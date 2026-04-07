@@ -17,6 +17,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 | "import my Claude history" / "mine my conversations" | `.skills/claude-history-ingest/SKILL.md` |
 | "process this export" / "ingest this data" / logs, transcripts | `.skills/data-ingest/SKILL.md` |
 | "what's the status" / "what's been ingested" / "show the delta" | `.skills/wiki-status/SKILL.md` |
+| "wiki insights" / "what's central" / "show me the hubs" / "wiki structure" | `.skills/wiki-status/SKILL.md` (insights mode) |
 | "what do I know about X" / "find info on Y" / any question | `.skills/wiki-query/SKILL.md` |
 | "audit" / "lint" / "find broken links" / "wiki health" | `.skills/wiki-lint/SKILL.md` |
 | "rebuild" / "start over" / "archive" / "restore" | `.skills/wiki-rebuild/SKILL.md` |
