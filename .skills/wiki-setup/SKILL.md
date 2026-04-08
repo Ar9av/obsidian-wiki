@@ -28,15 +28,21 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - Default: auto-discovers from `~/.claude`
    - Set explicitly if Claude data is elsewhere
 
+4. **Have QMD installed?** → `QMD_WIKI_COLLECTION` / `QMD_PAPERS_COLLECTION`
+   - Optional. Enables semantic search in `wiki-query` and source discovery in `wiki-ingest`.
+   - If unsure, skip for now — both skills fall back to `Grep` automatically.
+   - Install instructions: see `.env.example` (QMD section).
+
 ## Step 2: Create Vault Directory Structure
 
 ```bash
-mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,_archives,.obsidian}
+mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,journal,projects,_archives,_raw,.obsidian}
 ```
 
 - `.obsidian/` — Obsidian's own config. Creates vault recognition.
 - `projects/` — Per-project knowledge (populated during ingest).
 - `_archives/` — Stores wiki snapshots for rebuild/restore operations.
+- `_raw/` — Staging area for unprocessed drafts. Drop rough notes here; `wiki-ingest` will promote them to proper wiki pages and delete the originals.
 
 ## Step 3: Create Special Files
 
@@ -111,7 +117,7 @@ Tell the user about these recommended community plugins (they install manually):
 ## Step 6: Verify Setup
 
 Run a quick sanity check:
-- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `_archives/`
+- [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `_archives/`, `_raw/`
 - [ ] `index.md` exists at vault root
 - [ ] `log.md` exists at vault root
 - [ ] `.env` has `OBSIDIAN_VAULT_PATH` set

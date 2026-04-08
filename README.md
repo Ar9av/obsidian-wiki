@@ -31,6 +31,7 @@ This framework works with **any AI coding agent** that can read files. The `setu
 | **[Windsurf](https://windsurf.com)**                      | `.windsurf/rules/obsidian-wiki.md` | `.windsurf/skills/`             | ✅ via Cascade                          |
 | **[Codex (OpenAI)](https://openai.com/codex)**            | `AGENTS.md`                        | `~/.codex/skills/`              | `/wiki...                               |
 | **[Antigravity (Google)](https://aistudio.google.com)**   | `GEMINI.md`                        | `~/.gemini/antigravity/skills/` | `update wiki`                           |
+| **[OpenClaw](https://openclaw.ai)**                       | `AGENTS.md`                        | `.agents/skills/` + `~/.agents/skills/` | — (trigger by phrase)           |
 | **[GitHub Copilot](https://github.com/features/copilot)** | `.github/copilot-instructions.md`  | —                               | —                                       |
 
 > **How it works:** Each agent has its own convention for discovering skills. `setup.sh` symlinks the canonical `.skills/` directory into each agent's expected location, and creates the bootstrap file that tells the agent about the project. You write skills once, every agent can use them.
@@ -102,6 +103,22 @@ Gemini agents read `GEMINI.md` at the repo root. `setup.sh` installs skills glob
 - Manually symlink `.skills/*` to `~/.gemini/antigravity/skills/`
 
 Open in AI Studio and say "set up my wiki".
+
+</details>
+
+<details>
+<summary><b>OpenClaw</b></summary>
+
+OpenClaw is a local agent daemon that exposes itself through chat channels (Telegram, Slack, Discord, etc.) and discovers skills from `<workspace>/.agents/skills/` and `~/.agents/skills/`. It also reads `AGENTS.md` in the project root for always-on instructions. Either:
+
+- Run `setup.sh` to create both symlinks (workspace + global), OR
+- Manually symlink `.skills/*` into `.agents/skills/` and `~/.agents/skills/`
+
+OpenClaw doesn't have slash commands the way Claude Code does — just describe what you want and the agent will pick the right skill via `AGENTS.md` and the skill descriptions.
+
+```bash
+cd /path/to/obsidian-wiki && openclaw "set up my wiki"
+```
 
 </details>
 
@@ -207,6 +224,7 @@ obsidian-wiki/
 │
 ├── ~/.gemini/antigravity/skills/  → global symlinks (created by setup.sh)
 ├── ~/.codex/skills/               → global symlinks (created by setup.sh)
+├── ~/.agents/skills/              → global symlinks (OpenClaw + AGENTS.md-aware agents)
 │
 ├── setup.sh                          # One-command agent setup
 ├── .env.example                      # Configuration template
@@ -224,6 +242,7 @@ When you run `bash setup.sh`, two things happen:
 2. It symlinks `wiki-update` and `wiki-query` into `~/.claude/skills/` so they're available everywhere.
 3. It symlinks all skills into `~/.gemini/antigravity/skills/` for global Gemini/Antigravity access.
 4. It symlinks all skills into `~/.codex/skills/` for global Codex access.
+5. It symlinks all skills into `~/.agents/skills/` — the discovery path used by OpenClaw and other AGENTS.md-aware agents.
 
 After that, you're in some project, say `~/projects/my-cool-app`, working with Claude. Two commands:
 

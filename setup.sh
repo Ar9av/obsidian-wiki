@@ -89,7 +89,7 @@ for agent_dir in "${AGENT_DIRS[@]}"; do
       continue
     fi
 
-    ln -s "$skill" "$link_path"
+    ln -s "${skill%/}" "$link_path"
   done
 
   echo "✅  Symlinked skills → $agent_dir/"
@@ -147,6 +147,26 @@ for skill in "$SKILLS_DIR"/*/; do
 done
 echo "✅  Installed global skills → ~/.codex/skills/"
 
+# ── Step 3d: Install all skills globally for OpenClaw / generic agents ──
+# OpenClaw discovers skills from ~/.agents/skills/ (per docs.openclaw.ai/skills).
+# This path is also a generic standard for any agent following the AGENTS.md
+# convention, so it covers OpenClaw, OpenCode, Factory Droid, etc.
+AGENTS_SKILL_DIR="$HOME/.agents/skills"
+mkdir -p "$AGENTS_SKILL_DIR"
+
+for skill in "$SKILLS_DIR"/*/; do
+  skill_name="$(basename "$skill")"
+  link_path="$AGENTS_SKILL_DIR/$skill_name"
+  if [ -L "$link_path" ]; then
+    rm "$link_path"
+  elif [ -d "$link_path" ]; then
+    echo "⚠️   $link_path is a real directory, skipping symlink"
+    continue
+  fi
+  ln -s "$skill" "$link_path"
+done
+echo "✅  Installed global skills → ~/.agents/skills/ (OpenClaw + generic)"
+
 # ── Step 4: Summary ──────────────────────────────────────────
 SKILL_COUNT=$(ls -d "$SKILLS_DIR"/*/ 2>/dev/null | wc -l | tr -d ' ')
 
@@ -155,12 +175,12 @@ echo "────────────────────────�
 echo " Setup complete!"
 echo ""
 echo " Skills found:    $SKILL_COUNT"
-echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex"
+echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex, OpenClaw"
 echo ""
 echo " Bootstrap files:"
 echo "   CLAUDE.md       → Claude Code"
 echo "   GEMINI.md       → Gemini / Antigravity"
-echo "   AGENTS.md       → Codex / OpenAI"
+echo "   AGENTS.md       → Codex, OpenClaw, OpenCode, Droid"
 echo "   .cursor/rules/  → Cursor"
 echo "   .windsurf/rules/ → Windsurf"
 echo "   .github/copilot-instructions.md → GitHub Copilot"

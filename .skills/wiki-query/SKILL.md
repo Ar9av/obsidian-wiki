@@ -48,7 +48,32 @@ Build a candidate set *without opening any page bodies*:
 
 If you're in **index-only mode**, stop here. Answer from `summary:` fields, titles, and `index.md` descriptions only. Label the answer clearly: **"(index-only answer — page bodies not read; facts below are from page summaries and may miss nuance)"**. Then skip to Step 5.
 
-### Step 3: Section Pass (medium cost)
+### Step 2b: QMD Semantic Pass (optional — requires `QMD_WIKI_COLLECTION` in `.env`)
+
+**GUARD: If `$QMD_WIKI_COLLECTION` is empty or unset, skip this entire step and proceed to Step 3.**
+
+> **No QMD?** Skip to Step 3 and use `Grep` directly on the vault. QMD is faster and concept-aware but the grep path is fully functional. See `.env.example` for setup.
+
+If `QMD_WIKI_COLLECTION` is set and the index pass didn't produce clear candidates — or the question requires semantic matching rather than exact terms — use QMD before reaching for `Grep`:
+
+```
+mcp__qmd__query:
+  collection: <QMD_WIKI_COLLECTION>   # e.g. "knowledge-base-wiki"
+  intent: <the user's question>
+  searches:
+    - type: lex    # keyword match — good for exact names, file paths, error messages
+      query: <key terms>
+    - type: vec    # semantic match — good for concepts, patterns, "what is X like"
+      query: <question rephrased as a description>
+```
+
+The returned snippets act as pre-read section summaries. If they answer the question fully, skip Step 3 and go straight to Step 4 (reading only the pages QMD ranked highest). If not, use the ranked file list to guide which files to grep or read in Step 3.
+
+**Also search `papers` when the question may have source material in `_raw/`:**
+
+If `QMD_PAPERS_COLLECTION` is set and the user is asking about a topic likely covered by ingested papers (research, theory, background), run a parallel search against the papers collection. Cite raw sources separately from compiled wiki pages in your answer.
+
+### Step 3: Section Pass (medium cost — only if Steps 2/2b are inconclusive)
 
 For each of the top candidates, pull the relevant section *without reading the whole page*:
 
