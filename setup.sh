@@ -64,7 +64,8 @@ mkdir -p "$GLOBAL_CONFIG_DIR"
 # Read vault path from .env if it's already set
 VAULT_PATH=""
 if [ -f "$SCRIPT_DIR/.env" ]; then
-  VAULT_PATH=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$SCRIPT_DIR/.env" | cut -d'=' -f2-)
+  # Strip quotes if present, but preserve the path (spaces or not)
+  VAULT_PATH=$(grep -E '^OBSIDIAN_VAULT_PATH=' "$SCRIPT_DIR/.env" | cut -d'=' -f2- | sed 's/^"//;s/"$//')
 fi
 
 # If vault path is empty or placeholder, ask the user
@@ -72,16 +73,18 @@ if [ -z "$VAULT_PATH" ] || [ "$VAULT_PATH" = "/path/to/your/vault" ]; then
   echo ""
   read -p "  Where is your Obsidian vault? (absolute path): " VAULT_PATH
   if [ -n "$VAULT_PATH" ]; then
-    # Update .env with the provided path
-    sed -i.bak "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=$VAULT_PATH|" "$SCRIPT_DIR/.env"
+    # Escape the path for sed: replace '/' with '\/' and '"' with '\"'
+    ESCAPED_PATH=$(printf '%s\n' "$VAULT_PATH" | sed -e 's/[\/&]/\\&/g' -e 's/"/\\"/g')
+    # Update .env with quoted path to preserve spaces
+    sed -i.bak "s|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=\"$ESCAPED_PATH\"|" "$SCRIPT_DIR/.env"
     rm -f "$SCRIPT_DIR/.env.bak"
   fi
 fi
 
-# Write global config (repo path is just where we're running from)
+# Write global config with quoted path (preserves spaces)
 cat > "$GLOBAL_CONFIG" <<EOF
-OBSIDIAN_VAULT_PATH=$VAULT_PATH
-OBSIDIAN_WIKI_REPO=$SCRIPT_DIR
+OBSIDIAN_VAULT_PATH="$VAULT_PATH"
+OBSIDIAN_WIKI_REPO="$SCRIPT_DIR"
 EOF
 echo "✅  Global config written to ~/.obsidian-wiki/config"
 
