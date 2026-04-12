@@ -43,7 +43,7 @@ This framework works with **any AI coding agent** that can read files. The `setu
 | **[Claude Code](https://claude.ai/code)**                 | `CLAUDE.md`                        | `.claude/skills/`               | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
 | **[Cursor](https://cursor.com)**                          | `.cursor/rules/obsidian-wiki.mdc`  | `.cursor/skills/`               | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
 | **[Windsurf](https://windsurf.com)**                      | `.windsurf/rules/obsidian-wiki.md` | `.windsurf/skills/`             | ✅ via Cascade                          |
-| **[Codex (OpenAI)](https://openai.com/codex)**            | `AGENTS.md`                        | `~/.codex/skills/`              | `/wiki...                               |
+| **[Codex (OpenAI)](https://openai.com/codex)**            | `AGENTS.md`                        | `~/.codex/skills/`              | `/wiki...`                              |
 | **[Antigravity (Google)](https://aistudio.google.com)**   | `GEMINI.md`                        | `~/.gemini/antigravity/skills/` | `update wiki`                           |
 | **[OpenClaw](https://openclaw.ai)**                       | `AGENTS.md`                        | `.agents/skills/` + `~/.agents/skills/` | — (trigger by phrase)           |
 | **[GitHub Copilot](https://github.com/features/copilot)** | `.github/copilot-instructions.md`  | —                               | —                                       |
