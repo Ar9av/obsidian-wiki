@@ -234,6 +234,33 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 
 > **Note:** Slash commands (`/skill-name`) work in Claude Code, Cursor, and Windsurf. In other agents, just describe what you want and the agent will find the right skill.
 
+### Recommended: Obsidian Skills by Kepano
+
+We handle the knowledge management workflow — ingest, query, lint, rebuild. For Obsidian format mastery, we recommend installing [**kepano/obsidian-skills**](https://github.com/kepano/obsidian-skills) alongside this framework. These are optional but improve the quality of wiki output:
+
+| Skill | What it adds |
+|---|---|
+| `obsidian-markdown` | Teaches the agent correct Obsidian-flavored syntax — wikilinks, callouts, embeds, properties |
+| `obsidian-bases` | Create and edit `.base` files (database-like views of notes) |
+| `json-canvas` | Create and edit `.canvas` files (visual mind maps, flowcharts) |
+| `obsidian-cli` | Interact with a running Obsidian instance via CLI (search, create, manage notes) |
+| `defuddle` | Extract clean markdown from web pages — less noise than raw fetch, saves tokens during ingest |
+
+Both projects use the same [Agent Skills spec](https://agentskills.io/specification), so they coexist in the same `.skills/` directory with no conflicts.
+
+**Install:**
+
+```bash
+# Via npx (if skills CLI is available)
+npx skills add git@github.com:kepano/obsidian-skills.git
+
+# Or manually — copy into your skills directory
+git clone https://github.com/kepano/obsidian-skills.git /tmp/obsidian-skills
+cp -r /tmp/obsidian-skills/skills/* .skills/
+```
+
+After installing, your agent will automatically pick up the new skills alongside the existing wiki skills.
+
 ## Project Structure
 
 ```
