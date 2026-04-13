@@ -176,6 +176,8 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 - **Tag taxonomy.** A controlled vocabulary of canonical tags stored in `_meta/taxonomy.md`, with a skill that audits and normalizes tags across your entire vault.
 
+- **Visibility tags.** Optional `visibility/` tags (`visibility/internal`, `visibility/pii`, `visibility/public`) let you mark pages as team-only or sensitive without splitting the vault. Default behavior is unchanged — everything visible. Filtered mode is opt-in: say "public only" or "user-facing" in a query or export and the agent silently excludes restricted pages. Single source of truth, no sync issues.
+
 - **Provenance tracking.** Every claim on a wiki page is tagged: extracted (default), `^[inferred]` (LLM synthesis), or `^[ambiguous]` (sources disagree). A `provenance:` block in the frontmatter summarizes the mix per page, and `wiki-lint` flags pages that drift into mostly speculation. You can always tell what your wiki actually knows from what it guessed.
 
 - **Multimodal sources.** Screenshots, whiteboard photos, slide captures, and diagrams ingest the same way as text — the agent transcribes any visible text verbatim and tags interpreted content as inferred. Requires a vision-capable model.
