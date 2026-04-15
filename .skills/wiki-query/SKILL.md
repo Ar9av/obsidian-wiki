@@ -46,6 +46,8 @@ Build a candidate set *without opening any page bodies*:
   3. Summary field contains the query term
   4. `index.md` entry contains the query term
 
+**Diacritic normalization:** Before comparing the query against titles, aliases, and summaries, normalize both sides: decompose accented characters to base + combining marks (Unicode NFKD), then strip the combining marks. This ensures a search for "Muller" matches "Müller", "resume" matches "résumé", etc. Apply this to string comparisons only — raw `Grep` patterns are left unmodified (regex partial matching already handles many cases).
+
 If you're in **index-only mode**, stop here. Answer from `summary:` fields, titles, and `index.md` descriptions only. Label the answer clearly: **"(index-only answer — page bodies not read; facts below are from page summaries and may miss nuance)"**. Then skip to Step 5.
 
 ### Step 2b: QMD Semantic Pass (optional — requires `QMD_WIKI_COLLECTION` in `.env`)

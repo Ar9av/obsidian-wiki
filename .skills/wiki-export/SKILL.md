@@ -17,6 +17,12 @@ You are exporting the wiki's wikilink graph to structured formats so it can be u
 1. Read `.env` to get `OBSIDIAN_VAULT_PATH`
 2. Confirm the vault has pages to export — if fewer than 5 pages exist, warn the user and stop
 
+## Directed vs Undirected Mode
+
+Wikilinks have direction — "A links to B" is not the same as "B links to A". By default, exports are **directed** (`directed: true`), which gives semantically accurate results in Neo4j, Gephi, and graph analysis tools.
+
+Pass `directed=false` (or the user says "undirected", "ignore link direction") to produce an undirected graph instead — useful for community detection and clustering algorithms that require undirected input.
+
 ## Step 1: Build the Node and Edge Lists
 
 Glob all `.md` files in the vault (excluding `_archives/`, `_raw/`, `.obsidian/`, `index.md`, `log.md`, `_insights.md`).
@@ -61,7 +67,7 @@ NetworkX node_link format — standard for graph tools and scripts:
 
 ```json
 {
-  "directed": false,
+  "directed": true,
   "multigraph": false,
   "graph": {
     "exported_at": "<ISO timestamp>",
@@ -105,7 +111,7 @@ GraphML XML format — loadable in Gephi, yEd, and Cytoscape:
   <key id="community" for="node" attr.name="community" attr.type="int"/>
   <key id="relation" for="edge" attr.name="relation" attr.type="string"/>
   <key id="confidence" for="edge" attr.name="confidence" attr.type="string"/>
-  <graph id="wiki" edgedefault="undirected">
+  <graph id="wiki" edgedefault="directed">
     <node id="concepts/transformers">
       <data key="label">Transformer Architecture</data>
       <data key="category">concepts</data>
@@ -251,3 +257,4 @@ Wiki export complete → wiki-export/
 - **Broken wikilinks are skipped** — only edges to pages that exist in the vault are exported
 - **The `wiki-export/` directory should be gitignored** if the vault is version-controlled — these are derived artifacts
 - **`graph.json` is the primary format** — the others are derived from it. If a future tool supports graph queries natively, point it at `graph.json`
+- **Directed by default** — exports preserve wikilink direction (A→B). Pass `directed=false` for undirected output when needed by clustering tools. The HTML visualization always renders arrows regardless of this setting.

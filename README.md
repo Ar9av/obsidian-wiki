@@ -138,7 +138,7 @@ Use Copilot Chat in VS Code and say "set up my wiki".
 
 Every ingest runs through four stages:
 
-**1. Ingest** — The agent reads your source material directly. It handles whatever you throw at it: markdown files, PDFs (with page ranges), JSONL conversation exports, plain text logs, chat exports, meeting transcripts, and images (screenshots, whiteboard photos, diagrams — vision-capable model required). No preprocessing step, no pipeline to run. The agent reads the file the same way it reads code.
+**1. Ingest** — The agent reads your source material directly. It handles whatever you throw at it: markdown files, PDFs (with page ranges), JSONL conversation exports, plain text logs, chat exports, meeting transcripts, images (screenshots, whiteboard photos, diagrams — vision-capable model required), and video/audio files (lectures, podcasts, meeting recordings — transcribed before ingestion). Pass a YouTube URL and it downloads and transcribes automatically. No preprocessing step, no pipeline to run. The agent reads the file the same way it reads code.
 
 **2. Extract** — From the raw source, the agent pulls out concepts, entities, claims, relationships, and open questions. A conversation about debugging a React hook yields a "stale closure" pattern. A research paper yields the key idea and its caveats. A work log yields decisions and their rationale. Noise gets dropped, signal gets kept. Each page also gets a 1–2 sentence `summary:` in its frontmatter at write time — later queries use this to preview pages without opening them.
 
@@ -150,7 +150,7 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 ## What we added on top of Karpathy's pattern
 
-- **Delta tracking.** A manifest tracks every source file that's been ingested: path, timestamps, which wiki pages it produced. When you come back later, it computes the delta and only processes what's new or changed. You're not re-ingesting your entire document library every time.
+- **Delta tracking.** A manifest tracks every source file that's been ingested: path, timestamps, content hash, which wiki pages it produced. When you come back later, it computes the delta and only processes what's new or changed. For `.md` sources, the hash covers only the body — metadata edits (tags, timestamps) don't count as changes. You're not re-ingesting your entire document library every time.
 
 - **Project-based organization.** Knowledge gets filed under projects when it's project-specific, globally when it's not. Both are cross-referenced with wikilinks. If you're working on 10 different codebases, each one gets its own space in the vault.
 
@@ -166,11 +166,11 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 - **Provenance tracking.** Every claim on a wiki page is tagged: extracted (default), `^[inferred]` (LLM synthesis), or `^[ambiguous]` (sources disagree). A `provenance:` block in the frontmatter summarizes the mix per page, and `wiki-lint` flags pages that drift into mostly speculation. You can always tell what your wiki actually knows from what it guessed.
 
-- **Multimodal sources.** Screenshots, whiteboard photos, slide captures, and diagrams ingest the same way as text — the agent transcribes any visible text verbatim and tags interpreted content as inferred. Requires a vision-capable model.
+- **Multimodal sources.** Screenshots, whiteboard photos, slide captures, and diagrams ingest the same way as text — the agent transcribes any visible text verbatim and tags interpreted content as inferred. Requires a vision-capable model. Video and audio files (`.mp4`, `.mp3`, `.wav`, `.m4a`, and more) are transcribed first via faster-whisper or Whisper, then ingested as text. YouTube and web video URLs are also supported — pass the URL directly and the agent downloads audio-only via `yt-dlp` and runs the same pipeline. Transcripts are cached in `_transcripts/` so re-runs are instant.
 
 - **Wiki insights.** Beyond delta tracking, `wiki-status` can analyze the shape of your vault itself: top hubs, bridge pages (nodes whose removal would partition the graph), tag cluster cohesion scores, scored surprising connections, a graph delta since last run, and suggested questions the wiki structure is uniquely positioned to answer. Output goes to `_insights.md`.
 
-- **Graph export.** `wiki-export` turns the vault's wikilink graph into `graph.json` (queryable), `graph.graphml` (Gephi/yEd), `cypher.txt` (Neo4j), and a self-contained `graph.html` interactive browser visualization — no server required.
+- **Graph export.** `wiki-export` turns the vault's wikilink graph into `graph.json` (queryable), `graph.graphml` (Gephi/yEd), `cypher.txt` (Neo4j), and a self-contained `graph.html` interactive browser visualization — no server required. Exports are directed by default (A→B preserves wikilink direction), with an undirected mode available for clustering tools that require it.
 
 - **Tiered retrieval.** `wiki-query` reads titles, tags, and page summaries first and only opens page bodies when the cheap pass can't answer. Say "quick answer" or "just scan" to force index-only mode. Keeps query cost roughly flat as your vault grows from 20 pages to 2000.
 

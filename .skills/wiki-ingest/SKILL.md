@@ -30,6 +30,7 @@ Only ingest sources that are **new or modified** since last ingest. Check the ma
 - If a source path is not in `.manifest.json` → it's new, ingest it
 - If a source path is in `.manifest.json`:
   - Compute the file's SHA-256 hash: `sha256sum <file>` (or `shasum -a 256 <file>` on macOS)
+  - **For `.md` source files:** hash the **body only** — strip the YAML frontmatter block (everything between the opening `---` and closing `---`) before hashing. Metadata-only edits (updating a tag, bumping `updated:`) won't invalidate the cache and trigger a needless re-ingest.
   - If the hash matches `content_hash` in the manifest → **skip it**, even if the modification time differs (file was touched but content is identical — git checkout, copy, NFS timestamp drift)
   - If the hash differs → it's genuinely modified, re-ingest it
 - If a source path is in `.manifest.json` and has no `content_hash` (older entry) → fall back to mtime comparison as before
@@ -59,6 +60,8 @@ Read the document(s) the user wants to ingest. In append mode, skip files the ma
 - PDF (`.pdf`) — use the Read tool with page ranges
 - Web clippings — markdown files from Obsidian Web Clipper
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`) — *requires a vision-capable model*. Use the Read tool, which renders the image into your context. Treat screenshots, whiteboard photos, diagrams, and slide captures as first-class sources. If your model doesn't support vision, skip image sources and tell the user which files were skipped so they can re-run with a vision-capable model.
+- **Video/audio** (`.mp4`, `.mp3`, `.wav`, `.mov`, `.webm`, `.m4a`, `.ogg`, `.mkv`, `.avi`, `.m4v`) — transcribe to text first (see "Video/audio branch" below), then treat the transcript as a text source.
+- **YouTube / web video URLs** — if the user passes a URL (e.g. `https://youtube.com/...`), download audio-only via `yt-dlp` and transcribe. Cache the transcript by URL hash so re-runs skip already-transcribed URLs.
 
 Note the source path — you'll need it for provenance tracking.
 
@@ -74,6 +77,22 @@ When the source is an image, your extraction job is interpretive — you're read
 Vision is interpretive by nature, so image-derived pages will skew heavily toward `^[inferred]`. That's expected — the provenance markers exist precisely to surface this. Don't pretend an image's "meaning" was extracted when you really inferred it.
 
 For PDFs that are mostly images (scanned docs, slide decks exported to PDF), use `Read pages: "N"` to pull specific pages and treat each page as an image source.
+
+### Video/audio branch
+
+When the source is a video or audio file (or a YouTube/web URL):
+
+1. **Check the transcript cache first.** Look for `_transcripts/<filename>.txt` (or `_transcripts/<url-hash>.txt` for URLs) inside the vault. If it exists, read it directly and skip transcription.
+2. **Transcribe.** Use whichever transcription tool is available in priority order:
+   - `faster-whisper` CLI if installed: `faster-whisper <file> --output_dir _transcripts/`
+   - `whisper` CLI: `whisper <file> --output_dir _transcripts/ --output_format txt`
+   - For YouTube URLs: `yt-dlp -x --audio-format mp3 -o "_transcripts/%(id)s.%(ext)s" <url>` then transcribe the downloaded file
+   - If no transcription tool is available, **skip the file** and tell the user which files were skipped and what to install.
+3. **Save the transcript** to `_transcripts/<filename>.txt` (or `_transcripts/<url-hash>.txt`) inside the vault for future cache reuse.
+4. **Treat the transcript as a text source** from this point forward — extract concepts, entities, and claims the same way you would from a `.txt` file.
+5. **Tag transcript-derived content** as `^[inferred]` for any claim that relies on interpretation of spoken language (incomplete sentences, filler words, unclear antecedents). Verbatim quotes from the transcript are `extracted`.
+
+Domain hint: if the vault already has god-node pages (heavily-linked hub concepts), include their labels as a comma-separated hint when invoking Whisper — this improves accuracy on technical vocabulary.
 
 ### Step 1b: QMD Source Discovery (optional — requires `QMD_PAPERS_COLLECTION` in `.env`)
 
@@ -178,7 +197,7 @@ After writing pages, check that wikilinks work in both directions. If page A lin
   "size_bytes": FILE_SIZE,
   "modified_at": FILE_MTIME,
   "content_hash": "sha256:<64-char-hex>",
-  "source_type": "document",  // or "image" for png/jpg/webp/gif and image-only PDFs
+  "source_type": "document",  // or "image" for png/jpg/webp/gif and image-only PDFs; "video" for mp4/mov/mkv etc; "audio" for mp3/wav/m4a etc; "url" for YouTube/web URLs
   "project": "project-name-or-null",
   "pages_created": ["list/of/pages.md"],
   "pages_updated": ["list/of/pages.md"]
