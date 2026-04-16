@@ -50,7 +50,7 @@ This framework works with **any AI coding agent** that can read files. The `setu
 | **[Codex (OpenAI)](https://openai.com/codex)**            | `AGENTS.md`                        | `~/.codex/skills/`              | `/wiki...`                              |
 | **[Antigravity (Google)](https://aistudio.google.com)**   | `GEMINI.md`                        | `~/.gemini/antigravity/skills/` | `update wiki`                           |
 | **[Hermes (NousResearch)](https://hermes-agent.nousresearch.com)** | `.hermes.md`              | `~/.hermes/skills/`             | ✅ `/wiki-history-ingest hermes`, etc. |
-| **[OpenClaw](https://openclaw.ai)**                       | `AGENTS.md`                        | `.agents/skills/` + `~/.agents/skills/` | — (trigger by phrase)           |
+| **[OpenClaw](https://openclaw.ai)**                       | `AGENTS.md`                        | `~/.openclaw/skills/` + `~/.agents/skills/` | ✅ `/wiki-ingest`, `/wiki-history-ingest openclaw`, etc. |
 | **[GitHub Copilot](https://github.com/features/copilot)** | `.github/copilot-instructions.md`  | —                               | —                                       |
 | **[Kilocode](https://kilo.ai/)**                          | `AGENTS.md` (primary) or `CLAUDE.md` (compatibility)         | `.agents/skills/` + `.claude/skills/` | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
 
@@ -151,16 +151,24 @@ This reads `~/.hermes/memories/` and (if enabled) `~/.hermes/sessions/`.
 <details>
 <summary><b>OpenClaw</b></summary>
 
-OpenClaw is a local agent daemon that exposes itself through chat channels (Telegram, Slack, Discord, etc.) and discovers skills from `<workspace>/.agents/skills/` and `~/.agents/skills/`. It also reads `AGENTS.md` in the project root for always-on instructions. Either:
+OpenClaw is a local agent daemon that exposes itself through chat channels (Telegram, Slack, Discord, etc.). It reads `AGENTS.md` first (priority 10 in its bootstrap chain), then discovers skills from two paths: `~/.openclaw/skills/` (managed) and `~/.agents/skills/` (shared). Both are wired by `setup.sh`.
 
-- Run `setup.sh` to create both symlinks (workspace + global), OR
-- Manually symlink `.skills/*` into `.agents/skills/` and `~/.agents/skills/`
+Skills are auto-registered as slash commands — `/wiki-ingest`, `/wiki-query`, `/wiki-history-ingest`, etc. all work natively.
 
-OpenClaw doesn't have slash commands the way Claude Code does — just describe what you want and the agent will pick the right skill via `AGENTS.md` and the skill descriptions.
+- Run `setup.sh` to create symlinks in both paths, OR
+- Manually symlink `.skills/*` into `~/.openclaw/skills/` and `~/.agents/skills/`
 
 ```bash
 cd /path/to/obsidian-wiki && openclaw "set up my wiki"
 ```
+
+To mine your OpenClaw history into the wiki:
+
+```bash
+/wiki-history-ingest openclaw
+```
+
+This reads `~/.openclaw/workspace/MEMORY.md`, daily notes in `~/.openclaw/workspace/memory/`, and (if enabled) session transcripts in `~/.openclaw/agents/*/sessions/`.
 
 </details>
 
@@ -195,7 +203,7 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 - **Archive and rebuild.** When the wiki drifts too far from your sources, you can archive the whole thing (timestamped snapshot, nothing lost) and rebuild from scratch. Or restore any previous archive.
 
-- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Hermes memories and sessions (`~/.hermes/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for Claude, Codex, and Hermes history, plus a catch-all ingest skill for arbitrary text exports.
+- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Hermes memories and sessions (`~/.hermes/`), OpenClaw MEMORY.md and sessions (`~/.openclaw/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for Claude, Codex, Hermes, and OpenClaw history, plus a catch-all ingest skill for arbitrary text exports.
 
 - **Audit and lint.** Find orphaned pages, broken wikilinks, stale content, contradictions, missing frontmatter. See a dashboard of what's been ingested vs what's pending.
 
@@ -262,6 +270,7 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `claude-history-ingest` | Mine your `~/.claude` conversations and memories  | `/claude-history-ingest` |
 | `codex-history-ingest`  | Mine your `~/.codex` sessions and rollout logs    | `/codex-history-ingest`  |
 | `hermes-history-ingest` | Mine your `~/.hermes` memories and sessions       | `/hermes-history-ingest` |
+| `openclaw-history-ingest` | Mine your `~/.openclaw` MEMORY.md and sessions  | `/openclaw-history-ingest` |
 | `data-ingest`           | Ingest any text — chat exports, logs, transcripts | `/data-ingest`           |
 | `wiki-status`           | Show what's ingested, what's pending, the delta   | `/wiki-status`           |
 | `wiki-rebuild`          | Archive, rebuild from scratch, or restore         | `/wiki-rebuild`          |
@@ -309,6 +318,7 @@ obsidian-wiki/
 │   ├── claude-history-ingest/SKILL.md
 │   ├── codex-history-ingest/SKILL.md
 │   ├── hermes-history-ingest/SKILL.md
+│   ├── openclaw-history-ingest/SKILL.md
 │   ├── data-ingest/SKILL.md
 │   ├── wiki-status/SKILL.md
 │   ├── wiki-rebuild/SKILL.md
@@ -337,6 +347,7 @@ obsidian-wiki/
 ├── ~/.gemini/antigravity/skills/  → global symlinks (created by setup.sh)
 ├── ~/.codex/skills/               → global symlinks (created by setup.sh)
 ├── ~/.hermes/skills/              → global symlinks (created by setup.sh)
+├── ~/.openclaw/skills/            → global symlinks (created by setup.sh)
 ├── ~/.agents/skills/              → global symlinks (OpenClaw + AGENTS.md-aware agents)
 │
 ├── setup.sh                          # One-command agent setup

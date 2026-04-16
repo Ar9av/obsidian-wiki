@@ -135,6 +135,7 @@ echo "✅  Installed global skills → ~/.claude/skills/ (wiki-update, wiki-quer
 install_skills "$HOME/.gemini/antigravity/skills" "~/.gemini/antigravity/skills/"
 install_skills "$HOME/.codex/skills"              "~/.codex/skills/"
 install_skills "$HOME/.hermes/skills"             "~/.hermes/skills/ (Hermes)"
+install_skills "$HOME/.openclaw/skills"           "~/.openclaw/skills/ (OpenClaw managed)"
 install_skills "$HOME/.agents/skills"             "~/.agents/skills/ (OpenClaw + generic)"
 
 # ── Step 4: Summary ──────────────────────────────────────────
@@ -145,7 +146,7 @@ echo "────────────────────────�
 echo " Setup complete!"
 echo ""
 echo " Skills found:    $SKILL_COUNT"
-echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex, Hermes, OpenClaw"
+echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex, Hermes, OpenClaw (x2 paths)"
 echo ""
 echo " Bootstrap files:"
 echo "   CLAUDE.md       → Claude Code"
