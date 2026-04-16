@@ -18,16 +18,18 @@ If the user invokes `/wiki-history-ingest <target>` (or equivalent text command)
 |---|---|
 | `claude` | `claude-history-ingest` |
 | `codex` | `codex-history-ingest` |
+| `hermes` | `hermes-history-ingest` |
 | `auto` | infer from context using rules below |
 
 ## Routing Rules
 
-1. If the user explicitly says `claude` or `codex`, route directly.
+1. If the user explicitly says `claude`, `codex`, or `hermes`, route directly.
 2. If the user provides a path/source:
    - `~/.claude` or Claude memory/session JSONL artifacts -> `claude-history-ingest`
    - `~/.codex` or rollout/session index artifacts -> `codex-history-ingest`
+   - `~/.hermes` or Hermes memories/session artifacts -> `hermes-history-ingest`
 3. If ambiguous, ask one short clarification:
-   - "Should I ingest `claude` history or `codex` history?"
+   - "Should I ingest `claude`, `codex`, or `hermes` history?"
 
 ## Execution Contract
 
@@ -44,4 +46,5 @@ Examples:
 
 - `/wiki-history-ingest claude`
 - `/wiki-history-ingest codex`
+- `/wiki-history-ingest hermes`
 - `$wiki-history-ingest claude` (agents that use `$skill` invocation)

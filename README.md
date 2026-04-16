@@ -49,6 +49,7 @@ This framework works with **any AI coding agent** that can read files. The `setu
 | **[Windsurf](https://windsurf.com)**                      | `.windsurf/rules/obsidian-wiki.md` | `.windsurf/skills/`             | ✅ via Cascade                          |
 | **[Codex (OpenAI)](https://openai.com/codex)**            | `AGENTS.md`                        | `~/.codex/skills/`              | `/wiki...`                              |
 | **[Antigravity (Google)](https://aistudio.google.com)**   | `GEMINI.md`                        | `~/.gemini/antigravity/skills/` | `update wiki`                           |
+| **[Hermes (NousResearch)](https://hermes-agent.nousresearch.com)** | `.hermes.md`              | `~/.hermes/skills/`             | ✅ `/wiki-history-ingest hermes`, etc. |
 | **[OpenClaw](https://openclaw.ai)**                       | `AGENTS.md`                        | `.agents/skills/` + `~/.agents/skills/` | — (trigger by phrase)           |
 | **[GitHub Copilot](https://github.com/features/copilot)** | `.github/copilot-instructions.md`  | —                               | —                                       |
 | **[Kilocode](https://kilo.ai/)**                          | `AGENTS.md` (primary) or `CLAUDE.md` (compatibility)         | `.agents/skills/` + `.claude/skills/` | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
@@ -126,6 +127,28 @@ Open in AI Studio and say "set up my wiki".
 </details>
 
 <details>
+<summary><b>Hermes</b></summary>
+
+Hermes reads `.hermes.md` first (if present), then falls back to `AGENTS.md`. Skills are discovered globally from `~/.hermes/skills/`. Either:
+
+- Run `setup.sh` to create global symlinks, OR
+- Manually symlink `.skills/*` to `~/.hermes/skills/`
+
+```bash
+cd /path/to/obsidian-wiki && hermes "set up my wiki"
+```
+
+To mine your Hermes history into the wiki:
+
+```bash
+/wiki-history-ingest hermes
+```
+
+This reads `~/.hermes/memories/` and (if enabled) `~/.hermes/sessions/`.
+
+</details>
+
+<details>
 <summary><b>OpenClaw</b></summary>
 
 OpenClaw is a local agent daemon that exposes itself through chat channels (Telegram, Slack, Discord, etc.) and discovers skills from `<workspace>/.agents/skills/` and `~/.agents/skills/`. It also reads `AGENTS.md` in the project root for always-on instructions. Either:
@@ -172,7 +195,7 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 - **Archive and rebuild.** When the wiki drifts too far from your sources, you can archive the whole thing (timestamped snapshot, nothing lost) and rebuild from scratch. Or restore any previous archive.
 
-- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for both Claude history and Codex history, plus a catch-all ingest skill for arbitrary text exports.
+- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Hermes memories and sessions (`~/.hermes/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for Claude, Codex, and Hermes history, plus a catch-all ingest skill for arbitrary text exports.
 
 - **Audit and lint.** Find orphaned pages, broken wikilinks, stale content, contradictions, missing frontmatter. See a dashboard of what's been ingested vs what's pending.
 
@@ -235,9 +258,10 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | ----------------------- | ------------------------------------------------- | ------------------------ |
 | `wiki-setup`            | Initialize vault structure                        | `/wiki-setup`            |
 | `wiki-ingest`           | Distill documents into wiki pages                 | `/wiki-ingest`           |
-| `wiki-history-ingest`   | Unified history router (`claude` or `codex`)      | `/wiki-history-ingest <claude|codex>` |
+| `wiki-history-ingest`   | Unified history router (`claude`, `codex`, or `hermes`) | `/wiki-history-ingest <claude|codex|hermes>` |
 | `claude-history-ingest` | Mine your `~/.claude` conversations and memories  | `/claude-history-ingest` |
 | `codex-history-ingest`  | Mine your `~/.codex` sessions and rollout logs    | `/codex-history-ingest`  |
+| `hermes-history-ingest` | Mine your `~/.hermes` memories and sessions       | `/hermes-history-ingest` |
 | `data-ingest`           | Ingest any text — chat exports, logs, transcripts | `/data-ingest`           |
 | `wiki-status`           | Show what's ingested, what's pending, the delta   | `/wiki-status`           |
 | `wiki-rebuild`          | Archive, rebuild from scratch, or restore         | `/wiki-rebuild`          |
@@ -284,6 +308,7 @@ obsidian-wiki/
 │   ├── wiki-history-ingest/SKILL.md
 │   ├── claude-history-ingest/SKILL.md
 │   ├── codex-history-ingest/SKILL.md
+│   ├── hermes-history-ingest/SKILL.md
 │   ├── data-ingest/SKILL.md
 │   ├── wiki-status/SKILL.md
 │   ├── wiki-rebuild/SKILL.md
@@ -299,6 +324,7 @@ obsidian-wiki/
 ├── CLAUDE.md                         # Bootstrap → Claude Code / Kilocode
 ├── GEMINI.md                         # Bootstrap → Gemini / Antigravity
 ├── AGENTS.md                         # Bootstrap → Codex / OpenAI / Kilocode
+├── .hermes.md                        # Bootstrap → Hermes (symlink → AGENTS.md)
 ├── .cursor/rules/obsidian-wiki.mdc   # Bootstrap → Cursor
 ├── .windsurf/rules/obsidian-wiki.md  # Bootstrap → Windsurf
 ├── .github/copilot-instructions.md   # Bootstrap → GitHub Copilot
@@ -310,6 +336,7 @@ obsidian-wiki/
 │
 ├── ~/.gemini/antigravity/skills/  → global symlinks (created by setup.sh)
 ├── ~/.codex/skills/               → global symlinks (created by setup.sh)
+├── ~/.hermes/skills/              → global symlinks (created by setup.sh)
 ├── ~/.agents/skills/              → global symlinks (OpenClaw + AGENTS.md-aware agents)
 │
 ├── setup.sh                          # One-command agent setup

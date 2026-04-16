@@ -88,6 +88,19 @@ OBSIDIAN_WIKI_REPO="$SCRIPT_DIR"
 EOF
 echo "✅  Global config written to ~/.obsidian-wiki/config"
 
+# ── Step 1c: Bootstrap symlinks ──────────────────────────────
+# .hermes.md → AGENTS.md  (Hermes resolves .hermes.md before AGENTS.md;
+# a symlink keeps a single source of truth)
+HERMES_BOOTSTRAP="$SCRIPT_DIR/.hermes.md"
+if [ -L "$HERMES_BOOTSTRAP" ]; then
+  rm "$HERMES_BOOTSTRAP"
+elif [ -f "$HERMES_BOOTSTRAP" ]; then
+  echo "⚠️   .hermes.md is a regular file, replacing with symlink"
+  rm "$HERMES_BOOTSTRAP"
+fi
+ln -s AGENTS.md "$HERMES_BOOTSTRAP"
+echo "✅  .hermes.md → AGENTS.md"
+
 # ── Step 2: Symlink skills into agent directories ─────────────
 AGENT_DIRS=(
   ".claude/skills"
@@ -116,11 +129,12 @@ for skill_name in "wiki-update" "wiki-query"; do
 done
 echo "✅  Installed global skills → ~/.claude/skills/ (wiki-update, wiki-query)"
 
-# Steps 3b–3d: Install all skills for Gemini, Codex, and generic agents
+# Steps 3b–3e: Install all skills for Gemini, Codex, Hermes, and generic agents
 # OpenClaw discovers skills from ~/.agents/skills/ (per docs.openclaw.ai/skills);
 # that path also covers OpenCode, Factory Droid, and any AGENTS.md-aware agent.
 install_skills "$HOME/.gemini/antigravity/skills" "~/.gemini/antigravity/skills/"
 install_skills "$HOME/.codex/skills"              "~/.codex/skills/"
+install_skills "$HOME/.hermes/skills"             "~/.hermes/skills/ (Hermes)"
 install_skills "$HOME/.agents/skills"             "~/.agents/skills/ (OpenClaw + generic)"
 
 # ── Step 4: Summary ──────────────────────────────────────────
@@ -131,12 +145,13 @@ echo "────────────────────────�
 echo " Setup complete!"
 echo ""
 echo " Skills found:    $SKILL_COUNT"
-echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex, OpenClaw"
+echo " Agents ready:    Claude Code, Cursor, Windsurf, Antigravity/Gemini, Codex, Hermes, OpenClaw"
 echo ""
 echo " Bootstrap files:"
 echo "   CLAUDE.md       → Claude Code"
 echo "   GEMINI.md       → Gemini / Antigravity"
 echo "   AGENTS.md       → Codex, OpenClaw, OpenCode, Droid"
+echo "   .hermes.md      → Hermes"
 echo "   .cursor/rules/  → Cursor"
 echo "   .windsurf/rules/ → Windsurf"
 echo "   .github/copilot-instructions.md → GitHub Copilot"
