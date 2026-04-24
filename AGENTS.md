@@ -64,6 +64,8 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "save this" / "/wiki-capture" / "capture this" / "file this conversation" | `wiki-capture` |
 | "/wiki-research [topic]" / "research X" / "find everything about Y" | `wiki-research` |
 | "create a dashboard" / "vault dashboard" / "show all X as a table" / "dynamic view" | `wiki-dashboard` |
+| "sync gstack learnings" / "pull in new learnings" / "update wiki from gstack" | `gstack-learnings-sync` |
+| "watch gstack learnings" / "auto-sync gstack" / "keep wiki updated automatically" | `gstack-learnings-watch` |
 | "create a new skill" | `skill-creator` |
 
 ## Cross-Project Usage
