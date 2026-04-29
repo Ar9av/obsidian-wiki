@@ -11,6 +11,8 @@ Read config in this order (first found wins):
 
 Both files set `OBSIDIAN_VAULT_PATH` (where the wiki lives). The global config also sets `OBSIDIAN_WIKI_REPO` (where this repo is cloned).
 
+**After reading config, always read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists.** It contains owner-specific conventions (domain vocabulary, ingest preferences, writing style, project scoping) that override framework defaults for all skills. Apply it for the duration of the session.
+
 ## Vault Structure
 
 ```
