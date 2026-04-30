@@ -15,9 +15,11 @@ You are ingesting arbitrary text data into an Obsidian wiki. The source could be
 
 ## Before You Start
 
-1. Read `.env` to get `OBSIDIAN_VAULT_PATH`
+1. Read `~/.obsidian-wiki/config` (preferred) or `.env` (fallback) to get `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`)
 2. Read `.manifest.json` at the vault root — check if this source has been ingested before
 3. Read `index.md` at the vault root to know what already exists
+
+When writing internal links, apply the link format from `llm-wiki/SKILL.md` (Link Format section) using the `OBSIDIAN_LINK_FORMAT` value.
 
 If the source path is already in `.manifest.json` and the file hasn't been modified since `ingested_at`, tell the user it's already been ingested. Ask if they want to re-ingest anyway.
 
