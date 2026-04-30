@@ -1,19 +1,19 @@
 ---
-name: gstack-learnings-sync
+name: gstack-history-ingest
 description: >
-  Sync new gstack learnings into the Obsidian wiki. Reads ~/.gstack/projects/*/learnings.jsonl,
-  finds entries added since the last sync, and appends them to matching wiki project pages
-  (or creates new pages for unknown projects). Use when the user says "sync gstack learnings",
-  "update wiki from gstack", "pull in new learnings", "what did gstack learn recently",
-  or after any gstack review session that produced new learnings. Also invoke automatically
-  if the vault has a .gstack-sync-pending marker file.
+  Ingest gstack agent history into the Obsidian wiki. Reads ~/.gstack/projects/*/learnings.jsonl,
+  finds entries added since the last sync, and appends them to matching wiki project pages (or
+  creates new pages for unknown projects). Use when the user says "sync gstack learnings",
+  "update wiki from gstack", "pull in new learnings", "process my gstack history",
+  "/wiki-history-ingest gstack", or after any gstack review session that produced new learnings.
+  Also invoke automatically if the vault has a .gstack-sync-pending marker file.
 ---
 
-# gstack Learnings Sync
+# gstack History Ingest — Learnings Mining
 
-Syncs new entries from gstack's `learnings.jsonl` files into your Obsidian wiki. Each entry
-was written by a gstack review skill and captures a concrete pitfall, pattern, or
-architectural insight from real project work.
+Extracts knowledge from the user's gstack agent history and distills it into the Obsidian wiki. gstack writes a `learnings.jsonl` per project — each line was emitted by a gstack review skill (`/plan-eng-review`, `/plan-ceo-review`, `/aar`, etc.) and captures a concrete pitfall, pattern, or architectural insight from real project work.
+
+This skill can be invoked directly or via the `wiki-history-ingest` router (`/wiki-history-ingest gstack`).
 
 ## Before You Start
 
