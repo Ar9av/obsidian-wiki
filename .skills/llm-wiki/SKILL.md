@@ -256,6 +256,35 @@ Skills that consume this table: `wiki-query`, `cross-linker`, `wiki-lint`, `wiki
 
 6. **Obsidian is the IDE.** The user browses and explores the wiki in Obsidian. Everything must be valid Obsidian markdown with working wikilinks.
 
+## Link Format
+
+All internal links connecting wiki pages are controlled by `OBSIDIAN_LINK_FORMAT` (read from `~/.obsidian-wiki/config` or `.env`, default: `wikilink`).
+
+| Setting | Syntax | Example |
+|---|---|---|
+| `wikilink` *(default)* | `[[path/to/page]]` or `[[path/to/page\|display text]]` | `[[concepts/foo\|foo]]` |
+| `markdown` | `[display text](relative/path.md)` | `[foo](../concepts/foo.md)` |
+
+### Generating markdown-format links
+
+When `OBSIDIAN_LINK_FORMAT=markdown`:
+1. Compute the path from the **current file's directory** to the **target `.md` file** using `..` to climb up as needed.
+2. Use the page title or a natural phrase as display text.
+3. Always include the `.md` extension.
+
+| Current file | Target | Relative link |
+|---|---|---|
+| `index.md` | `concepts/foo.md` | `[foo](concepts/foo.md)` |
+| `concepts/foo.md` | `entities/bar.md` | `[bar](../entities/bar.md)` |
+| `projects/my-project/my-project.md` | `concepts/foo.md` | `[foo](../../concepts/foo.md)` |
+| `projects/my-project/concepts/arch.md` | `entities/bar.md` | `[bar](../../../entities/bar.md)` |
+
+The `[[path\|display text]]` wikilink form maps to `[display text](relative/path.md)` in Markdown mode.
+
+**Scope:** this setting affects only newly written or updated links. Existing vault content is never automatically migrated — users who want to convert old links can run the `cross-linker` or `wiki-lint` skill.
+
+Every write skill reads `OBSIDIAN_LINK_FORMAT` from config before generating links and applies the correct format.
+
 ## Environment Variables
 
 The wiki is configured through environment variables (see `.env.example`). The only required variable is the vault path — everything else has sensible defaults.
@@ -264,6 +293,7 @@ The wiki is configured through environment variables (see `.env.example`). The o
 - `OBSIDIAN_SOURCES_DIR` — Where raw source documents are
 - `OBSIDIAN_CATEGORIES` — Comma-separated list of categories
 - `CLAUDE_HISTORY_PATH` — Where to find Claude conversation data
+- `OBSIDIAN_LINK_FORMAT` — Internal link syntax: `wikilink` (default) or `markdown`
 
 No API keys are needed — the agent running these skills already has LLM access built in.
 
