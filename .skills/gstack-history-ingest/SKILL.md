@@ -11,7 +11,7 @@ description: >
 
 # gstack History Ingest — Learnings Mining
 
-Extracts knowledge from the user's gstack agent history and distills it into the Obsidian wiki. gstack writes a `learnings.jsonl` per project — each line was emitted by a gstack review skill (`/plan-eng-review`, `/plan-ceo-review`, `/aar`, etc.) and captures a concrete pitfall, pattern, or architectural insight from real project work.
+Extracts knowledge from the user's gstack agent history and distills it into the Obsidian wiki. gstack writes a `learnings.jsonl` per project — each line was emitted by a gstack review skill (e.g. `/plan-eng-review`, `/plan-ceo-review`, `/retro`) and captures a concrete pitfall, pattern, or architectural insight from real project work.
 
 This skill can be invoked directly or via the `wiki-history-ingest` router (`/wiki-history-ingest gstack`).
 
