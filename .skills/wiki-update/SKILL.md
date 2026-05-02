@@ -16,9 +16,12 @@ You are distilling knowledge from the current project into the user's Obsidian w
 1. Read `~/.obsidian-wiki/config` to get:
    - `OBSIDIAN_VAULT_PATH` — where the wiki lives
    - `OBSIDIAN_WIKI_REPO` — where the obsidian-wiki repo is cloned (for reading other skills if needed)
+   - `OBSIDIAN_LINK_FORMAT` — `wikilink` (default) or `markdown`
 2. If `~/.obsidian-wiki/config` doesn't exist, tell the user to run `bash setup.sh` from their obsidian-wiki repo first.
 3. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` to check if this project has been synced before.
 4. Read `$OBSIDIAN_VAULT_PATH/index.md` to know what the wiki already contains.
+
+When writing internal links in Steps 4–5, apply the link format from `llm-wiki/SKILL.md` (Link Format section) using the `OBSIDIAN_LINK_FORMAT` value.
 
 ## Step 1: Understand the Project
 

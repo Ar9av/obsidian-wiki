@@ -36,7 +36,7 @@ $OBSIDIAN_VAULT_PATH/
     └── <project-name>.md   # One page per project synced via wiki-update
 ```
 
-Every wiki page has required frontmatter: `title`, `category`, `tags`, `sources`, `created`, `updated`. Pages connect via `[[wikilinks]]`.
+Every wiki page has required frontmatter: `title`, `category`, `tags`, `sources`, `created`, `updated`. Pages connect via internal links — `[[wikilinks]]` by default, or standard Markdown links when `OBSIDIAN_LINK_FORMAT=markdown` is set in config.
 
 ## Skill Routing
 
@@ -67,6 +67,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "/wiki-research [topic]" / "research X" / "find everything about Y" | `wiki-research` |
 | "create a dashboard" / "vault dashboard" / "show all X as a table" / "dynamic view" | `wiki-dashboard` |
 | "import my gstack history" / "sync gstack learnings" / "pull in new learnings" / "update wiki from gstack" | `gstack-history-ingest` |
+| "synthesize my wiki" / "find connections" / "what concepts keep coming up together" / "/wiki-synthesize" | `wiki-synthesize` |
 | "create a new skill" | `skill-creator` |
 
 ## Cross-Project Usage
