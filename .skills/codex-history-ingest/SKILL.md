@@ -150,6 +150,13 @@ For each impacted project, create/update `projects/<name>/<name>.md` (project na
 - Distill knowledge, not chronology
 - Avoid "on date X we discussed..." unless date context is essential
 - Add `summary:` frontmatter on each new/updated page (1-2 sentences, <= 200 chars)
+- Add confidence and lifecycle fields to every new page:
+  ```yaml
+  base_confidence: 0.42
+  lifecycle: draft
+  lifecycle_changed: <ISO date today>
+  ```
+  Leave `lifecycle` unchanged on update.
 - Add provenance markers:
   - `^[extracted]` when directly grounded in explicit session content
   - `^[inferred]` when synthesizing patterns across events/sessions

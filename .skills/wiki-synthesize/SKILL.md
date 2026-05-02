@@ -81,6 +81,9 @@ provenance:
   extracted: 0.2
   inferred: 0.7
   ambiguous: 0.1
+base_confidence: <min(base_confidence of all input pages)>
+lifecycle: draft
+lifecycle_changed: TIMESTAMP_DATE
 ---
 
 # <Concept A> × <Concept B>

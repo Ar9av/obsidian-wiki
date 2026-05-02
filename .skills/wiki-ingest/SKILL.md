@@ -175,6 +175,21 @@ For each page in your plan:
 
 **Write a `summary:` frontmatter field** on every new page (1–2 sentences, ≤200 characters) answering "what is this page about?" for a reader who hasn't opened it. When updating an existing page whose meaning has shifted, rewrite the summary to match the new content. This field is what `wiki-query`'s cheap retrieval path reads — a missing or stale summary forces expensive full-page reads.
 
+**Add confidence and lifecycle fields** to every new page's frontmatter:
+
+```yaml
+base_confidence: <computed>   # [0.0, 1.0] — see llm-wiki/SKILL.md Confidence formula
+lifecycle: draft
+lifecycle_changed: "<ISO date today>"
+```
+
+Compute `base_confidence` using the formula from `llm-wiki/SKILL.md` (Confidence and Lifecycle section):
+- Count distinct source_ids for this page
+- Classify each source's quality bucket
+- `base_confidence = min(N/3, 1.0) × 0.5 + avg_quality × 0.5`
+
+When **updating** an existing page, recompute `base_confidence` only if sources changed materially (source added or removed). Do not rewrite it on every update — this avoids git churn. Leave `lifecycle` unchanged on update; only the human editor promotes lifecycle state.
+
 **Apply a `visibility/` tag** if the content clearly warrants one (optional):
 - `visibility/internal` — architecture internals, system credentials patterns, team-only context
 - `visibility/pii` — content that references personal data, user records, or sensitive identifiers

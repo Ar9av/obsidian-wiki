@@ -114,6 +114,9 @@ provenance:
   extracted: 0.6
   inferred: 0.35
   ambiguous: 0.05
+base_confidence: 0.59
+lifecycle: draft
+lifecycle_changed: TIMESTAMP_DATE
 created: TIMESTAMP
 updated: TIMESTAMP
 ---

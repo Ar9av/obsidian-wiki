@@ -94,6 +94,9 @@ provenance:
   extracted: 0.X
   inferred: 0.X
   ambiguous: 0.X
+base_confidence: 0.42
+lifecycle: draft
+lifecycle_changed: <ISO date today>
 ---
 ```
 

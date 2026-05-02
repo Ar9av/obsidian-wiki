@@ -276,6 +276,14 @@ For each project with content, create or update the project overview page at `pr
 
 **Write a `summary:` frontmatter field** on every new/updated page — 1–2 sentences, ≤200 chars, answering "what is this page about?" for a reader who hasn't opened it. `wiki-query`'s cheap retrieval path reads this field to avoid opening page bodies.
 
+**Add confidence and lifecycle fields** to every new page's frontmatter:
+```yaml
+base_confidence: 0.42
+lifecycle: draft
+lifecycle_changed: <ISO date today>
+```
+On update, leave `lifecycle` and `lifecycle_changed` unchanged — only a human editor transitions lifecycle state.
+
 **Mark provenance** per the convention in `llm-wiki` (Provenance Markers section):
 
 - **Memory files** are mostly extracted — the user wrote them by hand and they're already distilled. Treat memory-derived claims as extracted unless you're stitching together claims from multiple memory files.
