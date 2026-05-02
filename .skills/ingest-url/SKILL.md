@@ -170,6 +170,9 @@ provenance:
   extracted: 0.X
   inferred: 0.X
   ambiguous: 0.X
+base_confidence: <computed — see below>
+lifecycle: draft
+lifecycle_changed: "<ISO date today>"
 ---
 ```
 
@@ -192,8 +195,26 @@ provenance:
   extracted: 0.X
   inferred: 0.X
   ambiguous: 0.X
+base_confidence: <computed — see below>
+lifecycle: draft
+lifecycle_changed: "<ISO date today>"
 ---
 ```
+
+**Computing `base_confidence` for a URL source:**
+
+Classify the URL's quality bucket using the host:
+- `arxiv.org`, `doi.org`, conference sites → `paper` (1.0)
+- `*.gov`, official vendor docs (e.g. `docs.python.org`, `developer.mozilla.org`) → `official` (0.9)
+- Well-maintained third-party docs (e.g. `docs.docker.com`) → `documentation` (0.85)
+- GitHub READMEs (`github.com`) → `repository` (0.75)
+- Personal blogs, Medium, Substack, dev.to → `blog` (0.55)
+- Stack Overflow, Hacker News, Reddit → `forum` (0.4)
+- Anything else → `unknown` (0.4)
+
+With 1 distinct source: `base_confidence = round(0.17 + 0.5 × quality_score, 2)`
+
+Examples: `paper` → 0.67, `official` → 0.62, `documentation` → 0.60, `repository` → 0.55, `blog` → 0.45, `forum/unknown` → 0.37.
 
 Then write the body (same for both modes):
 

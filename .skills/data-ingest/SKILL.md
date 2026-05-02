@@ -121,6 +121,13 @@ Follow the `wiki-ingest` skill's process for creating/updating pages:
 - Attribute claims to their source
 - **Write a `summary:` frontmatter field** on every new page (1–2 sentences, ≤200 characters) answering "what is this page about?" — this is what downstream skills read to avoid opening the page body.
 - **Apply provenance markers** per the convention in `llm-wiki`. Conversation, log, and chat data tend to be high-inference — you're often reading between the turns to extract a coherent claim. Be liberal with `^[inferred]` for synthesized patterns and with `^[ambiguous]` when speakers contradict each other or you're unsure who's right. Write a `provenance:` frontmatter block on each new/updated page.
+- **Add confidence and lifecycle fields** to every new page:
+  ```yaml
+  base_confidence: 0.37
+  lifecycle: draft
+  lifecycle_changed: <ISO date today>
+  ```
+  The caller may pass an explicit quality override (e.g. `quality: documentation`) — if so, recompute: `base_confidence = round(0.17 + 0.5 × quality_score, 2)` using the quality table in `llm-wiki/SKILL.md`. Default is `unknown` (0.4) → 0.37.
 
 ## Step 5: Update Manifest and Special Files
 

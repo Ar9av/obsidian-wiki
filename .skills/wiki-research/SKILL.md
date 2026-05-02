@@ -97,6 +97,9 @@ provenance:
   extracted: 0.X
   inferred: 0.X
   ambiguous: 0.X
+base_confidence: <0.17 + 0.5 × classify(url) for a single source>
+lifecycle: draft
+lifecycle_changed: <ISO date today>
 ---
 ```
 
@@ -133,6 +136,9 @@ provenance:
   extracted: 0.X
   inferred: 0.X
   ambiguous: 0.X
+base_confidence: <min(N_unique_sources/3,1.0)×0.5 + avg_source_quality×0.5>
+lifecycle: draft
+lifecycle_changed: <ISO date today>
 ---
 
 # Research: <Topic>
