@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.obsidian-wiki.daily-update</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <!-- Substituted automatically by /daily-update setup mode — do not edit manually -->
+    <string>OBSIDIAN_WIKI_REPO/scripts/daily-update.sh</string>
+  </array>
+
+  <!-- Run at 9:00 AM daily -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>9</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <!-- Also run immediately on load if the last run was missed (laptop was asleep) -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/obsidian-wiki-daily.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/tmp/obsidian-wiki-daily.err</string>
+</dict>
+</plist>
