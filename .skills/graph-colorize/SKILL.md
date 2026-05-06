@@ -18,7 +18,7 @@ Obsidian stores graph settings in `<vault>/.obsidian/graph.json`. The `colorGrou
 
 ## Before You Start
 
-1. Read `~/.obsidian-wiki/config`, or fall back to `.env` in this repo, to get `OBSIDIAN_VAULT_PATH`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
 2. Confirm `$OBSIDIAN_VAULT_PATH/.obsidian/` exists. If it doesn't, the vault has never been opened in Obsidian — tell the user to open the vault once in Obsidian, then re-run.
 3. **Warn the user if Obsidian is likely open**: Obsidian overwrites `graph.json` on close. Tell them to close the vault first, or be ready to reload (Cmd/Ctrl+R) and not touch the graph settings until they reload.
 

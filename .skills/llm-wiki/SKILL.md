@@ -340,7 +340,7 @@ Skills that consume this table: `wiki-query`, `cross-linker`, `wiki-lint`, `wiki
 
 ## Link Format
 
-All internal links connecting wiki pages are controlled by `OBSIDIAN_LINK_FORMAT` (read from `~/.obsidian-wiki/config` or `.env`, default: `wikilink`).
+All internal links connecting wiki pages are controlled by `OBSIDIAN_LINK_FORMAT` from the resolved config (default: `wikilink`).
 
 | Setting | Syntax | Example |
 |---|---|---|

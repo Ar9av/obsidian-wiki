@@ -4,12 +4,13 @@ A **skill-based framework** for building and maintaining an Obsidian knowledge b
 
 ## Configuration
 
-Read config in this order (first found wins):
+Resolve config using the Config Resolution Protocol in `llm-wiki/SKILL.md`:
 
-1. **`~/.obsidian-wiki/config`** — global config, works from any project directory
-2. **`.env`** in the obsidian-wiki repo — local fallback
+1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
+2. **Global config** — if no local `.env` is found, read `~/.obsidian-wiki/config`.
+3. **Prompt setup** — if neither exists, tell the user to run `wiki-setup`.
 
-Both files set `OBSIDIAN_VAULT_PATH` (where the wiki lives). The global config also sets `OBSIDIAN_WIKI_REPO` (where this repo is cloned).
+The resolved config sets `OBSIDIAN_VAULT_PATH` (where the wiki lives). It may also set `OBSIDIAN_WIKI_REPO` (where this repo is cloned) and other optional variables.
 
 **After reading config, always read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists.** It contains owner-specific conventions (domain vocabulary, ingest preferences, writing style, project scoping) that override framework defaults for all skills. Apply it for the duration of the session.
 
@@ -79,7 +80,7 @@ The main use case: you're working in some other project and want to sync knowled
 
 ### wiki-update (write to wiki)
 
-1. Read `~/.obsidian-wiki/config` to get `OBSIDIAN_VAULT_PATH`
+1. Resolve config using the Config Resolution Protocol to get `OBSIDIAN_VAULT_PATH`
 2. Scan the current project: README, source structure, git log, package metadata
 3. Distill what's worth remembering (architecture decisions, patterns, trade-offs — not code listings)
 4. Write to `$VAULT/projects/<project-name>.md`, cross-linking to concept/entity pages as needed
@@ -89,7 +90,7 @@ On repeat runs, it checks `last_commit_synced` in `.manifest.json` and only proc
 
 ### wiki-query (read from wiki)
 
-1. Read `~/.obsidian-wiki/config` to get `OBSIDIAN_VAULT_PATH`
+1. Resolve config using the Config Resolution Protocol to get `OBSIDIAN_VAULT_PATH`
 2. Scan titles, tags, and `summary:` frontmatter fields first (cheap pass)
 3. Only open page bodies when the index pass can't answer
 4. Return a synthesized answer with `[[wikilink]]` citations
