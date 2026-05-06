@@ -45,7 +45,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | User says something like… | Skill |
 |---|---|
 | "set up my wiki" / "initialize" | `wiki-setup` |
-| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" | `wiki-history-ingest` |
+| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" / "/wiki-history-ingest gstack" | `wiki-history-ingest` |
 | "/ingest-url <url>" / "add this URL" / "ingest this link" / "save this page" | `ingest-url` |
 | "ingest" / "add this to the wiki" / "process these docs" | `wiki-ingest` |
 | "import my Claude history" / "mine my conversations" | `claude-history-ingest` |
@@ -66,6 +66,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "save this" / "/wiki-capture" / "capture this" / "file this conversation" | `wiki-capture` |
 | "/wiki-research [topic]" / "research X" / "find everything about Y" | `wiki-research` |
 | "create a dashboard" / "vault dashboard" / "show all X as a table" / "dynamic view" | `wiki-dashboard` |
+| "import my gstack history" / "sync gstack learnings" / "pull in new learnings" / "update wiki from gstack" | `gstack-history-ingest` |
 | "synthesize my wiki" / "find connections" / "what concepts keep coming up together" / "/wiki-synthesize" | `wiki-synthesize` |
 | "create a new skill" | `skill-creator` |
 | "/wiki-claude [topic]" / "/wiki-codex [topic]" / "/wiki-hermes [topic]" / "/wiki-openclaw [topic]" / "/wiki-copilot [topic]" | `wiki-agent` |
