@@ -367,6 +367,43 @@ The `[[path\|display text]]` wikilink form maps to `[display text](relative/path
 
 Every write skill reads `OBSIDIAN_LINK_FORMAT` from config before generating links and applies the correct format.
 
+## Config Resolution Protocol
+
+**All skills must resolve config using this algorithm — do not hard-code `.env` or `~/.obsidian-wiki/config` directly.** This ensures single-vault, multi-vault, project-local, and VPS setups all work correctly.
+
+### Resolution order
+
+1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
+2. **Global config** — if no local `.env` found, read `~/.obsidian-wiki/config`.
+3. **Prompt setup** — if neither exists, tell the user: "No config found. Run `wiki-setup` to initialize your wiki."
+
+```
+find_config() {
+  dir="$PWD"
+  while [[ "$dir" != "$HOME" && "$dir" != "/" ]]; do
+    [[ -f "$dir/.env" ]] && grep -q "OBSIDIAN_VAULT_PATH" "$dir/.env" && { echo "$dir/.env"; return; }
+    dir="$(dirname "$dir")"
+  done
+  [[ -f "$HOME/.obsidian-wiki/config" ]] && { echo "$HOME/.obsidian-wiki/config"; return; }
+  echo ""
+}
+```
+
+### Vault-scoped state
+
+Skills that write runtime state (e.g. `daily-update`) must scope that state to the resolved vault, not to a global path. Use:
+
+```
+VAULT_ID=$(echo "$OBSIDIAN_VAULT_PATH" | md5sum 2>/dev/null || md5 -q - <<< "$OBSIDIAN_VAULT_PATH" | cut -c1-8)
+STATE_DIR="$HOME/.obsidian-wiki/state/$VAULT_ID"
+```
+
+### Standard "Before You Start" block
+
+Every skill's setup section should read:
+
+> **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. Walk up from CWD for `.env`, fall back to `~/.obsidian-wiki/config`, else prompt setup. This gives `OBSIDIAN_VAULT_PATH` and any tool-specific path overrides.
+
 ## Environment Variables
 
 The wiki is configured through environment variables (see `.env.example`). The only required variable is the vault path — everything else has sensible defaults.
@@ -375,6 +412,10 @@ The wiki is configured through environment variables (see `.env.example`). The o
 - `OBSIDIAN_SOURCES_DIR` — Where raw source documents are
 - `OBSIDIAN_CATEGORIES` — Comma-separated list of categories
 - `CLAUDE_HISTORY_PATH` — Where to find Claude conversation data
+- `CODEX_HISTORY_PATH` — Where to find Codex session data
+- `HERMES_HOME` — Where to find Hermes agent data
+- `OPENCLAW_HOME` — Where to find OpenClaw data
+- `COPILOT_HISTORY_PATH` — Where to find Copilot session data
 - `OBSIDIAN_LINK_FORMAT` — Internal link syntax: `wikilink` (default) or `markdown`
 
 No API keys are needed — the agent running these skills already has LLM access built in.

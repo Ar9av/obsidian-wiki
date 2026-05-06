@@ -2,27 +2,56 @@
 set -euo pipefail
 
 # Daily wiki index update — called by launchd or directly.
-# Checks if any history sources are stale and writes a status file
+# Checks if any history sources are stale and writes vault-scoped state files
 # that the shell prompt reads on terminal open.
+#
+# Config resolution order (mirrors llm-wiki/SKILL.md protocol):
+#   1. Walk up from CWD looking for .env with OBSIDIAN_VAULT_PATH
+#   2. Fall back to ~/.obsidian-wiki/config
+#   3. Exit with error if neither found
 
-CONFIG="$HOME/.obsidian-wiki/config"
-STATE_DIR="$HOME/.obsidian-wiki"
-STATE_FILE="$STATE_DIR/.last_update"
-DELTA_FILE="$STATE_DIR/.pending_delta"
+_find_config() {
+  local dir="$PWD"
+  while [[ "$dir" != "$HOME" && "$dir" != "/" ]]; do
+    if [[ -f "$dir/.env" ]] && grep -q "OBSIDIAN_VAULT_PATH" "$dir/.env" 2>/dev/null; then
+      echo "$dir/.env"
+      return
+    fi
+    dir="$(dirname "$dir")"
+  done
+  if [[ -f "$HOME/.obsidian-wiki/config" ]]; then
+    echo "$HOME/.obsidian-wiki/config"
+    return
+  fi
+  echo ""
+}
 
-# Read vault path from config
-if [[ -f "$CONFIG" ]]; then
-  # shellcheck source=/dev/null
-  source "$CONFIG"
-fi
+CONFIG_FILE="$(_find_config)"
 
-if [[ -z "${OBSIDIAN_VAULT_PATH:-}" ]]; then
-  echo "[wiki-daily] OBSIDIAN_VAULT_PATH not set in $CONFIG — skipping" >&2
+if [[ -z "$CONFIG_FILE" ]]; then
+  echo "[wiki-daily] No config found. Run wiki-setup to initialize your wiki." >&2
   exit 1
 fi
 
-MANIFEST="$OBSIDIAN_VAULT_PATH/.manifest.json"
+# shellcheck source=/dev/null
+source "$CONFIG_FILE"
+
+if [[ -z "${OBSIDIAN_VAULT_PATH:-}" ]]; then
+  echo "[wiki-daily] OBSIDIAN_VAULT_PATH not set in $CONFIG_FILE — skipping" >&2
+  exit 1
+fi
+
+# Vault-scoped state dir (supports multiple vaults independently)
+VAULT_ID=$(echo "$OBSIDIAN_VAULT_PATH" | md5sum 2>/dev/null | cut -c1-8 || \
+           md5 -q - <<< "$OBSIDIAN_VAULT_PATH" 2>/dev/null | cut -c1-8 || \
+           echo "default")
+STATE_DIR="$HOME/.obsidian-wiki/state/$VAULT_ID"
 mkdir -p "$STATE_DIR"
+
+# Write vault path so wiki-notify.sh can find this state dir
+echo "$OBSIDIAN_VAULT_PATH" > "$STATE_DIR/.vault_path"
+
+MANIFEST="$OBSIDIAN_VAULT_PATH/.manifest.json"
 
 # Count sources modified after last ingest
 stale_count=0
@@ -37,7 +66,6 @@ except:
 " 2>/dev/null || echo "")
 
   if [[ -n "$last_updated" ]]; then
-    # Check each known source path for modification time > last_updated
     stale_count=$(MANIFEST="$MANIFEST" python3 - <<'PYEOF'
 import json, os, sys
 from datetime import datetime, timezone
@@ -71,13 +99,13 @@ PYEOF
   fi
 fi
 
-# Write state
+# Write vault-scoped state
 NOW=$(date +%s)
-echo "$NOW" > "$STATE_FILE"
-echo "$stale_count" > "$DELTA_FILE"
+echo "$NOW" > "$STATE_DIR/.last_update"
+echo "$stale_count" > "$STATE_DIR/.pending_delta"
 
 if [[ "$stale_count" -gt 0 ]]; then
-  echo "[wiki-daily] $stale_count source(s) have new content since last ingest."
+  echo "[wiki-daily] $stale_count source(s) have new content since last ingest. State: $STATE_DIR"
 else
-  echo "[wiki-daily] Wiki is up to date."
+  echo "[wiki-daily] Wiki is up to date. State: $STATE_DIR"
 fi

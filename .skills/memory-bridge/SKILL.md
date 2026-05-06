@@ -15,7 +15,7 @@ You are helping the user browse and compare their Obsidian wiki knowledge filter
 
 ## Before You Start
 
-1. Read `~/.obsidian-wiki/config` to get `OBSIDIAN_VAULT_PATH`. Fall back to `.env` inside the obsidian-wiki repo.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
 2. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` — this is the source-of-truth for what tool produced what.
 3. Read `$OBSIDIAN_VAULT_PATH/index.md` for page titles and one-line descriptions.
 
