@@ -15,7 +15,7 @@ You are ingesting source documents into an Obsidian wiki. Your job is not to sum
 
 ## Before You Start
 
-1. Read `~/.obsidian-wiki/config` (preferred) or `.env` (fallback) to get `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_SOURCES_DIR`, and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`). Only read the specific variables you need — do not log, echo, or reference any other values from these files.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_SOURCES_DIR`, and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`). Only read the specific variables you need — do not log, echo, or reference any other values from these files.
 2. Read `.manifest.json` at the vault root to check what's already been ingested
 3. Read `index.md` to understand current wiki content
 4. Read `log.md` to understand recent activity
