@@ -1,183 +1,434 @@
 ---
 name: wiki-dashboard
 description: >
-  Create dynamic, queryable dashboard views of the Obsidian vault using Obsidian Bases — a native
-  Obsidian feature that turns vault frontmatter into interactive tables, card galleries, and lists.
+  Create dynamic, queryable dashboard views of the Obsidian vault using Obsidian Bases or Dataview.
   Use this skill when the user says "create a dashboard", "vault dashboard", "show all X as a table",
   "dynamic view", "query my vault", "build a content index", "show me all concepts/entities/projects",
   or wants a structured, auto-updating view of their wiki content.
-  Requires Obsidian 1.8+ (Bases is a core plugin, no external install needed).
+  Bases is native to Obsidian 1.8+ (no plugin needed). Dataview requires the community plugin.
 ---
 
 # Wiki Dashboard — Dynamic Vault Views
 
-You are creating a `.base` file — an Obsidian Bases definition that turns vault frontmatter into a live, queryable view. The `.base` format is native to Obsidian 1.8+ and requires no plugins.
+Two tools available: **Obsidian Bases** (native, GUI-driven, no plugin) and **Dataview** (community plugin, SQL-like, more powerful). Check which the user has and prefer Bases unless they ask for Dataview or need GROUP BY / computed columns.
 
 ## Before You Start
 
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
-2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand what categories and pages exist
-3. Ask the user what they want to view if not specified — what folder, tag, category, or date range?
+2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand what categories and pages exist.
+3. Ask the user what they want to view if not specified — folder, tag, category, date range?
+4. Ask if they have Dataview installed if you're unsure which tool to use.
 
-## What Obsidian Bases Can Do
+---
 
-`.base` files define database-style views over vault notes. Each file declares:
-- **Which notes to include** — filtered by folder, tag, frontmatter property, or combination
-- **Which properties to show** — any frontmatter field becomes a column
-- **What view type** — `table`, `cards`, or `list`
-- **Sort and group** — by any property
-- **Computed columns** — formulas using `file.*` helpers and arithmetic
+## Option A — Obsidian Bases (`.base` files)
 
-Embed a `.base` into any note with `![[MyBase.base]]`.
+Bases are YAML files that define live views over vault notes. Native to Obsidian 1.8+, no plugin needed.
 
-## Step 1: Understand the Request
+### Official canonical schema
 
-Determine:
-- **What to show** — all pages in a category? Pages with a specific tag? A project's pages?
-- **What columns matter** — title, tags, created, updated, summary, category, project?
-- **View type** — table (default), cards (visual), or list (minimal)
-- **Sort order** — by updated (default), created, title, or a custom property
-- **Any filters** — date range, specific tags, folder scope
+Top-level keys:
 
-## Step 2: Generate the `.base` File
-
-The `.base` format is YAML. Here are the patterns you'll use:
-
-### Basic table — all pages in a category folder
 ```yaml
+filters:      # Global filter applied to all views (expression strings under and/or/not)
+formulas:     # Named computed properties — referenced as formula.<name>
+properties:   # Display config per property — sets displayName for column headers
+summaries:    # Aggregation formulas (e.g. mean, sum)
+views:        # Array of view definitions (required)
+```
+
+Each item in `views:`:
+
+```yaml
+views:
+  - type: table          # table | list | cards | map
+    name: "View Name"    # display label
+    limit: 50            # optional max rows
+    order:               # column display order (list of property/formula names)
+      - file.name
+      - note.updated
+    groupBy:             # grouping — goes INSIDE the view, NOT at top level
+      property: note.tags
+      direction: ASC     # ASC | DESC
+    filters:             # view-specific filter (merges with global filters)
+      and:
+        - 'note.status != "done"'
+    summaries:
+      formula.myFormula: Average
+```
+
+### Filter syntax — CRITICAL
+
+**Filters use expression strings, not typed objects.** Always wrap in `and:`, `or:`, or `not:` — a bare list causes a "may only have one of and/or/not keys" parse error.
+
+```yaml
+# CORRECT
+filters:
+  and:
+    - file.inFolder("concepts")
+
+# WRONG — typed objects (parse error)
 filters:
   - type: folder
     folder: concepts
-columns:
-  - property: file.name
-    title: Page
-  - property: tags
-    title: Tags
-  - property: summary
-    title: Summary
-  - property: updated
-    title: Updated
-sort:
-  - property: updated
-    direction: desc
-view: table
 ```
 
-### Filtered by tag
+Filters support nesting:
 ```yaml
 filters:
-  - type: tag
-    tag: "#machine-learning"
-columns:
-  - property: file.name
-    title: Page
-  - property: category
-    title: Category
-  - property: summary
-    title: Summary
-  - property: created
-    title: Created
-sort:
-  - property: created
-    direction: desc
-view: table
+  or:
+    - file.hasTag("book")
+    - and:
+        - file.inFolder("concepts")
+        - file.hasTag("research")
+    - not:
+        - file.hasTag("archived")
+```
+
+### Property name conventions
+
+Different contexts use different naming — confirmed from Obsidian's auto-reformat behaviour:
+
+| Context | Frontmatter field `tags` | File name | Formula |
+|---|---|---|---|
+| `properties:` keys | `note.tags` | `file.name` | `formula.<name>` |
+| `order:` values | `tags` (bare) | `file.name` | `formula.<name>` |
+| `groupBy.property:` | `tags` (bare) | `file.name` | — |
+| `filters:` expressions | `file.hasTag(...)` / `note.tags` | `file.name` | `formula.<name>` |
+| `formulas:` expressions | `note.tags`, `note.updated` | `file.name` | — |
+
+### Basic table — folder filter
+
+```yaml
+filters:
+  and:
+    - file.inFolder("concepts")
+properties:
+  file.name:
+    displayName: Page
+  note.tags:
+    displayName: Tags
+  note.summary:
+    displayName: Summary
+  note.updated:
+    displayName: Updated
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - tags
+      - summary
+      - updated
+```
+
+### Cards view — folder filter
+
+```yaml
+filters:
+  and:
+    - file.inFolder("entities")
+properties:
+  file.name:
+    displayName: Entity
+  note.title:
+    displayName: Full Name
+  note.tags:
+    displayName: Tags
+  note.summary:
+    displayName: Summary
+views:
+  - type: cards
+    name: Cards
+    order:
+      - file.name
+      - title
+      - tags
+      - summary
+```
+
+### Group by property — groupBy goes INSIDE the view
+
+When `groupBy` is set, **omit that property from `order:`** — it becomes the group header row and adding it as a column too causes duplication.
+
+```yaml
+filters:
+  and:
+    - file.inFolder("concepts")
+properties:
+  file.name:
+    displayName: Concept
+  note.summary:
+    displayName: Summary
+  note.updated:
+    displayName: Updated
+views:
+  - type: table
+    name: By Domain
+    groupBy:
+      property: tags        # bare property name, no note. prefix
+      direction: ASC
+    order:
+      - file.name           # do NOT include tags here — already the group header
+      - summary
+      - updated
+```
+
+### Tag filter
+
+```yaml
+filters:
+  and:
+    - file.hasTag("machine-learning")
+properties:
+  file.name:
+    displayName: Page
+  note.category:
+    displayName: Category
+  note.summary:
+    displayName: Summary
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - category
+      - summary
 ```
 
 ### Multi-filter (folder AND tag)
+
 ```yaml
 filters:
-  operator: and
-  conditions:
-    - type: folder
-      folder: projects
-    - type: tag
-      tag: "#active"
-columns:
-  - property: file.name
-    title: Project
-  - property: summary
-    title: Summary
-  - property: updated
-    title: Last Updated
-view: cards
+  and:
+    - file.inFolder("projects")
+    - file.hasTag("active")
+properties:
+  file.name:
+    displayName: Project
+  note.summary:
+    displayName: Summary
+  note.updated:
+    displayName: Last Updated
+views:
+  - type: cards
+    name: Cards
+    order:
+      - file.name
+      - summary
+      - updated
 ```
 
-### Computed column (days since last update)
+### OR filter (two folders)
+
 ```yaml
-columns:
-  - property: file.name
-    title: Page
-  - property: updated
-    title: Updated
-  - formula: "floor((now() - updated) / 86400000)"
-    title: Days Stale
-    type: number
-sort:
-  - formula: "floor((now() - updated) / 86400000)"
-    direction: desc
-view: table
+filters:
+  or:
+    - file.inFolder("concepts")
+    - file.inFolder("entities")
+properties:
+  file.name:
+    displayName: Page
+  note.category:
+    displayName: Category
+  note.updated:
+    displayName: Updated
+views:
+  - type: table
+    name: Table
+    order:
+      - file.name
+      - category
+      - updated
 ```
 
-### Filter operators and functions available
-- `file.hasTag("tag")` — boolean, true if page has tag
-- `file.inFolder("path")` — boolean, true if page is in folder
-- `file.name` — the note's filename (without extension)
-- `file.path` — full vault-relative path
-- `now()` — current timestamp in ms
-- Arithmetic: `+`, `-`, `*`, `/`, `floor()`, `ceil()`
-- Comparison: `==`, `!=`, `>`, `<`, `>=`, `<=`
+### Computed column via formulas
+
+```yaml
+filters:
+  and:
+    - file.inFolder("concepts")
+formulas:
+  days_stale: "floor((now() - note.updated) / 86400000)"
+properties:
+  file.name:
+    displayName: Page
+  note.updated:
+    displayName: Updated
+  formula.days_stale:
+    displayName: Days Stale
+views:
+  - type: table
+    name: Stale
+    order:
+      - file.name
+      - updated
+      - formula.days_stale
+```
+
+### Filter expression reference
+
+| Expression | What it does |
+|---|---|
+| `file.inFolder("path")` | Pages in that folder |
+| `file.hasTag("tag")` | Pages with that tag (no `#` prefix) |
+| `file.hasLink("Note Name")` | Pages linking to a note |
+| `file.name == "note-name"` | Exact filename match |
+| `file.ext == "md"` | Filter by extension |
+| `note.propertyName` | Any frontmatter property |
+| `formula.formulaName` | A named formula result |
+| `now()` | Current timestamp in ms |
+
+> **On Obsidian UI-generated format:** When Obsidian's GUI writes or reformats a `.base` file it may output a simplified shorthand with top-level `columns:`, `sort:`, and `view:` keys instead of the canonical schema. That format also works — Obsidian accepts both. Manually authored files should use the canonical schema above.
+
+---
+
+## Option B — Dataview (community plugin)
+
+Dataview uses a SQL-like query language inside ` ```dataview ``` ` code blocks in any note. More powerful than Bases for computed columns, GROUP BY, and cross-folder queries.
+
+### Basic table — folder
+
+````markdown
+```dataview
+TABLE
+  tags AS "Tags",
+  summary AS "Summary",
+  file.mtime AS "Last Modified"
+FROM "concepts"
+SORT file.mtime DESC
+```
+````
+
+### Table with clickable links (TABLE WITHOUT ID)
+
+````markdown
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Entity",
+  tags AS "Tags",
+  summary AS "Summary"
+FROM "entities"
+SORT file.name ASC
+```
+````
+
+### GROUP BY — use `rows.` prefix after grouping
+
+After `GROUP BY`, individual file properties must be prefixed with `rows.` — otherwise the column is empty or errors.
+
+````markdown
+```dataview
+TABLE WITHOUT ID
+  rows.file.link AS "Concept",
+  rows.summary AS "Summary"
+FROM "concepts"
+GROUP BY tags[0] AS "Domain"
+```
+````
+
+### Stale pages — use `file.mtime` for date math
+
+Avoid `choice(updated, date(updated), file.mtime)` — mixed date formats in `updated` frontmatter cause arithmetic errors. `file.mtime` is always a valid DateTime.
+
+````markdown
+```dataview
+TABLE WITHOUT ID
+  file.link AS "Page",
+  category AS "Type",
+  file.mtime AS "Last Modified",
+  (date(today) - file.mtime).days + " days" AS "Age"
+FROM "concepts" OR "entities" OR "projects"
+WHERE file.name != file.folder
+WHERE (date(today) - file.mtime).days > 30
+SORT (date(today) - file.mtime).days DESC
+```
+````
+
+### Multi-folder query
+
+````markdown
+```dataview
+TABLE
+  summary AS "Summary",
+  file.mtime AS "Last Modified"
+FROM "projects"
+WHERE file.name != file.folder
+SORT file.mtime DESC
+```
+````
+
+### Dataview reference
+
+| Clause | Usage |
+|---|---|
+| `FROM "folder"` | All notes in folder |
+| `FROM #tag` | All notes with tag |
+| `FROM "a" OR "b"` | Union of two folders |
+| `WHERE file.name != file.folder` | Exclude folder index pages |
+| `GROUP BY field AS "Label"` | Group rows — use `rows.` for properties after this |
+| `SORT field DESC` | Sort direction |
+| `file.link` | Clickable wikilink |
+| `file.mtime` | Last modified time (always valid DateTime) |
+| `(date(today) - file.mtime).days` | Days since last modification |
+
+---
 
 ## Step 3: Write the File
 
-Target path: `$OBSIDIAN_VAULT_PATH/_meta/<dashboard-name>.base`
+**Bases:** Target path `$OBSIDIAN_VAULT_PATH/_meta/<dashboard-name>.base`
 
-Use a slug derived from the dashboard's purpose:
+**Dataview:** Write queries directly into any `.md` note. A dedicated dashboard note at `$OBSIDIAN_VAULT_PATH/_meta/dashboard.md` works well for multi-section views.
+
+Slug examples:
 - "All concepts" → `_meta/concepts-index.base`
 - "Recent ingests" → `_meta/recent-ingests.base`
 - "Project overview" → `_meta/projects-overview.base`
 - "Stale pages" → `_meta/stale-pages.base`
+- "Full dashboard" → `_meta/dashboard.md`
 
 Create `_meta/` if it doesn't exist yet.
 
-## Step 4: Embed (optional)
+## Step 4: Embed Bases (optional)
 
-If the user wants the dashboard embedded in an existing note (e.g., `index.md` or a project overview), add:
+To embed a `.base` inside a note:
 
 ```markdown
-## <Dashboard Title>
-
-![[_meta/<dashboard-name>.base]]
+## Entities
+![[_meta/entities-tracker.base]]
 ```
 
-Ask the user before modifying an existing note.
+Ask before modifying an existing note.
 
 ## Step 5: Update Tracking
 
-**`log.md`** — Append:
+Append to `$OBSIDIAN_VAULT_PATH/log.md`:
 ```
-- [TIMESTAMP] WIKI_DASHBOARD name="<slug>" view=<type> filter="<description>"
+- [TIMESTAMP] WIKI_DASHBOARD name="<slug>" tool=bases|dataview view=<type> filter="<description>"
 ```
 
-No manifest or index update needed — `.base` files are live queries, not static content pages.
+No manifest or index update needed — dashboards are live queries, not static pages.
 
 ## Common Dashboard Recipes
 
-Tell the user about these if they're not sure what to ask for:
-
-| Dashboard | What it shows |
-|---|---|
-| **Content index** | All wiki pages grouped by category, sortable by updated date |
-| **Entity tracker** | All entity pages (people, tools, orgs) with tags and sources |
-| **Ingestion log** | Pages sorted by `created` date — see what was added recently |
-| **Stale content** | Pages not updated in 30+ days — maintenance view |
-| **Project overview** | All project pages with last-sync date |
-| **Tag cloud** | Pages grouped by tag — see coverage across topics |
-| **Research tracker** | All synthesis pages tagged `research` — shows research history |
+| Dashboard | Best tool | What it shows |
+|---|---|---|
+| **Content index** | Bases or Dataview | All pages grouped by category, sorted by updated |
+| **Entity tracker** | Bases (cards) | Entity pages as a visual card gallery |
+| **Concepts by domain** | Dataview | Concepts grouped by first tag using GROUP BY |
+| **Ingestion log** | Either | Pages sorted by `created` date |
+| **Stale content** | Dataview | Pages not touched in 30+ days with day count |
+| **Project overview** | Either | Project pages with last-sync date |
+| **Research tracker** | Dataview | Synthesis pages tagged `research` |
 
 ## Quality Checklist
 
-- [ ] `.base` YAML is valid and uses correct field names
-- [ ] Filter matches the user's intent
+- [ ] Bases: filters use expression strings under `and:`/`or:`/`not:`, never typed objects
+- [ ] Bases: `groupBy` goes inside the view definition — not as a top-level key
+- [ ] Bases: column headers set via `properties: <name>: displayName: "..."`, not `columns: [{title}]`
+- [ ] Bases: `formulas:` used for computed columns, referenced as `formula.<name>` in order/properties
+- [ ] Dataview: GROUP BY queries use `rows.property` not bare `property`
+- [ ] Dataview: date arithmetic uses `file.mtime`, not `choice(updated, ...)`
 - [ ] File written to `_meta/` with a descriptive slug
 - [ ] `log.md` updated
-- [ ] User told how to embed it (`![[_meta/<name>.base]]`) and what Obsidian version is required (1.8+)
+- [ ] User told how to embed Bases (`![[_meta/<name>.base]]`) or open the dashboard note
