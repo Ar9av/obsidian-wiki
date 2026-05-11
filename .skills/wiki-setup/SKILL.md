@@ -28,8 +28,10 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - Default: auto-discovers from `~/.claude`
    - Set explicitly if Claude data is elsewhere
 
-4. **Have QMD installed?** → `QMD_WIKI_COLLECTION` / `QMD_PAPERS_COLLECTION`
+4. **Have QMD installed?** → `QMD_WIKI_COLLECTION` / `QMD_PAPERS_COLLECTION` / `QMD_TRANSPORT`
    - Optional. Enables semantic search in `wiki-query` and source discovery in `wiki-ingest`.
+   - Default to `QMD_TRANSPORT=mcp` unless the user wants the agent to call the local `qmd` CLI directly.
+   - If using CLI mode, set `QMD_CLI_SEARCH_MODE=quality` by default; suggest `balanced` if reranking is too slow.
    - If unsure, skip for now — both skills fall back to `Grep` automatically.
    - Install instructions: see `.env.example` (QMD section).
 

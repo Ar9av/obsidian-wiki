@@ -219,27 +219,31 @@ Modes: `by-tag` (default — top 10 tags), `by-category` (the seven vault folder
 
 - **Tiered retrieval.** `wiki-query` reads titles, tags, and page summaries first and only opens page bodies when the cheap pass can't answer. Say "quick answer" or "just scan" to force index-only mode. Keeps query cost roughly flat as your vault grows from 20 pages to 2000.
 
-- **QMD semantic search (optional).** [QMD](https://github.com/tobi/qmd) is a local MCP server that indexes your wiki and source documents for fast semantic search. When `QMD_WIKI_COLLECTION` is set in `.env`, `wiki-query` runs a lex+vec pass against the collection before falling back to Grep — enabling concept-level matches that exact-string search misses. When `QMD_PAPERS_COLLECTION` is set, `wiki-ingest` queries your indexed sources before writing a new page, surfacing related work, detecting contradictions, and deciding whether to create or merge. Without QMD, both skills fall back to Grep/Glob and remain fully functional.
+- **QMD semantic search (optional).** [QMD](https://github.com/tobi/qmd) indexes your wiki and source documents for semantic search. When `QMD_WIKI_COLLECTION` is set in `.env`, `wiki-query` runs a lex+vec pass against the collection before falling back to Grep — enabling concept-level matches that exact-string search misses. When `QMD_PAPERS_COLLECTION` is set, `wiki-ingest` queries your indexed sources before writing a new page, surfacing related work, detecting contradictions, and deciding whether to create or merge. QMD can be used through MCP or the local CLI. Without QMD, both skills fall back to Grep/Glob and remain fully functional.
 
 - **`_raw/` staging directory.** Drop rough notes, clipboard pastes, or quick captures into `_raw/` inside your vault. The next `wiki-ingest` run promotes them to proper wiki pages and removes the originals. Configured via `OBSIDIAN_RAW_DIR` in `.env` (defaults to `_raw`).
 
 ## Optional: QMD Semantic Search
 
-By default, `wiki-ingest` and `wiki-query` use `Grep`/`Glob` for search — fully functional, no extra setup. If your vault grows large or you want concept-level matches across your sources, you can plug in [QMD](https://github.com/tobi/qmd): a local MCP server that runs lex+vec queries against indexed collections.
+By default, `wiki-ingest` and `wiki-query` use `Grep`/`Glob` for search — fully functional, no extra setup. If your vault grows large or you want concept-level matches across your sources, you can plug in [QMD](https://github.com/tobi/qmd), either through MCP or by letting the agent call the local `qmd` CLI.
 
 **Setup:**
 
-1. Install QMD and add it to your MCP config (see the QMD repo for instructions).
+1. Install QMD. If you want MCP mode, also add it to your MCP config (see the QMD repo for instructions).
 2. Index your wiki and/or source documents:
    ```bash
    qmd index --name wiki /path/to/your/vault
    qmd index --name papers /path/to/your/sources
    ```
-3. Set the collection names in your `.env`:
+3. Set the collection names and transport in your `.env`:
    ```env
-   QMD_WIKI_COLLECTION=wiki      # used by wiki-query
-   QMD_PAPERS_COLLECTION=papers  # used by wiki-ingest (source discovery)
+   QMD_WIKI_COLLECTION=wiki       # used by wiki-query
+   QMD_PAPERS_COLLECTION=papers   # used by wiki-ingest (source discovery)
+   QMD_TRANSPORT=mcp              # mcp | cli
+   QMD_CLI_SEARCH_MODE=quality    # quality | balanced | fast
    ```
+
+`QMD_TRANSPORT=mcp` preserves the original behavior and uses an agent-configured QMD MCP server. `QMD_TRANSPORT=cli` runs the local `qmd` command directly. CLI mode defaults to `quality`, which uses `qmd query` with reranking for the best relevance. If that is too slow on CPU, set `QMD_CLI_SEARCH_MODE=balanced` to use `qmd query --no-rerank`, or `fast` for a lighter semantic pass.
 
 **What changes with QMD enabled:**
 

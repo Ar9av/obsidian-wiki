@@ -101,6 +101,15 @@ When `QMD_PAPERS_COLLECTION` is set:
 
 Before extracting knowledge from a document, check whether related papers are already indexed that could enrich the page you're about to write:
 
+Choose the QMD transport from `$QMD_TRANSPORT`:
+
+- `mcp` (default): use the QMD MCP tool configured in the agent.
+- `cli`: run the local qmd CLI. Use `$QMD_CLI` if set; otherwise use `qmd`.
+
+If the selected transport is unavailable (no MCP tool, `qmd` not on PATH, or the command errors), skip QMD and continue with Step 2.
+
+For MCP transport:
+
 ```
 mcp__qmd__query:
   collection: <QMD_PAPERS_COLLECTION>   # e.g. "papers"
@@ -111,6 +120,23 @@ mcp__qmd__query:
     - type: lex    # keyword — finds papers citing the same methods, tools, or authors
       query: <key terms, author names, method names from the source>
 ```
+
+For CLI transport, pick the command from `$QMD_CLI_SEARCH_MODE`:
+
+- `quality` (default): best relevance; slower on CPU.
+  ```bash
+  ${QMD_CLI:-qmd} query $'vec: <topic or thesis of the source>\nlex: <key terms, author names, method names>' -c "$QMD_PAPERS_COLLECTION" -n 8 --files
+  ```
+- `balanced`: hybrid search without LLM reranking; use when `quality` is too slow.
+  ```bash
+  ${QMD_CLI:-qmd} query $'vec: <topic or thesis of the source>\nlex: <key terms, author names, method names>' -c "$QMD_PAPERS_COLLECTION" -n 8 --no-rerank --files
+  ```
+- `fast`: semantic-only source discovery.
+  ```bash
+  ${QMD_CLI:-qmd} vsearch "<topic or thesis of the source>" -c "$QMD_PAPERS_COLLECTION" -n 8 --files
+  ```
+
+Use `${QMD_CLI:-qmd} get "#docid"` to retrieve a ranked source by docid when CLI output provides one.
 
 Use the returned snippets to:
 1. **Surface related papers** you may not have thought to link — add them as cross-references in the wiki page

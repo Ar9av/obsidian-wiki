@@ -72,6 +72,15 @@ If you're in **index-only mode**, stop here. Answer from `summary:` fields, titl
 
 If `QMD_WIKI_COLLECTION` is set and the index pass didn't produce clear candidates — or the question requires semantic matching rather than exact terms — use QMD before reaching for `Grep`:
 
+Choose the QMD transport from `$QMD_TRANSPORT`:
+
+- `mcp` (default): use the QMD MCP tool configured in the agent.
+- `cli`: run the local qmd CLI. Use `$QMD_CLI` if set; otherwise use `qmd`.
+
+If the selected transport is unavailable (no MCP tool, `qmd` not on PATH, or the command errors), skip QMD and continue with Step 3.
+
+For MCP transport:
+
 ```
 mcp__qmd__query:
   collection: <QMD_WIKI_COLLECTION>   # e.g. "knowledge-base-wiki"
@@ -83,7 +92,24 @@ mcp__qmd__query:
       query: <question rephrased as a description>
 ```
 
-The returned snippets act as pre-read section summaries. If they answer the question fully, skip Step 3 and go straight to Step 4 (reading only the pages QMD ranked highest). If not, use the ranked file list to guide which files to grep or read in Step 3.
+For CLI transport, pick the command from `$QMD_CLI_SEARCH_MODE`:
+
+- `quality` (default): best relevance; slower on CPU.
+  ```bash
+  ${QMD_CLI:-qmd} query $'lex: <key terms>\nvec: <question rephrased as a description>' -c "$QMD_WIKI_COLLECTION" -n 8 --files
+  ```
+- `balanced`: hybrid search without LLM reranking; use when `quality` is too slow.
+  ```bash
+  ${QMD_CLI:-qmd} query $'lex: <key terms>\nvec: <question rephrased as a description>' -c "$QMD_WIKI_COLLECTION" -n 8 --no-rerank --files
+  ```
+- `fast`: semantic-only recall, or `search` instead when exact names, file paths, or error messages matter.
+  ```bash
+  ${QMD_CLI:-qmd} vsearch "<question rephrased as a description>" -c "$QMD_WIKI_COLLECTION" -n 8 --files
+  ```
+
+Use `${QMD_CLI:-qmd} get "#docid"` to retrieve a ranked document by docid when CLI output provides one.
+
+The returned snippets or ranked files act as pre-read section summaries. If they answer the question fully, skip Step 3 and go straight to Step 4 (reading only the pages QMD ranked highest). If not, use the ranked file list to guide which files to grep or read in Step 3.
 
 **Also search `papers` when the question may have source material in `_raw/`:**
 
