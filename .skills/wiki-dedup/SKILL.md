@@ -52,21 +52,24 @@ For every pair of pages in the registry, compute a **similarity score** using th
 
 | Signal | How to assess | Max contribution |
 |---|---|---|
-| **Token overlap** | Jaccard similarity of lowercased title word-tokens (split on spaces, hyphens, punctuation) | 0.50 |
-| **Edit distance** | Normalized edit distance on lowercased titles: `1 - (edits / max(len_a, len_b))` | 0.30 |
-| **Substring containment** | One title is a substring of the other (e.g. "RSC" ⊂ "React Server Components") | 0.40 |
-| **Alias cross-match** | Page A's title appears in page B's `aliases`, or vice versa | 0.50 |
+| **Token overlap** | Jaccard similarity of lowercased title word-tokens (split on spaces, hyphens, underscores, punctuation) | 0.65 |
+| **Edit distance** | Normalized edit distance on lowercased titles: `1 - (edits / max(len_a, len_b))` | 0.40 |
+| **Substring containment** | One title is a substring of the other (e.g. "RSC" ⊂ "React Server Components") | 0.50 |
+| **Alias cross-match** | Page A's title appears in page B's `aliases`, or vice versa | 0.65 |
 
-Composite title score = `min(max(token_overlap, edit_distance, substring), 0.50) + alias_cross_bonus`.
+Composite title score = `min(max(token_overlap, edit_distance, substring), 0.65) + alias_cross_bonus`.
 
 You don't need exact arithmetic — make a confident judgement about degree of similarity.
+
+**Title extraction note:** Some pages use YAML block scalars (`title: >-` or `title: |`). When the `title:` value is `>-`, `>`, `|`, or `|-`, the actual title is on the next indented line — read it from there. Never compare the literal string `>-` as a title.
 
 ### 2b. Semantic signals (cheap pass)
 
 | Signal | Points |
 |---|---|
-| Same `category` | +0.10 |
-| Tag overlap ≥ 3 shared tags | +0.10 |
+| Same `category` directory | +0.10 |
+| Tag overlap ≥ 3 shared tags | +0.15 |
+| Tag overlap ≥ 2 shared tags | +0.05 |
 | Same first tag (dominant tag) | +0.05 |
 
 ### 2c. Threshold
