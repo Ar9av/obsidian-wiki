@@ -124,11 +124,18 @@ If the QMD results show that 3+ papers touch the same concept, that concept almo
 ### Step 2: Extract Knowledge
 
 From the source, identify:
+- **Source thesis** — what the source is trying to convince the reader of, not just the topics it covers
 - **Key concepts** that deserve their own page or belong on an existing one
 - **Entities** (people, tools, projects, organizations) mentioned
 - **Claims** that can be attributed to the source
 - **Relationships** between concepts (what connects to what)
 - **Open questions** the source raises but doesn't answer
+
+For every non-trivial source, extract the thesis before splitting the document into concept pages:
+- **Thesis** — the source's main claim, argument, or point of view
+- **Supporting claims** — the main claims the source uses to support that thesis
+- **Implications** — what follows if the thesis is true; mark these `^[inferred]`
+- **Scope** — where the thesis applies and where it should not be generalized
 
 **Track provenance per claim as you go.** For each claim you extract, mentally tag it as:
 - *Extracted* — the source explicitly states this
@@ -154,9 +161,46 @@ Before writing anything, plan which pages to update or create. Aim for 10-15 pag
 - If it's new, which category does it belong in?
 - What `[[wikilinks]]` should connect it to existing pages?
 
+### Step 4b: Synthesis Decision Gate
+
+After extracting the source thesis, decide whether it should stay only in the reference/concept pages or also create/update a `synthesis/` page.
+
+Always record one explicit line in the plan:
+
+`Synthesis: create <path> | update <path> | skip — <reason>`
+
+Create or update `synthesis/` only when the source thesis does at least one of these:
+- Connects this source to claims from at least one other source
+- Reframes an existing concept that already has multiple sources
+- Contradicts, qualifies, or strengthens another source's thesis
+- Combines several existing concept pages into a higher-level conclusion
+- Extends an ongoing thread already tracked in `hot.md`, `index.md`, or existing `synthesis/` pages
+
+Skip `synthesis/` when:
+- The thesis is only supported by this one source and does not materially synthesize existing wiki knowledge
+- The output would only restate the reference page summary
+- The page would merely group concepts without adding a cross-source thesis
+
+If synthesis is triggered, include the synthesis page in the planned pages. Name it after the cross-source question or conclusion, not after a single source title.
+
 ### Step 5: Write/Update Pages
 
 For each page in your plan:
+
+### Wiki Writing Standard: concise mental-model pages
+
+Default to the compact style the user prefers. A wiki page should be easy to reread months later, not a replacement for source code or a full article.
+
+- Start with the core mental model in 2-5 sentences: what this thing is, why it exists, and what makes it different.
+- Use 3-6 short sections with plain headings such as `## Core Model`, `## Flow`, `## Tradeoffs`, `## Related Pages`.
+- Keep concept/project pages short by default: usually 40-120 lines. Go longer only when the source is inherently broad or the user explicitly asks for depth.
+- Prefer simple bullets over dense paragraphs. Each bullet should preserve one idea, not a call-by-call trace.
+- Include only the identifiers needed to recognize the implementation: public commands, file/module names, record types, external APIs, or domain terms. Avoid long function lists, private helper names, variable names, and line-level details.
+- Use one compact Mermaid diagram when it clarifies the model or flow. Keep node labels conceptual. Do not add multiple diagrams unless each answers a different question.
+- Preserve important ambiguity, coupling, and tradeoffs, but state them simply. Avoid exhaustive edge-case catalogs unless the edge case is the point of the page.
+- For reference pages, include the thesis and supporting claims, but still distill: do not mirror the source outline section by section.
+
+Use this compression test before saving: if a reader can rediscover the detail by opening one obvious source file or source section, leave it out. If they would need to reconstruct the mental model across many places, keep it.
 
 **If creating a new page:**
 - Use the page template from the llm-wiki skill (frontmatter + sections)
@@ -170,6 +214,21 @@ For each page in your plan:
 - Update the `updated` timestamp in frontmatter
 - Add the new source to the `sources` list
 - Resolve any contradictions between old and new information (note them if unresolvable)
+
+**If creating or updating a reference page:**
+- Include a `## Thesis` or `## 主张` section for every non-trivial source
+- State what the source is trying to convince the reader of
+- Separate the thesis from a topic list or neutral summary
+- Include supporting claims and scope limits when they materially affect interpretation
+- Keep the reference page close to the source; mark implications or generalizations as `^[inferred]`
+
+**If creating or updating a synthesis page:**
+- Use the `synthesis/` template from the llm-wiki skill
+- Cite at least two reference pages, or one new source plus existing pages whose frontmatter `sources` point to other documents
+- Include a clear `## Thesis` or `## Question` section
+- Explain what each source contributes to the synthesis
+- Mark cross-source conclusions as `^[inferred]`
+- Mark unresolved disagreements as `^[ambiguous]`
 
 **Write a `summary:` frontmatter field** on every new page (1–2 sentences, ≤200 characters) answering "what is this page about?" for a reader who hasn't opened it. When updating an existing page whose meaning has shifted, rewrite the summary to match the new content. This field is what `wiki-query`'s cheap retrieval path reads — a missing or stale summary forces expensive full-page reads.
 
@@ -247,8 +306,11 @@ After ingesting, verify:
 - [ ] `index.md` reflects all changes
 - [ ] `log.md` has the ingest entry
 - [ ] Source attribution is present for every new claim
+- [ ] The reference page includes a `## Thesis` or `## 主张` section for each non-trivial source
+- [ ] Synthesis decision was recorded as create/update/skip with a reason; if triggered, the synthesis page is included in manifest, index, and log
 - [ ] Inferred and ambiguous claims are marked with `^[inferred]` / `^[ambiguous]`; `provenance:` frontmatter block is present on new and updated pages
 - [ ] Every new/updated page has a `summary:` frontmatter field (1–2 sentences, ≤200 chars)
+- [ ] Concept/project pages follow the concise mental-model standard: core model first, short sections, minimal identifiers, no source-code walkthrough
 
 ## Reference
 

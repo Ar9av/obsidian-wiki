@@ -149,46 +149,348 @@ The manifest enables:
 - **Audit** — which source produced which wiki page
 - **Staleness detection** — source changed but wiki page hasn't been updated
 
-## Page Template
+## Page Templates
 
-When creating a new wiki page, use this structure:
+All pages share the same lightweight frontmatter. Different categories only differ in body structure.
+
+The goal is not to make every page exhaustive. The goal is to make each page useful, easy to update, and well-connected.
+
+---
+
+## Shared Frontmatter
+
+Use this frontmatter for all pages:
 
 ```markdown
 ---
 title: Page Title
 category: concepts
-tags: [ml, architecture]
-aliases: [alternate name]
-sources: [papers/attention.pdf]
-summary: One or two sentences, ≤200 chars, so a reader (or another skill) can preview this page without opening it.
+tags: []
+aliases: []
+sources: []
+summary:
+created:
+updated:
+---
+```
+
+Field meanings:
+
+- `title`: The page title.
+- `category`: The page category, such as `concepts`, `entities`, `skills`, `references`, `synthesis`, `journal`, or `project`.
+- `tags`: Topic tags.
+- `aliases`: Alternative names, abbreviations, Chinese names, English names, or other searchable variants.
+- `sources`: Source pages or raw sources that support this page.
+- `summary`: One or two sentences summarizing the page for quick preview.
+- `created`: Creation timestamp.
+- `updated`: Last updated timestamp.
+
+Optional provenance block:
+
+```yaml
 provenance:
-  extracted: 0.72
-  inferred: 0.25
-  ambiguous: 0.03
-created: 2024-03-15T10:30:00Z
-updated: 2024-03-15T10:30:00Z
+  extracted: 0.80
+  inferred: 0.15
+  ambiguous: 0.05
+```
+
+Use provenance markers inline:
+
+- No marker = extracted or paraphrased from a source
+- `^[inferred]` = synthesized, inferred, or extended beyond the source
+- `^[ambiguous]` = unclear, disputed, or conflicting across sources
+
 ---
 
-# Page Title
+## `concepts/` Body Template
 
-One-paragraph summary of what this page covers.
+Use for ideas, theories, patterns, mechanisms, and mental models.
 
-## Key Ideas
+```markdown
+# Concept Name
 
-- The source's central claim, paraphrased directly.
-- A generalization the source implies but doesn't state outright. ^[inferred]
-- A figure two sources disagree on. ^[ambiguous]
+One short paragraph explaining what this concept is.
 
-Use [[wikilinks]] to connect to related pages.
+## Core Idea
 
-## Open Questions
+- The 3-5 most important things to know.
+- Keep each bullet short.
+- Mark inferred or uncertain claims when needed. ^[inferred]
 
-Things that are unresolved or need more sources.
+## How It Works
+
+If the concept has an internal mechanism, explain how it works here.
+
+For protocols, this section can be renamed to `Protocol Flow`.
+For algorithms, this section can be renamed to `Algorithm`.
+For architectures, this section can be renamed to `Architecture`.
+
+## Use Cases
+
+Explain when this concept is useful.
+
+## Limits
+
+Explain where this concept breaks down, is often misused, or should not be applied.
+
+## Related Pages
+
+- [[related-concept]]
+- [[contrasting-concept]]
+- [[larger-system]]
 
 ## Sources
 
-- [[references/attention-is-all-you-need]] — Original paper
+- [[references/source-name]] — What this source contributed.
 ```
+
+---
+
+## `entities/` Body Template
+
+Use for people, organizations, tools, products, projects, libraries, models, or systems.
+
+```markdown
+# Entity Name
+
+One short paragraph explaining what this entity is.
+
+## Overview
+
+- What it is.
+- Why it matters.
+- What it is associated with.
+
+## Role
+
+Describe the entity's role in the relevant domain, project, or discussion.
+
+## Key Facts
+
+- Important fact.
+- Important fact.
+- Important fact.
+
+## Related Pages
+
+- [[related-concept]]
+- [[related-project]]
+- [[related-entity]]
+
+## Sources
+
+- [[references/source-name]] — What this source contributed.
+```
+
+---
+
+## `skills/` Body Template
+
+Use for procedures, workflows, techniques, and how-to knowledge.
+
+```markdown
+# Skill Name
+
+One short paragraph explaining what this skill helps someone do.
+
+## When To Use
+
+- Situation where this skill applies.
+- Situation where this skill applies.
+
+## Steps
+
+1. First step.
+2. Second step.
+3. Third step.
+
+## Notes
+
+- Practical tips.
+- Edge cases.
+- Common mistakes.
+
+## Related Pages
+
+- [[related-skill]]
+- [[related-concept]]
+- [[related-tool]]
+
+## Sources
+
+- [[references/source-name]] — What this source contributed.
+```
+
+---
+
+## `references/` Body Template
+
+Use for summaries of specific source documents.
+
+Reference pages should stay close to the original source. Do not over-synthesize here; synthesis belongs in `concepts/` or `synthesis/`.
+
+```markdown
+# Source Title
+
+Briefly summarize what this source is about.
+
+## Key Points
+
+- Main point from the source.
+- Main point from the source.
+- Main point from the source.
+
+## Claims
+
+- Claim made by the source.
+- Claim made by the source.
+- Unclear or disputed claim. ^[ambiguous]
+
+## Mentions
+
+- [[mentioned-concept]]
+- [[mentioned-entity]]
+- [[mentioned-skill]]
+
+## Pages Updated
+
+- [[concepts/page-name]] — What was added or changed.
+- [[entities/page-name]] — What was added or changed.
+```
+
+---
+
+## `synthesis/` Body Template
+
+Use for cross-source analysis, comparisons, debates, and higher-level conclusions.
+
+```markdown
+# Synthesis Title
+
+One short paragraph explaining the question or theme being synthesized.
+
+## Question
+
+What question this page is trying to answer.
+
+## Sources Compared
+
+- [[references/source-a]]
+- [[references/source-b]]
+
+## Synthesis
+
+- What the sources collectively suggest.
+- Where they agree.
+- What pattern emerges across them. ^[inferred]
+
+## Disagreements
+
+- Source A says one thing.
+- Source B says another.
+- The conflict is currently unresolved. ^[ambiguous]
+
+## Current Understanding
+
+The best current understanding based on available sources.
+
+## Related Pages
+
+- [[related-concept]]
+- [[related-synthesis]]
+
+## Sources
+
+- [[references/source-a]]
+- [[references/source-b]]
+```
+
+---
+
+## `journal/` Body Template
+
+Use for timestamped observations, session notes, and working logs.
+
+Journal pages can be looser than other pages. Their main purpose is to preserve context, not to become polished concept pages.
+
+```markdown
+# 2026-04-28
+
+## Notes
+
+- Observation, idea, or session note.
+- Observation, idea, or session note.
+
+## Decisions
+
+- Decision made and why.
+
+## Follow-ups
+
+- [ ] Thing to revisit.
+- [ ] Source to ingest.
+- [ ] Page to update.
+
+## Links
+
+- [[related-page]]
+```
+
+---
+
+## `projects/` Project Overview Body Template
+
+Use for `projects/<project-name>/<project-name>.md`.
+
+```markdown
+# Project Name
+
+One short paragraph explaining what this project is.
+
+## Overview
+
+- What the project does.
+- What problem it solves.
+- Current state.
+
+## Key Pages
+
+- [[projects/project-name/concepts/page]]
+- [[projects/project-name/skills/page]]
+- [[concepts/global-page]]
+
+## Important Decisions
+
+- Important project decision.
+- Important project decision.
+
+## Open Questions
+
+- Question to resolve.
+- Question to resolve.
+
+## Related Pages
+
+- [[related-concept]]
+- [[related-entity]]
+- [[related-project]]
+```
+
+---
+
+## Template Selection Rule
+
+Choose the template by asking:
+
+- Is this an idea, pattern, mechanism, or theory? → `concepts/`
+- Is this a person, organization, tool, model, product, or system? → `entities/`
+- Is this something someone can do? → `skills/`
+- Is this a summary of a single source? → `references/`
+- Is this comparing or synthesizing multiple sources? → `synthesis/`
+- Is this a dated note or session log? → `journal/`
+- Is this an overview of one project? → `projects/<project-name>/<project-name>.md`
+
+Do not force every page to include every section. If a section would be empty or repetitive, omit it.
 
 ## Provenance Markers
 
