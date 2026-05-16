@@ -60,6 +60,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "wiki insights" / "hubs" / "wiki structure" | `wiki-status` (insights mode) |
 | "what do I know about X" / "find info on Y" / any question | `wiki-query` |
 | "audit" / "lint" / "find broken links" / "wiki health" | `wiki-lint` |
+| "dedup my wiki" / "find duplicate pages" / "merge duplicates" / "identity resolution" / "consolidate my wiki" | `wiki-dedup` |
 | "rebuild" / "start over" / "archive" / "restore" | `wiki-rebuild` |
 | "link my pages" / "cross-reference" / "connect my wiki" | `cross-linker` |
 | "fix my tags" / "normalize tags" / "tag audit" | `tag-taxonomy` |
