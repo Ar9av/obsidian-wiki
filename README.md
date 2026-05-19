@@ -10,7 +10,7 @@ A knowledge mgmt system inspired by [gist](https://gist.github.com/karpathy/442a
 
 Instead of asking an LLM the same questions over over (or doing RAG every time), you compile knowledge once into interconnected markdown files and keep them current. In this case Obsidian is the viewer and the LLM is the maintainer.
 
-We took that and built a framework around it. The whole thing is a set of markdown skill files that any AI coding agent (Claude Code, Cursor, Windsurf, whatever you use) can read and execute. You point it at your Obsidian vault and tell it what to do.
+We took that and built a framework around it. The whole thing is a set of markdown skill files that any AI coding agent (Claude Code, Cursor, Windsurf, Pi, whatever you use) can read and execute. You point it at your Obsidian vault and tell it what to do.
 
 ## Quick Start
 
@@ -40,7 +40,7 @@ Open the project in your agent and say **"set up my wiki"**. That's it.
 
 ## Agent Compatibility
 
-Works with **any AI coding agent** that can read files — Claude Code, Cursor, Windsurf, Codex, Gemini CLI, Kiro, and more. `setup.sh` handles skill discovery for each one automatically.
+Works with **any AI coding agent** that can read files — Claude Code, Cursor, Windsurf, Pi, Codex, Gemini CLI, Kiro, and more. `setup.sh` handles skill discovery for each one automatically.
 
 <details>
 <summary><b>Supported agents and manual setup instructions</b></summary>
@@ -63,6 +63,7 @@ Works with **any AI coding agent** that can read files — Claude Code, Cursor, 
 | **GitHub Copilot (VS Code)** | `.github/copilot-instructions.md` | — | Describe intent in chat |
 | **GitHub Copilot (CLI)** | — | `~/.copilot/skills/` | ✅ `/wiki-ingest`, `/wiki-query`, etc. |
 | **[Kilocode](https://kilo.ai/)** | `AGENTS.md` / `CLAUDE.md` | `.agents/skills/` + `.claude/skills/` | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
+| **[Pi](https://pi.dev)** | `AGENTS.md` | `.pi/skills/` + `~/.pi/agent/skills/` | ✅ `/wiki-ingest`, `/wiki-history-ingest pi`, etc. |
 
 > Each agent has its own convention for discovering skills. `setup.sh` symlinks the canonical `.skills/` directory into each agent's expected location. You write skills once, every agent can use them.
 
@@ -160,6 +161,18 @@ cd /path/to/obsidian-wiki && openclaw "set up my wiki"
 **CLI:** discovers skills from `~/.copilot/skills/`. Run `setup.sh` or manually symlink `.skills/*` there.
 </details>
 
+<details>
+<summary>Pi</summary>
+
+Reads `AGENTS.md` (walking up from cwd). Discovers skills from `.pi/skills/`, `.agents/skills/`, and `~/.pi/agent/skills/`. Run `setup.sh` or manually symlink `.skills/*` to `~/.pi/agent/skills/`.
+
+```bash
+cd /path/to/obsidian-wiki && pi "set up my wiki"
+# Mine Pi session history:
+/wiki-history-ingest pi
+```
+</details>
+
 </details>
 
 ## How it works
@@ -199,9 +212,9 @@ Modes: `by-tag` (default — top 10 tags), `by-category` (the seven vault folder
 
 - **Archive and rebuild.** When the wiki drifts too far from your sources, you can archive the whole thing (timestamped snapshot, nothing lost) and rebuild from scratch. Or restore any previous archive.
 
-- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Hermes memories and sessions (`~/.hermes/`), OpenClaw MEMORY.md and sessions (`~/.openclaw/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for Claude, Codex, Hermes, and OpenClaw history, plus a catch-all ingest skill for arbitrary text exports.
+- **Multi-agent ingest.** Documents, PDFs, Claude Code history (`~/.claude`), Codex sessions (`~/.codex/`), Hermes memories and sessions (`~/.hermes/`), OpenClaw MEMORY.md and sessions (`~/.openclaw/`), Pi sessions (`~/.pi/agent/sessions/`), Windsurf data (`~/.windsurf`), ChatGPT exports, Slack logs, meeting transcripts, raw text. There are dedicated skills for Claude, Codex, Hermes, OpenClaw, and Pi history, plus a catch-all ingest skill for arbitrary text exports.
 
-- **Cross-agent targeted search.** `/wiki-claude`, `/wiki-codex`, `/wiki-hermes`, `/wiki-openclaw`, `/wiki-copilot` — query-driven ingest from a specific agent's raw history. Say `/wiki-codex "rust ownership"` while in Claude Code and it finds your Codex sessions about that topic, extracts the relevant conversation blobs, distills them into wiki pages, and returns a synthesized answer you can use immediately. Different from bulk ingest: this is topic-first, not session-first. Each agent has its own extraction strategy (Codex rollout events, Claude JSONL turns, OpenClaw's pre-synthesized `MEMORY.md`, etc.). Pair with `/memory-bridge diff` to see what each tool uniquely contributed to a topic.
+- **Cross-agent targeted search.** `/wiki-claude`, `/wiki-codex`, `/wiki-hermes`, `/wiki-openclaw`, `/wiki-copilot`, `/wiki-pi` — query-driven ingest from a specific agent's raw history. Say `/wiki-codex "rust ownership"` while in Claude Code and it finds your Codex sessions about that topic, extracts the relevant conversation blobs, distills them into wiki pages, and returns a synthesized answer you can use immediately. Different from bulk ingest: this is topic-first, not session-first. Each agent has its own extraction strategy (Codex rollout events, Claude JSONL turns, OpenClaw's pre-synthesized `MEMORY.md`, Pi tree-structured JSONL sessions, etc.). Pair with `/memory-bridge diff` to see what each tool uniquely contributed to a topic.
 
 - **Audit and lint.** Find orphaned pages, broken wikilinks, stale content, contradictions, missing frontmatter. See a dashboard of what's been ingested vs what's pending.
 
@@ -268,12 +281,13 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | ----------------------- | ------------------------------------------------- | ------------------------ |
 | `wiki-setup`            | Initialize vault structure                        | `/wiki-setup`            |
 | `wiki-ingest`           | Distill documents into wiki pages                 | `/wiki-ingest`           |
-| `wiki-history-ingest`   | Unified history router (`claude`, `codex`, or `hermes`) | `/wiki-history-ingest <claude|codex|hermes>` |
+| `wiki-history-ingest`   | Unified history router (`claude`, `codex`, `hermes`, `pi`) | `/wiki-history-ingest <claude|codex|hermes|pi>` |
 | `claude-history-ingest` | Mine your `~/.claude` conversations and memories from Claude code and desktop  | `/claude-history-ingest` |
 | `codex-history-ingest`  | Mine your `~/.codex` sessions and rollout logs    | `/codex-history-ingest`  |
 | `hermes-history-ingest` | Mine your `~/.hermes` memories and sessions       | `/hermes-history-ingest` |
 | `openclaw-history-ingest` | Mine your `~/.openclaw` MEMORY.md and sessions  | `/openclaw-history-ingest` |
 | `copilot-history-ingest` | Mine your `~/.copilot` CLI session history       | `/copilot-history-ingest` |
+| `pi-history-ingest`     | Mine your `~/.pi/agent/sessions` JSONL history    | `/pi-history-ingest` |
 | `data-ingest`           | Ingest any text — chat exports, logs, transcripts | `/data-ingest`           |
 | `ingest-url`            | Fetch and ingest a URL directly into the wiki     | `/ingest-url <url>`      |
 | `obsidian-wiki-ingest`  | Project-scoped automation wrapper for wiki-ingest | `/obsidian-wiki-ingest`  |
@@ -333,6 +347,7 @@ obsidian-wiki/
 │   ├── codex-history-ingest/SKILL.md
 │   ├── hermes-history-ingest/SKILL.md
 │   ├── openclaw-history-ingest/SKILL.md
+│   ├── pi-history-ingest/SKILL.md
 │   ├── data-ingest/SKILL.md
 │   ├── wiki-status/SKILL.md
 │   ├── wiki-rebuild/SKILL.md
@@ -360,6 +375,7 @@ obsidian-wiki/
 ├── .cursor/skills/   → symlinks to .skills/*  (created by setup.sh)
 ├── .windsurf/skills/ → symlinks to .skills/*  (created by setup.sh)
 ├── .agents/skills/   → symlinks to .skills/*  (created by setup.sh)
+├── .pi/skills/       → symlinks to .skills/*  (created by setup.sh)
 ├── .kiro/skills/     → symlinks to .skills/*  (created by setup.sh)
 │
 ├── ~/.claude/skills/              → portable skills (wiki-update, wiki-query)
@@ -372,6 +388,7 @@ obsidian-wiki/
 ├── ~/.trae/skills/                → global symlinks — Trae
 ├── ~/.trae-cn/skills/             → global symlinks — Trae CN
 ├── ~/.kiro/skills/                → global symlinks — Kiro CLI
+├── ~/.pi/agent/skills/            → global symlinks — Pi
 ├── ~/.agents/skills/              → global symlinks — OpenCode, Aider, Droid, generic
 │
 ├── setup.sh                          # One-command agent setup
@@ -397,9 +414,10 @@ When you run `bash setup.sh`, it does the following:
    - `~/.copilot/skills/` — GitHub Copilot CLI
    - `~/.trae/skills/` + `~/.trae-cn/skills/` — Trae / Trae CN
    - `~/.kiro/skills/` — Kiro CLI
+   - `~/.pi/agent/skills/` — Pi
    - `~/.agents/skills/` — OpenCode, Aider, Factory Droid, and other AGENTS.md-aware agents
 
-After that, you're in some project, say `~/projects/my-cool-app`, working with Claude. Two commands:
+After that, you're in some project, say `~/projects/my-cool-app`, working with Claude or Pi. Two commands:
 
 ```bash
 # You're working on some project

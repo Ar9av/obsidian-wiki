@@ -46,7 +46,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | User says something like… | Skill |
 |---|---|
 | "set up my wiki" / "initialize" | `wiki-setup` |
-| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" | `wiki-history-ingest` |
+| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" / "/wiki-history-ingest pi" | `wiki-history-ingest` |
 | "/ingest-url <url>" / "add this URL" / "ingest this link" / "save this page" | `ingest-url` |
 | "ingest" / "add this to the wiki" / "process these docs" | `wiki-ingest` |
 | "import my Claude history" / "mine my conversations" | `claude-history-ingest` |
@@ -54,6 +54,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "import my Hermes history" / "mine my Hermes memories" / "ingest ~/.hermes" | `hermes-history-ingest` |
 | "import my OpenClaw history" / "mine my OpenClaw sessions" / "ingest ~/.openclaw" | `openclaw-history-ingest` |
 | "import my Copilot history" / "mine my Copilot sessions" / "ingest ~/.copilot" | `copilot-history-ingest` |
+| "import my Pi history" / "mine my Pi sessions" / "ingest ~/.pi" | `pi-history-ingest` |
 | "process this export" / "ingest this data" / logs, transcripts | `data-ingest` |
 | "ingest this obsidian wiki" / "ingest the obsidian-wiki project" | `obsidian-wiki-ingest` |
 | "what's the status" / "what's been ingested" / "show the delta" | `wiki-status` |
@@ -72,7 +73,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "create a dashboard" / "vault dashboard" / "show all X as a table" / "dynamic view" | `wiki-dashboard` |
 | "synthesize my wiki" / "find connections" / "what concepts keep coming up together" / "/wiki-synthesize" | `wiki-synthesize` |
 | "create a new skill" | `skill-creator` |
-| "/wiki-claude [topic]" / "/wiki-codex [topic]" / "/wiki-hermes [topic]" / "/wiki-openclaw [topic]" / "/wiki-copilot [topic]" | `wiki-agent` |
+| "/wiki-claude [topic]" / "/wiki-codex [topic]" / "/wiki-hermes [topic]" / "/wiki-openclaw [topic]" / "/wiki-copilot [topic]" / "/wiki-pi [topic]" | `wiki-agent` |
 | "/memory-bridge" / "browse codex memory" / "what did codex know about X" / "compare tool memories" / "cross-tool memory" | `memory-bridge` |
 | "/daily-update" / "morning sync" / "refresh the wiki index" / "set up the daily cron" / "install terminal notification" | `daily-update` |
 | "/impl-validator" / "check this implementation" / "validate what you did" / "is this correct?" | `impl-validator` |

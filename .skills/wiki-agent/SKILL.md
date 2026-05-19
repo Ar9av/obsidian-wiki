@@ -2,7 +2,7 @@
 name: wiki-agent
 description: >
   Query-driven targeted ingest from a specific AI agent's raw history. Use this skill when the user
-  invokes /wiki-claude, /wiki-codex, /wiki-hermes, /wiki-openclaw, /wiki-copilot — with or without a
+  invokes /wiki-claude, /wiki-codex, /wiki-hermes, /wiki-openclaw, /wiki-copilot, /wiki-pi — with or without a
   search topic. Different from wiki-history-ingest (which bulk-ingests everything new): this skill finds
   sessions about a SPECIFIC TOPIC in a specific agent's history and ingests just those, then returns a
   synthesized answer immediately usable in the current session. Primary use case: you're working in
@@ -28,6 +28,7 @@ Parse the invocation to determine the target agent and optional query:
 | `/wiki-hermes [query]` | Hermes agent history | `/wiki-hermes "memory architecture"` |
 | `/wiki-openclaw [query]` | OpenClaw history | `/wiki-openclaw "project planning approach"` |
 | `/wiki-copilot [query]` | Copilot chat history | `/wiki-copilot "test strategy for API routes"` |
+| `/wiki-pi [query]` | Pi agent history | `/wiki-pi "how did I refactor the auth module"` |
 
 If no query is given, default to **recent sessions mode**: ingest the last 5 unprocessed sessions from that agent and return a summary of what was found. This is equivalent to a focused `wiki-history-ingest` for that agent only.
 
@@ -48,6 +49,7 @@ If no query is given, default to **recent sessions mode**: ingest the last 5 unp
 | `hermes` | `~/.hermes` | `HERMES_HOME` in env or `.env` |
 | `openclaw` | `~/.openclaw` | `OPENCLAW_HOME` in `.env` |
 | `copilot` | `~/.copilot` | `COPILOT_HISTORY_PATH` in `.env` |
+| `pi` | `~/.pi/agent/sessions` | `PI_HISTORY_PATH` in `.env` |
 
 If the history root doesn't exist, stop and tell the user: "No `<agent>` history found at `<path>`. Have you run `<agent>` on this machine? You can set a custom path with `<CONFIG_VAR>` in `.env`."
 
@@ -98,6 +100,14 @@ Session files:   varies by client (VS Code: ~/.copilot/sessions/*.jsonl or simil
 Signal fields:   session timestamps, file names
 ```
 
+### Pi
+```
+Primary index:   ~/.pi/agent/sessions/--<cwd>--/ directories
+Session files:   ~/.pi/agent/sessions/--<cwd>--/<timestamp>_<uuid>.jsonl
+Signal fields:   cwd (decoded from dir name), session_info.name, timestamp in filename
+```
+Scan session directories first. Decode `--<cwd>--` to get the working directory. Read the first line (session header) and any `session_info` entries for the session name. No separate index file — the filesystem is the index.
+
 ---
 
 ## Step 3: Score Sessions Against the Query
@@ -146,6 +156,15 @@ Open each selected session file and extract only the content relevant to the que
 **Copilot** (session JSONL):
 - Same grep-window approach as Claude
 - Look for checkpoint files if available (pre-summarized)
+
+**Pi** (structured JSONL with tree layout):
+- Each line is a tree entry: `{type, id, parentId, timestamp, message?, ...}`
+- Build the active branch: map entries by `id`, find leaf (last entry with no children), walk `parentId` to root
+- Search with: `grep -i "<query terms>" <session.jsonl>` to find matching entries
+- Extract: the matching entries + their ancestors on the active branch (follow parent chain)
+- Special signal: `toolCall` blocks inside assistant messages reveal what was actually done — extract these even without keyword matches if they're in the relevant window
+- Prefer `compaction` and `branch_summary` entries when available — they're pre-synthesized summaries
+- Skip `thinking` content blocks (noise) and `model_change` / `thinking_level_change` entries
 
 ---
 
@@ -250,6 +269,12 @@ These are the primary use cases this skill is designed for:
 
 **No query — just "catch me up on recent Codex work"**
 → `/wiki-codex` — ingests last 5 Codex sessions and returns a summary
+
+**"I'm on Claude Code. What did I figure out about X in Pi?"**
+→ `/wiki-pi "X"` — finds Pi sessions about X, ingests them, returns the answer
+
+**No query — just "catch me up on recent Pi work"**
+→ `/wiki-pi` — ingests last 5 Pi sessions and returns a summary
 
 ## QMD Refresh After Vault Writes
 

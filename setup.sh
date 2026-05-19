@@ -164,6 +164,7 @@ AGENT_DIRS=(
   ".cursor/skills"
   ".windsurf/skills"
   ".agents/skills"
+  ".pi/skills"         # Pi coding agent
   ".kiro/skills"        # Kiro IDE/CLI (paired with .kiro/steering/obsidian-wiki.md)
 )
 
@@ -189,6 +190,7 @@ install_skills "$HOME/.copilot/skills"            "~/.copilot/skills/ (GitHub Co
 install_skills "$HOME/.trae/skills"               "~/.trae/skills/ (Trae)"
 install_skills "$HOME/.trae-cn/skills"            "~/.trae-cn/skills/ (Trae CN)"
 install_skills "$HOME/.kiro/skills"               "~/.kiro/skills/ (Kiro CLI)"
+install_skills "$HOME/.pi/agent/skills"           "~/.pi/agent/skills/ (Pi)"
 install_skills "$HOME/.agents/skills"             "~/.agents/skills/ (OpenCode, Aider, Droid, generic)"
 
 # ── Step 4: Summary ──────────────────────────────────────────
@@ -201,12 +203,12 @@ echo ""
 echo " Skills found:    $SKILL_COUNT"
 echo " Agents ready:    Claude Code, Cursor, Windsurf, Gemini CLI, Antigravity,"
 echo "                  Codex, Hermes, OpenClaw, OpenCode, Aider, Factory Droid,"
-echo "                  Trae, Trae CN, Kiro, GitHub Copilot (CLI + VS Code Chat)"
+echo "                  Trae, Trae CN, Kiro, Pi, GitHub Copilot (CLI + VS Code Chat)"
 echo ""
 echo " Bootstrap files:"
 echo "   CLAUDE.md                            → Claude Code"
 echo "   GEMINI.md                            → Gemini / Antigravity"
-echo "   AGENTS.md                            → Codex, OpenClaw, OpenCode, Aider, Droid, Trae, Hermes"
+echo "   AGENTS.md                            → Codex, OpenClaw, OpenCode, Aider, Droid, Trae, Hermes, Pi"
 echo "   .hermes.md                           → Hermes (symlink → AGENTS.md)"
 echo "   .cursor/rules/obsidian-wiki.mdc      → Cursor (alwaysApply)"
 echo "   .windsurf/rules/obsidian-wiki.md     → Windsurf (always-on)"

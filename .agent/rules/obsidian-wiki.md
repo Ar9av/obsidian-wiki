@@ -23,6 +23,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 | "import my Codex history" | `codex-history-ingest` |
 | "import my Hermes history" | `hermes-history-ingest` |
 | "import my OpenClaw history" | `openclaw-history-ingest` |
+| "import my Pi history" | `pi-history-ingest` |
 | "process this export" / "ingest this data" | `data-ingest` |
 | "what's the status" / "show the delta" | `wiki-status` |
 | "what do I know about X" | `wiki-query` |

@@ -19,9 +19,10 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 |---|---|
 | "set up my wiki" / "initialize" | `.skills/wiki-setup/SKILL.md` |
 | "ingest" / "add this to the wiki" | `.skills/wiki-ingest/SKILL.md` |
-| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" | `.skills/wiki-history-ingest/SKILL.md` |
+| "/wiki-history-ingest claude" / "/wiki-history-ingest codex" / "/wiki-history-ingest pi" | `.skills/wiki-history-ingest/SKILL.md` |
 | "import my Claude history" | `.skills/claude-history-ingest/SKILL.md` |
 | "import my Codex history" | `.skills/codex-history-ingest/SKILL.md` |
+| "import my Pi history" | `.skills/pi-history-ingest/SKILL.md` |
 | "process this export" / "ingest this data" | `.skills/data-ingest/SKILL.md` |
 | "what's the status" / "show the delta" | `.skills/wiki-status/SKILL.md` |
 | "what do I know about X" / any question | `.skills/wiki-query/SKILL.md` |

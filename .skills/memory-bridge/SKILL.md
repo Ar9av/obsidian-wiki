@@ -31,7 +31,7 @@ Parse the user's invocation to determine mode:
 | `/memory-bridge diff <tool-a> <tool-b>` | **Diff** — compare two specific tools |
 | `/memory-bridge map` | **Map** — full origin matrix: every page × every tool that touched it |
 
-Recognized tool names: `claude`, `codex`, `hermes`, `openclaw`, `copilot`, `manual` (hand-written), `ingest` (wiki-ingest documents).
+Recognized tool names: `claude`, `codex`, `hermes`, `openclaw`, `copilot`, `pi`, `manual` (hand-written), `ingest` (wiki-ingest documents).
 
 ## Step 1: Build the Source Map
 
@@ -42,6 +42,7 @@ Read `.manifest.json`. For each source entry, extract:
   - `hermes_memory`, `hermes_session` → `hermes`
   - `openclaw_memory`, `openclaw_daily_note`, `openclaw_session`, `openclaw_dreams` → `openclaw`
   - `copilot_session`, `copilot_checkpoint`, `copilot_transcript`, `copilot_memory_artifact` → `copilot`
+  - `pi_session` → `pi`
   - `document` → `ingest`
   - anything else → `manual`
 - `pages_created` and `pages_updated` — the wiki pages that came out of this source
@@ -124,10 +125,10 @@ Both tools have contributed to these pages.
 Build a matrix showing every page and which tools have touched it. Cap at 50 rows; sort by number of contributing tools descending (most cross-tool pages first — these are the richest nodes).
 
 ```
-| Page | claude | codex | hermes | copilot |
-|------|--------|-------|--------|---------|
-| [[react-patterns]] | ✓ | ✓ | — | ✓ |
-| [[rust-ownership]] | — | ✓ | — | — |
+| Page | claude | codex | hermes | copilot | pi |
+|------|--------|-------|--------|---------|----|
+| [[react-patterns]] | ✓ | ✓ | — | ✓ | — |
+| [[rust-ownership]] | — | ✓ | — | — | ✓ |
 ```
 
 ## Step 3: Spawn impl-validator (if available)
