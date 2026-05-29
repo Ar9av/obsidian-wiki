@@ -64,6 +64,13 @@ Process draft pages from the `_raw/` staging directory inside the vault. Use whe
 
 In raw mode, each file in `OBSIDIAN_VAULT_PATH/_raw/` (or `OBSIDIAN_RAW_DIR`) is treated as a source. After promoting a file to a proper wiki page, **delete the original from `_raw/`**. Never leave promoted files in `_raw/` — they'll be double-processed on the next run.
 
+**Source inheritance:** The `_raw/` path is a staging artifact — never use it as the `sources:` value on the promoted page. Derive the source entry from the `_raw/` file's own frontmatter instead:
+
+- If the file has both `capture_source` and `sources:` fields, synthesize a combined entry:
+  `"agent:<capture_source> source:<capture_source> project:<project> date:<lifecycle_changed>"`
+- If the file has only `sources:`, copy those entries verbatim.
+- Only fall back to the `_raw/` filename if the file has no `sources:` or `capture_source` fields at all.
+
 **Deletion safety:** Only delete the specific file that was just promoted. Before deleting, verify the resolved path is inside `$OBSIDIAN_VAULT_PATH/_raw/` — never delete files outside this directory. Never use wildcards or recursive deletion (`rm -rf`, `rm *`). Delete one file at a time by its exact path.
 
 ## The Ingest Process
@@ -229,7 +236,7 @@ For each page in your plan:
 - Use the page template from the llm-wiki skill (frontmatter + sections)
 - Place in the correct category directory
 - Add `[[wikilinks]]` to at least 2-3 existing pages
-- Include the source in the `sources` frontmatter field
+- Include the source in the `sources` frontmatter field. In raw mode: derive from `capture_source` + `sources` frontmatter of the `_raw/` file — never use the `_raw/` path itself (see Raw Mode section)
 
 **If updating an existing page:**
 - Read the current page first
