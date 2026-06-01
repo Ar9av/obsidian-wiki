@@ -3,7 +3,7 @@ title: post-mortem
 type: skill-catalog
 repo: 9arm
 category: engineering
-source: /Users/icmini/repos/9arm-skills/skills/engineering/post-mortem/SKILL.md
+source: engineering/post-mortem/SKILL.md
 status: external-cataloged
 tags: [skill-catalog, 9arm, engineering]
 ---
@@ -14,6 +14,6 @@ Write the canonical engineering record of a fixed bug — root cause, mechanism,
 
 - **Repo:** `9arm`
 - **Category:** engineering
-- **Source:** `/Users/icmini/repos/9arm-skills/skills/engineering/post-mortem/SKILL.md`
+- **Source:** `engineering/post-mortem/SKILL.md`
 
 > Cataloged for visibility only — not registered as a live skill. Promotion to a loadable skill requires its runtime dependencies to exist in this environment and explicit registration (see skill_registry_topology.md).

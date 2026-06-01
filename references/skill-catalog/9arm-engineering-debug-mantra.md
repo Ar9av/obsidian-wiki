@@ -3,7 +3,7 @@ title: debug-mantra
 type: skill-catalog
 repo: 9arm
 category: engineering
-source: /Users/icmini/repos/9arm-skills/skills/engineering/debug-mantra/SKILL.md
+source: engineering/debug-mantra/SKILL.md
 status: external-cataloged
 tags: [skill-catalog, 9arm, engineering]
 ---
@@ -14,6 +14,6 @@ Four-mantra debugging discipline — reproduce, trace the fail path, falsify the
 
 - **Repo:** `9arm`
 - **Category:** engineering
-- **Source:** `/Users/icmini/repos/9arm-skills/skills/engineering/debug-mantra/SKILL.md`
+- **Source:** `engineering/debug-mantra/SKILL.md`
 
 > Cataloged for visibility only — not registered as a live skill. Promotion to a loadable skill requires its runtime dependencies to exist in this environment and explicit registration (see skill_registry_topology.md).

@@ -3,7 +3,7 @@ title: scrutinize
 type: skill-catalog
 repo: 9arm
 category: engineering
-source: /Users/icmini/repos/9arm-skills/skills/engineering/scrutinize/SKILL.md
+source: engineering/scrutinize/SKILL.md
 status: external-cataloged
 tags: [skill-catalog, 9arm, engineering]
 ---
@@ -14,6 +14,6 @@ Outsider-perspective end-to-end review of a plan, PR, or code change. First ques
 
 - **Repo:** `9arm`
 - **Category:** engineering
-- **Source:** `/Users/icmini/repos/9arm-skills/skills/engineering/scrutinize/SKILL.md`
+- **Source:** `engineering/scrutinize/SKILL.md`
 
 > Cataloged for visibility only — not registered as a live skill. Promotion to a loadable skill requires its runtime dependencies to exist in this environment and explicit registration (see skill_registry_topology.md).

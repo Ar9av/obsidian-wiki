@@ -3,7 +3,7 @@ title: management-talk
 type: skill-catalog
 repo: 9arm
 category: productivity
-source: /Users/icmini/repos/9arm-skills/skills/productivity/management-talk/SKILL.md
+source: productivity/management-talk/SKILL.md
 status: external-cataloged
 tags: [skill-catalog, 9arm, productivity]
 ---
@@ -14,6 +14,6 @@ Rewrite engineer-to-engineer content for engineering-org leadership (VPs, direct
 
 - **Repo:** `9arm`
 - **Category:** productivity
-- **Source:** `/Users/icmini/repos/9arm-skills/skills/productivity/management-talk/SKILL.md`
+- **Source:** `productivity/management-talk/SKILL.md`
 
 > Cataloged for visibility only — not registered as a live skill. Promotion to a loadable skill requires its runtime dependencies to exist in this environment and explicit registration (see skill_registry_topology.md).
