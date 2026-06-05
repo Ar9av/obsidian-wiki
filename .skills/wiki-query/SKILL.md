@@ -4,7 +4,9 @@ description: >
   Answer questions by searching the compiled Obsidian wiki. Use this skill when the user asks a question
   about their knowledge base, wants to find information across their wiki, asks "what do I know about X",
   "find everything related to Y", or wants synthesized answers with citations from their wiki pages.
-  Also use when the user wants to explore connections between topics in their wiki. Works from any project.
+  Also use when the user wants to explore connections between topics in their wiki, or asks a multi-hop
+  "how is X connected to Y", "what links X to Y", "trace the chain from X to Z", or "what does X depend on
+  transitively" question — answered by walking typed edges across multiple hops. Works from any project.
   Includes an index-only fast mode triggered by "quick answer", "just scan", "don't read the pages",
   "fast lookup" — returns answers from page summaries and frontmatter without reading page bodies.
 ---
@@ -44,6 +46,7 @@ In filtered mode, note the filter in the Step 6 log entry: `mode=filtered`.
 Classify the query type:
 - **Factual lookup** — "What is X?" → Find the relevant page(s)
 - **Relationship query** — "How does X relate to Y?" / "What contradicts X?" → Find both pages, their cross-references, and their `relationships:` frontmatter blocks for typed edges
+- **Path / multi-hop query** — "How is X connected to Y?" / "What links X to Y?" / "Trace the chain from X to Z" / "What does X depend on transitively?" → X and Y don't link directly; the connection runs through intermediate pages. Use the multi-hop graph traversal in Step 4b.
 - **Synthesis query** — "What's the current thinking on X?" → Find all pages that touch X, synthesize
 - **Gap query** — "What don't I know about X?" → Find what's missing, check open questions sections
 
@@ -139,6 +142,32 @@ Only when Steps 2 and 3 don't answer the question:
 - **For relationship queries** ("How does X relate to Y?" / "What contradicts X?"): also read the `relationships:` frontmatter block of the candidate pages. Each entry gives a typed, directional edge (`extends`, `implements`, `contradicts`, `derived_from`, `uses`, `replaces`, `related_to`). Surface these explicitly in your answer — "Page A *contradicts* Page B (typed edge)" is more useful than "Page A links to Page B".
 - Check "Open Questions" sections for known gaps.
 - If you're still short, **then** fall back to a broad content grep across the vault. Tell the user you escalated — this is the expensive path and they should know.
+
+### Step 4b: Multi-hop Graph Traversal (typed edges)
+
+Plain retrieval surfaces pages that *mention* the query terms. It cannot answer **path / multi-hop queries** — "How is X connected to Y?", "What does X depend on transitively?", "Trace the chain from X to Z" — when X and Y never appear on the same page. The answer lives in the *shape* of the typed-edge graph, not in any single page body. This is the step that walks it.
+
+Run this step **only** for path/multi-hop queries (or when a relationship query returns no direct edge between the two pages). It is built entirely from frontmatter — never read page bodies here.
+
+1. **Build the typed-edge adjacency (cheap).** Grep every page's `relationships:` block in one pass — `Grep -A 20 "^relationships:" <vault>/**/*.md` (frontmatter only). Each entry yields a directed, typed edge `source —type→ target`. Add the reverse direction as a traversable edge too (mark it `(reverse)`), since "connected to" is symmetric even though the typed assertion is directional. Plain body `[[wikilinks]]` count as untyped `related_to` edges only if you need them to complete a path — prefer typed edges first.
+
+2. **Locate the endpoints.** Resolve X (and Y, if the query names two) to page paths using the registry from Step 2. If an endpoint is ambiguous, pick the `tier: core` candidate and note the assumption.
+
+3. **Bounded BFS.** Walk outward from X over the adjacency:
+   - **Max depth 3 hops** by default (the connection is rarely meaningful beyond that). Raise to 4 only if the user says "deep" / "however many hops it takes".
+   - **Frontier cap:** stop expanding a node once the visited set exceeds ~60 pages — report partial results rather than fanning out across the whole vault.
+   - For a **two-endpoint query** (X→Y): stop as soon as you find the shortest path; then continue briefly to surface up to 2 alternate paths if they exist.
+   - For a **one-endpoint query** (X transitively): collect all nodes reachable within the depth limit, grouped by hop distance.
+
+4. **Report the path(s) with edge types.** Show the chain, not just the endpoints — the typed edges *are* the answer:
+
+   ```
+   [[concepts/transformers]] —uses→ [[concepts/attention]] —derived_from→ [[concepts/rnn-seq2seq]] —contradicts (reverse)→ [[concepts/lstm]]
+   ```
+
+   State the hop count and whether any hop is a `(reverse)` traversal or an untyped `related_to` fallback (those chains are weaker — flag them). If no path exists within the depth limit, say so explicitly: "No typed-edge path from X to Y within 3 hops — they are in disconnected regions of the graph." That is itself a useful finding (a graph gap).
+
+**Cost guard:** this step reads only frontmatter via grep. If the adjacency grep returns nothing (no page uses `relationships:` yet), report that the graph has no typed edges to traverse and suggest running `cross-linker` to populate them, then fall back to ordinary one-hop retrieval.
 
 ### Step 5: Synthesize an Answer
 
