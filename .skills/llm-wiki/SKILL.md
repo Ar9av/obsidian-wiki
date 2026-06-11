@@ -327,7 +327,7 @@ source_quality_score = avg(quality score per distinct source_id)
 
 | Skill | base_confidence | lifecycle |
 |---|---|---|
-| `ingest-url` | `0.17 + 0.5 × classify(url)` | `draft` |
+| `wiki-ingest` (URL) | `0.17 + 0.5 × classify(url)` | `draft` |
 | `wiki-ingest` (single doc) | per-source classifier | `draft` |
 | `wiki-ingest` (multi-doc) | `min(N/3,1)×0.5 + avg_q×0.5` | `draft` |
 | `wiki-research` | varies, often 0.85+ | `draft` |

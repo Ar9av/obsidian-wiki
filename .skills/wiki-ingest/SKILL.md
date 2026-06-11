@@ -2,15 +2,16 @@
 name: wiki-ingest
 description: >
   Ingest any source into the Obsidian wiki by distilling its knowledge into interconnected wiki pages.
-  Handles structured documents (PDFs, markdown, articles, papers, notes, folders) AND raw/unstructured
-  text — chat exports, conversation logs, Slack/Discord threads, meeting transcripts, CSV/JSON data,
-  journal entries, browser bookmarks, email archives, or any text dump. Use whenever the user wants to
-  add new sources to their wiki: "add this to the wiki", "process these docs", "ingest this folder",
-  "ingest this data", "process this export", "process these logs", "import my chat history from X".
-  Also triggers when the user drops a file and wants it incorporated, or for raw mode: "process my
-  drafts", "promote my raw pages", or any reference to the _raw/ staging directory. This is the general
-  catch-all ingest skill for any document or text source not covered by a more specific ingest skill
-  (claude-history-ingest, ingest-url, etc.).
+  Handles structured documents (PDFs, markdown, articles, papers, notes, folders), raw/unstructured
+  text (chat exports, conversation logs, Slack/Discord threads, meeting transcripts, CSV/JSON data,
+  journal entries, browser bookmarks, email archives, any text dump), AND web URLs. Use whenever the
+  user wants to add new sources to their wiki: "add this to the wiki", "process these docs", "ingest
+  this folder", "ingest this data", "process this export", "process these logs", "import my chat
+  history from X", "/ingest-url <url>", "add this URL", "ingest this link", "save this page", or pastes
+  a URL and says "add this" / "save this to my wiki". Also triggers when the user drops a file and
+  wants it incorporated, or for raw mode: "process my drafts", "promote my raw pages", or any reference
+  to the _raw/ staging directory. This is the general catch-all ingest skill for any document, text, or
+  URL source not covered by a more specific ingest skill (claude-history-ingest, etc.).
 ---
 
 # Obsidian Ingest — Document Distillation
@@ -111,6 +112,10 @@ Common chat export shapes:
 **Distill substance, not dialogue.** A 50-message debugging session might yield one `skills/` page about the fix; a long brainstorm might yield three `concepts/` pages. Skip greetings, pleasantries, meta-conversation, repetitive back-and-forth, and raw code dumps (unless they show a reusable pattern). Cluster extracted knowledge by **topic**, not by source file or conversation — a long thread or twenty screenshots of the same bug should produce pages organized by subject, not one page per message. Conversation/log data is high-inference: be liberal with `^[inferred]` for synthesized patterns and `^[ambiguous]` when speakers contradict each other.
 
 **Large files:** read in chunks with offset/limit — don't load a 10 MB JSON at once. **Encoding issues:** if text is garbled, mention it to the user and move on. **Binary files:** skip them (except images, which are first-class via the Read tool).
+
+### Web URL sources
+
+When the source is a **web URL** (`/ingest-url <url>`, "add this URL", "ingest this link", "save this page", or a pasted link), the flow is different: detect the current project, fetch with `defuddle`/`WebFetch`, then file the page into the detected project's `references/` folder or fall back to `misc/` with affinity scoring for later promotion. **Read `references/url-sources.md` and follow it** — it covers project detection, clean extraction, dedup, slug generation, project-vs-misc frontmatter, affinity scoring, stub handling on fetch failure, and the `INGEST_URL` log/manifest format. The rest of this skill (config, trust boundary, QMD refresh) still applies.
 
 ### Multimodal branch (images)
 

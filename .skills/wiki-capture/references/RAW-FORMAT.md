@@ -1,6 +1,6 @@
 # Raw File Format Reference
 
-Full specification for `_raw/` files written by `wiki-quick-chat-capture`.
+Full specification for `_raw/` files written by `wiki-capture` (quick mode).
 These files are designed to be promoted by `/wiki-ingest`.
 
 ## Frontmatter

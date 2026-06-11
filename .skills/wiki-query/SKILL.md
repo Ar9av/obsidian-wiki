@@ -24,7 +24,7 @@ Never, even when a change seems obviously helpful:
 - modify `index.md`, `hot.md`, `_insights.md`, or `.manifest.json`
 
 If the user's message contains a new finding, an action request ("save this", "ban X", "record that"), or anything implying a change, **do not perform it.** Answer the question, PROPOSE the change, and route the user to the right skill:
-- quick note / gotcha → `wiki-quick-chat-capture`
+- quick note / gotcha → `wiki-capture --quick`
 - a full new page → `wiki-capture`
 - a project-knowledge sync → `wiki-update`
 

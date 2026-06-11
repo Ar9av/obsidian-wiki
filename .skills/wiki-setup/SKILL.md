@@ -182,11 +182,11 @@ Report the results and tell the user they can now:
 Ask the user: **"Want to auto-capture findings at session end?"**
 
 If yes, install the Stop hook into their global Claude Code settings so that every session
-with meaningful work automatically prompts `/wiki-quick-chat-capture` before closing.
+with meaningful work automatically prompts `/wiki-capture --quick` before closing.
 
 **What the hook does:** reads the session transcript on Stop, counts file edits and shell
-calls, and if significant work happened, asks Claude to run `/wiki-quick-chat-capture` once.
-The `wiki-quick-chat-capture` skill's own KEEP/SKIP gate prevents noise — routine or
+calls, and if significant work happened, asks Claude to run `/wiki-capture --quick` once.
+The `wiki-capture` quick-mode KEEP/SKIP gate prevents noise — routine or
 inconclusive sessions are skipped automatically.
 
 **Installation steps:**
@@ -218,7 +218,7 @@ inconclusive sessions are skipped automatically.
    If `~/.claude/settings.json` already exists and has a `hooks.Stop` array, **append** the new
    entry rather than replacing — don't clobber existing hooks.
 
-3. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-quick-chat-capture` at the
+3. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-capture --quick` at the
    end of any session where you write files or run ≥ 4 shell commands."
 
 **To uninstall later:** remove the hook entry from `~/.claude/settings.json` or set

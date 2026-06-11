@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fires on Claude Code Stop event.
 # Reads the session transcript; if significant work happened (file edits or
-# substantial shell activity), asks Claude to run /wiki-quick-chat-capture so
+# substantial shell activity), asks Claude to run /wiki-capture --quick so
 # findings aren't silently lost at session end.
 #
 # Exit 0 → no-op (nothing worth capturing, or hook suppressed).
@@ -70,7 +70,7 @@ BASH_COUNT=$(echo "$COUNTS" | awk '{print $2}')
 # Trigger if any file was written/edited, or if there were ≥ 4 shell calls
 # (suggesting investigation/debugging worth preserving).
 if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || [[ "${BASH_COUNT:-0}" -ge 4 ]]; then
-  echo "Session ended with ${WRITE_EDIT} file edit(s) and ${BASH_COUNT} shell call(s). Please run /wiki-quick-chat-capture now to preserve any reusable findings before this context closes." >&2
+  echo "Session ended with ${WRITE_EDIT} file edit(s) and ${BASH_COUNT} shell call(s). Please run /wiki-capture --quick now to preserve any reusable findings before this context closes." >&2
   exit 2
 fi
 
