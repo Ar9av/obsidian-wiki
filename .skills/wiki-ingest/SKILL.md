@@ -130,6 +130,17 @@ Vision is interpretive by nature, so image-derived pages will skew heavily towar
 
 For PDFs that are mostly images (scanned docs, slide decks exported to PDF), use `Read pages: "N"` to pull specific pages and treat each page as an image source.
 
+### Long-PDF preprocessing — PageIndex (optional — requires `PAGEINDEX_REPO` in `.env`)
+
+When the source is a **text PDF with ≥ `PAGEINDEX_MIN_PAGES` pages** (default 30) and
+`PAGEINDEX_REPO` is set, don't read the whole document linearly. Build a structure-aware
+table-of-contents tree first, reason over it, and read only the relevant page ranges —
+**read `references/pageindex.md` and follow it.** It yields section titles, summaries, and
+page ranges, giving precise page-cited provenance at a fraction of the context cost.
+
+If `PAGEINDEX_REPO` is unset, the repo is missing, or PageIndex errors, **fall back** to
+reading the PDF directly with page ranges. Never block an ingest on PageIndex.
+
 ### Academic papers
 
 Research papers (arXiv/conference PDFs) carry their substance in figures, equations, and results tables — exactly what plain text extraction drops. A normal arXiv PDF has a text layer, so the image branch above never fires and its diagrams are skipped by default. When a source is an academic paper, override that:
