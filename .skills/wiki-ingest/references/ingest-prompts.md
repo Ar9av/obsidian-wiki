@@ -26,7 +26,7 @@ When reading a source document, ask yourself:
 For academic papers (ML/AI/LLM/VLM and similar), the generic frame above misses what makes a paper legible. Add these questions:
 
 1. **What problem does it solve, and what's new?** The one-sentence thesis + the single most important result.
-2. **What is the method?** Which figure shows the architecture/pipeline? Sketch it as a Mermaid flowchart — capture the data flow, not just the component names.
+2. **What is the method?** Which figure shows the architecture/pipeline? **Embed that figure from the PDF** (see the *Academic papers* recipe in `wiki-ingest/SKILL.md` — extract the raster, or render the vector region); fall back to a Mermaid flowchart only if extraction fails. Capture the data flow, not just the component names.
 3. **What are the core equations?** The 1–3 that define the mechanism — keep them as math (`$$…$$`), not prose.
 4. **What's the experimental setup and the headline numbers?** Datasets, baselines, and the metric table the paper is judged on.
 5. **What are the ablations and limitations?** What did they vary, and what does the method *not* do?
