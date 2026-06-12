@@ -21,6 +21,18 @@ When reading a source document, ask yourself:
 5. **How does this connect to what the wiki already knows?**
    This is the most important question. The value of the wiki compounds through connections.
 
+## Paper Extraction Frame
+
+For academic papers (ML/AI/LLM/VLM and similar), the generic frame above misses what makes a paper legible. Add these questions:
+
+1. **What problem does it solve, and what's new?** The one-sentence thesis + the single most important result.
+2. **What is the method?** Which figure shows the architecture/pipeline? Sketch it as a Mermaid flowchart — capture the data flow, not just the component names.
+3. **What are the core equations?** The 1–3 that define the mechanism — keep them as math (`$$…$$`), not prose.
+4. **What's the experimental setup and the headline numbers?** Datasets, baselines, and the metric table the paper is judged on.
+5. **What are the ablations and limitations?** What did they vary, and what does the method *not* do?
+
+These map onto the Paper Deep-Dive Template in `llm-wiki/SKILL.md`. The goal is a page a reader could study instead of the PDF — figures, equations, and results included.
+
 ## Synthesis Frame
 
 When a new source covers ground that existing pages already cover:
