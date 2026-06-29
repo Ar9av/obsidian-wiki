@@ -14,7 +14,7 @@ You are producing a focused, token-bounded context pack from the wiki. Unlike `w
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and any QMD variables.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and any QMD variables.
 2. Read `$OBSIDIAN_VAULT_PATH/hot.md` if it exists — gives instant context on recent activity.
 3. Read `$OBSIDIAN_VAULT_PATH/index.md` — the full page inventory.
 

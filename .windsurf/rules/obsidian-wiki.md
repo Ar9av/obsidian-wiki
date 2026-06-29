@@ -9,7 +9,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 
 ## Quick Orientation
 
-1. Read `.env` for `OBSIDIAN_VAULT_PATH` — this is where the wiki lives.
+1. Resolve config via `AGENTS.md`: honor an inline `@name` vault override first, then `.env`, then `~/.obsidian-wiki/config`. This gives `OBSIDIAN_VAULT_PATH` — where the wiki lives.
 2. Read `.manifest.json` at the vault root to see what's already been ingested.
 3. Skills are in `.skills/` (also at `.windsurf/skills/`). Each subfolder has a `SKILL.md`.
 

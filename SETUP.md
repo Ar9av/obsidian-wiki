@@ -49,7 +49,7 @@ Open this project in your coding agent and tell it what you want:
 | "Audit my wiki" | `wiki-lint` |
 | "Rebuild from scratch" | `wiki-rebuild` |
 
-The agent reads the skills from `.skills/`, reads `.env` for your vault path, and does the work.
+The agent reads the skills from `.skills/`, resolves the vault path via the Config Resolution Protocol (`@name` override → `.env` → `~/.obsidian-wiki/config`), and does the work.
 
 ### 3. Open in Obsidian
 

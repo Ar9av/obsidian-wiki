@@ -8,7 +8,8 @@ description: >
   it in the correct vault category. Also supports a fast QUICK MODE (`/wiki-capture --quick`, "quick
   capture", "capture this finding", "save this bug fix", "save this gotcha", "drop this to raw", "quick
   save to wiki") that drops findings to the `_raw/` staging area in under 60 seconds with no manifest
-  or index writes — used by the session-end Stop hook to auto-preserve findings.
+  or index writes — used by the session-end Stop hook to auto-preserve findings. Accepts inline
+  named-vault routing like "@research save this" via the shared Config Resolution Protocol.
 ---
 
 # Wiki Capture — Conversation to Wiki Note
@@ -55,7 +56,7 @@ Trigger when invoked as `/wiki-capture --quick`, by "quick capture" / "capture t
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`).
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default: `wikilink`).
 2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand existing wiki content (avoid duplicates)
 3. Read `$OBSIDIAN_VAULT_PATH/hot.md` if it exists — it gives context on recent activity
 

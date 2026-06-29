@@ -6,11 +6,19 @@ A **skill-based framework** for building and maintaining an Obsidian knowledge b
 
 Resolve config using the Config Resolution Protocol in `llm-wiki/SKILL.md`:
 
+0. **Inline vault override (`@name`)** — if the request contains an `@<name>` token, resolve `~/.obsidian-wiki/config.<name>` directly, overriding the steps below. See "Targeting a specific vault" right after this list.
 1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
 2. **Global config** — if no local `.env` is found, read `~/.obsidian-wiki/config`.
 3. **Prompt setup** — if neither exists, tell the user to run `wiki-setup`.
 
 The resolved config sets `OBSIDIAN_VAULT_PATH` (where the wiki lives). It may also set `OBSIDIAN_WIKI_REPO` (where this repo is cloned) and other optional variables.
+
+### Targeting a specific vault
+
+You can maintain multiple vaults (each a `~/.obsidian-wiki/config.<name>` file managed by `wiki-switch`) and reach any of them from any directory:
+
+- **`@name` (per-invocation override)** — prefix or mention `@<name>` anywhere in a request to route that one command to that vault, e.g. `@work save this` or `wiki-query @personal what do I know about X`. It overrides the CWD `.env` and the active symlink **for that invocation only** — it does **not** flip your default vault. If `config.<name>` doesn't exist, the skill reports it and lists available vaults; do **not** silently fall back to the default. The `@name` is stripped before the rest of the request is used as content.
+- **`/wiki-switch <name>` (persistent default)** — re-points the active symlink so all future requests use that vault. This is your default "brain" vault; use `@name` to dip into the other one without switching.
 
 **After reading config, always read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists.** It contains owner-specific conventions (domain vocabulary, ingest preferences, writing style, project scoping) that override framework defaults for all skills. Apply it for the duration of the session.
 
@@ -63,6 +71,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "link my pages" / "cross-reference" / "connect my wiki" | `cross-linker` |
 | "fix my tags" / "normalize tags" / "tag audit" | `tag-taxonomy` |
 | "update wiki" / "sync to wiki" / "save this to my wiki" | `wiki-update` |
+| `@work update wiki` / `wiki-query @personal ...` / `@research save this` | Any matching wiki skill + Config Resolution Protocol `@name` override |
 | "export wiki" / "export graph" / "graphml" / "neo4j" / "export to OKF" / "OKF bundle" / "open knowledge format" | `wiki-export` |
 | "import wiki" / "import from export" / "load graph.json" / "import vault" / "import OKF bundle" / "/wiki-import" | `wiki-import` |
 | "color my graph" / "color code obsidian" / "color by tag/category/visibility" | `graph-colorize` |

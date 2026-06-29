@@ -9,6 +9,8 @@ description: >
   transitively" question — answered by walking typed edges across multiple hops. Works from any project.
   Includes an index-only fast mode triggered by "quick answer", "just scan", "don't read the pages",
   "fast lookup" — returns answers from page summaries and frontmatter without reading page bodies.
+  Accepts inline named-vault routing like "wiki-query @work what do I know about X" via the shared
+  Config Resolution Protocol.
 ---
 
 # Wiki Query — Knowledge Retrieval
@@ -30,7 +32,7 @@ If the user's message contains a new finding, an action request ("save this", "b
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). Prefer `~/.obsidian-wiki/config` for cross-project queries when present, even if it is a symlink to the vault `.env`. This gives `OBSIDIAN_VAULT_PATH` and any QMD variables. Works from any project directory.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). For cross-project queries without `@name`, prefer `~/.obsidian-wiki/config` when present, even if it is a symlink to the vault `.env`. This gives `OBSIDIAN_VAULT_PATH` and any QMD variables. Works from any project directory.
 2. **Load QMD settings from the resolved config** before deciding retrieval strategy. If `QMD_WIKI_COLLECTION` is set, treat QMD as available subject only to transport/tool checks below. If it is empty or unset, say briefly why QMD is being skipped before using grep/page reads.
 3. If `$OBSIDIAN_VAULT_PATH/hot.md` exists, read it first — it gives you instant context on recent activity. If the user's question is about something ingested recently, hot.md may answer it before you even open `index.md`.
 4. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand the wiki's scope and structure

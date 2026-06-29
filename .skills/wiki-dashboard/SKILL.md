@@ -14,7 +14,7 @@ Two tools available: **Obsidian Bases** (native, GUI-driven, no plugin) and **Da
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
 2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand what categories and pages exist.
 3. Ask the user what they want to view if not specified — folder, tag, category, date range?
 4. Ask if they have Dataview installed if you're unsure which tool to use.

@@ -6,7 +6,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 
 - **Purpose:** Build and maintain an Obsidian wiki using the LLM Wiki pattern (Andrej Karpathy).
 - **Tech Stack:** Markdown only. No code, no dependencies. The AI agent IS the runtime.
-- **Key Config:** `.env` contains `OBSIDIAN_VAULT_PATH` pointing to the vault location.
+- **Key Config:** Resolve config via `AGENTS.md`: inline `@name` vault override first, then `.env`, then `~/.obsidian-wiki/config`. The resolved config supplies `OBSIDIAN_VAULT_PATH`.
 - **Skills:** `.skills/` contains skill folders, each with a `SKILL.md` defining a workflow.
 
 ## Key Concepts

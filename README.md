@@ -37,6 +37,12 @@ obsidian-wiki setup --copy      # copy skill files instead of symlinking
 
 `OBSIDIAN_VAULT_PATH` is just any directory where you want your digital brain to live, a new empty folder or an existing Obsidian vault. Omit `--vault` to be prompted (or set it later in `~/.obsidian-wiki/config`).
 
+### Multiple Vaults
+
+Keep a default vault active in `~/.obsidian-wiki/config`, or create named configs like `~/.obsidian-wiki/config.work` with `/wiki-switch new work`. From any directory, route one request to a named vault with `@name`, for example `@work update wiki` or `wiki-query @personal what do I know about MCP security`. The `@name` override applies only to that request and never changes your default vault.
+
+All supported agents can use this syntax after `obsidian-wiki setup` or `setup.sh`, because the shared skills and always-on bootstrap files all point back to the same Config Resolution Protocol. The routing token works with write skills (`@work update wiki`, `@research save this`) and read skills (`wiki-query @personal what do I know about X`).
+
 ### Install via Skills CLI (deprecated)
 
 ```bash
@@ -88,7 +94,7 @@ Works with **any AI coding agent** that can read files — Claude Code, Cursor, 
 | **[Kilocode](https://kilo.ai/)** | `AGENTS.md` / `CLAUDE.md` | `.agents/skills/` + `.claude/skills/` | ✅ `/wiki-ingest`, `/wiki-status`, etc. |
 | **[Pi](https://pi.dev)** | `AGENTS.md` | `.pi/skills/` + `~/.pi/agent/skills/` | ✅ `/wiki-ingest`, `/wiki-history-ingest pi`, etc. |
 
-> Each agent has its own convention for discovering skills. `setup.sh` symlinks the canonical `.skills/` directory into each agent's expected location. You write skills once, every agent can use them.
+> Each agent has its own convention for discovering skills. `setup.sh` symlinks the canonical `.skills/` directory into each agent's expected location. You write skills once, every agent can use them. The same is true for named-vault routing: `@name` is documented in the shared skills and bootstrap context, so Claude Code, Cursor, Windsurf, Codex, Gemini, Kiro, Hermes, OpenClaw, Copilot CLI, Pi, and the generic `AGENTS.md` agents all pick it up from the same instructions.
 
 ### Manual setup (if you prefer `setup.sh`)
 
