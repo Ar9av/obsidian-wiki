@@ -11,6 +11,8 @@
   <img width="768" height="512" alt="obisidan-wiki" src="https://github.com/user-attachments/assets/b44cf63b-3197-4fb1-8e18-dbc9a39f27a7" />
 </p>
 
+English | [繁體中文](README_TW.md)
+
 A **digital brain** you grow with your AI agent. It remembers what you figure out, connects it to what you already know, and answers when you ask.
 
 The pattern comes from Andrej Karpathy's [LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): compile knowledge once into interconnected markdown files and keep them current, instead of asking an LLM the same questions over and over (or running RAG every time). Obsidian is how you see the brain. Your AI agent is how you grow it.
