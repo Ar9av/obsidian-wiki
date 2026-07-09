@@ -460,6 +460,8 @@ Reading the vault is the dominant cost of every read-side skill. Use the cheapes
 | Whole-page content | `Read <file>` | **Expensive** — last resort |
 | Relationships across pages | `Grep "\[\[.*?\]\]"` across the vault, or walk wikilinks from a known page | Case-by-case |
 
+**Search command preference:** for shell/file searches, use ripgrep (`rg`, `rg --files`) when available; if not, fall back to `grep`/`find`. Capitalized `Grep`/`Glob` names in these skills are tool-generic primitives for agents that expose those tools.
+
 **The rule:** escalate only when the cheaper primitive can't answer the question. If you can answer from `summary:` fields alone, don't read page bodies. If a grepped section with `-A 10 -B 2` gives you the claim, don't read the whole page. A 500-line page opened to read 15 lines is 485 lines of wasted tokens.
 
 **Why this matters:** a 20-page vault lets you get away with full-vault scans. A 200-page vault does not. The primitives above are how the skills framework scales to large vaults without a database.
