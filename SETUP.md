@@ -19,6 +19,7 @@ Useful local commands after setup:
 obsidian-wiki doctor
 obsidian-wiki query "what do I know about rate limiting?"
 obsidian-wiki lint
+obsidian-wiki index
 ```
 
 The rest of this doc covers the `git clone` + `setup.sh` path.

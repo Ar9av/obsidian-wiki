@@ -162,6 +162,8 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "slug": _slug(path.stem),
         "title": values.get("title", "").strip() or path.stem,
         "summary": values.get("summary", "").strip(),
+        "category": values.get("category", "").strip(),
+        "tags": values.get("tags", "").strip(),
         "fields": fields,
         "links": links,
         "relationships": _parse_relationships(frontmatter),

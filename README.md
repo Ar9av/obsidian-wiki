@@ -50,6 +50,7 @@ obsidian-wiki query "rate limiting"  # query the configured vault from the termi
 obsidian-wiki lint              # lint the configured vault for broken links / metadata gaps
 obsidian-wiki trust-check --strict  # CI/scheduled gate for approved manual review fingerprints
 obsidian-wiki trust-record --all --reviewed-at <ISO-with-timezone> --approved  # record a human-approved full review
+obsidian-wiki index             # rebuild the vault's index.md deterministically from page frontmatter
 obsidian-wiki setup --project . # also drop project-local skills + AGENTS.md into the current repo
 obsidian-wiki setup --copy      # copy skill files instead of symlinking
 ```
@@ -64,11 +65,12 @@ The Python package also ships a few local commands for inspection and maintenanc
 obsidian-wiki doctor --json
 obsidian-wiki query "what do I know about MCP security?"
 obsidian-wiki lint --strict
+obsidian-wiki index --check
 obsidian-wiki graph-query /path/to/vault "transformer architecture"
 obsidian-wiki graph-analyse /path/to/vault --pretty
 ```
 
-Use `doctor` to catch broken setup, stale installs, or malformed vault state. Use `query` and `lint` when you want fast local answers without going through an agent prompt. The lower-level `graph-query`, `graph-analyse`, `batch-plan`, `cache-*`, and `ast-extract` commands are still available for automation and debugging.
+Use `doctor` to catch broken setup, stale installs, or malformed vault state. Use `query` and `lint` when you want fast local answers without going through an agent prompt. Use `index` to regenerate `index.md` from page frontmatter (grouped by category, stable sort) instead of hand-editing it — `--check` verifies the index without writing and exits non-zero with a diff when it's stale. The lower-level `graph-query`, `graph-analyse`, `batch-plan`, `cache-*`, and `ast-extract` commands are still available for automation and debugging.
 
 ### Multiple Vaults
 

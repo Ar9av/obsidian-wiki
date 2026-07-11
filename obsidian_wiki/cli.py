@@ -837,6 +837,32 @@ def cmd_trust_check(args: argparse.Namespace) -> int:
     return 0
 
 
+_INDEX_DIFF_LIMIT = 40
+
+
+def cmd_index(args: argparse.Namespace) -> int:
+    from obsidian_wiki.index import rebuild_index
+
+    vault = _resolve_command_vault(args.vault)
+    if vault is None:
+        return 1
+
+    report = rebuild_index(vault, check=args.check)
+    if report["in_sync"]:
+        print(f"index.md is up to date ({report['pages']} pages)")
+        return 0
+    if args.check:
+        print(f"index.md is out of date ({report['pages']} pages indexed)")
+        for line in report["diff"][:_INDEX_DIFF_LIMIT]:
+            print(line)
+        hidden = len(report["diff"]) - _INDEX_DIFF_LIMIT
+        if hidden > 0:
+            print(f"... ({hidden} more diff lines)")
+        return 1
+    print(f"index.md rebuilt ({report['pages']} pages)")
+    return 0
+
+
 def _print_query(result: dict[str, object]) -> None:
     print(f"answer_type: {result['answer_type']}")
     candidates = result.get("candidates", [])
@@ -1057,6 +1083,14 @@ def build_parser() -> argparse.ArgumentParser:
     tc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     tc.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
     tc.set_defaults(func=cmd_trust_check)
+
+    ix = sub.add_parser(
+        "index",
+        help="rebuild the vault's index.md deterministically from page frontmatter",
+    )
+    ix.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    ix.add_argument("--check", action="store_true", help="don't write; exit non-zero if index.md is out of date")
+    ix.set_defaults(func=cmd_index)
 
     qq = sub.add_parser(
         "query",
