@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from obsidian_wiki.index import build_index, rebuild_index
+from obsidian_wiki.lint import _parse_page
 
 
 def _page(
@@ -16,7 +17,8 @@ def _page(
     *,
     category: str | None = None,
     summary: str | None = "Short summary.",
-    tags: str = "[test]",
+    tags: str | None = "[test]",
+    frontmatter_lines: list[str] | None = None,
 ) -> Path:
     path = vault / relpath
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,16 +29,37 @@ def _page(
         "---",
         f"title: {path.stem}",
         f"category: {category}",
-        f"tags: {tags}",
-        "sources: [manual]",
-        "created: 2026-07-01",
-        "updated: 2026-07-01",
     ]
+    if tags is not None:
+        lines.append(f"tags: {tags}")
+    if frontmatter_lines:
+        lines.extend(frontmatter_lines)
+    lines.extend(
+        [
+            "sources: [manual]",
+            "created: 2026-07-01",
+            "updated: 2026-07-01",
+        ]
+    )
     if summary is not None:
         lines.append(f"summary: {summary}")
     lines.extend(["---", f"# {path.stem}"])
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def test_index_renders_inline_and_block_list_tags(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    inline = _page(vault, "concepts/inline.md", tags="[ml, architecture]")
+    block = _page(
+        vault,
+        "concepts/block.md",
+        tags=None,
+        frontmatter_lines=["tags:", "  - ml", "  - architecture"],
+    )
+
+    assert _parse_page(inline, vault)["tag_list"] == ["ml", "architecture"]
+    assert _parse_page(block, vault)["tag_list"] == ["ml", "architecture"]
 
 
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
