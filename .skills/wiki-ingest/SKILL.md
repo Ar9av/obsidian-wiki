@@ -360,7 +360,7 @@ For each page in your plan:
   updated: <new ISO timestamp>
   sources: [<new source added>]
   ```
-- `index.md` and `log.md` are always updated immediately (low-risk tracking files). `hot.md` notes that staged writes are pending.
+- `log.md` is updated immediately and `hot.md` notes that staged writes are pending. Do not refresh `index.md` for a staged-only run because `_staging/` pages are not yet visible.
 - When writing staged pages, use the path `_staging/<category>/` — create the directory if it doesn't exist.
 
 **If `WIKI_STAGED_WRITES` is not set or is `false` (default):**
@@ -444,7 +444,14 @@ Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
 If the manifest doesn't exist yet, create it with `version: 1`.
 
-**`index.md`** — Add entries for any new pages, update summaries for modified pages.
+**`index.md`** — If this run wrote visible pages (not staged-only), after all visible page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
 
 **`log.md`** — Append an entry:
 ```

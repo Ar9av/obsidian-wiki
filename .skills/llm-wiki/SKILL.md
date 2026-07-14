@@ -129,6 +129,18 @@ A content-oriented catalog organized by category. Each entry has a one-line summ
 ❌ Don't: `description (#tag)` — breaks tag parsing
 ✅ Do: `description ( #tag)` — proper spacing and tag parsing
 
+### Deterministic Index Refresh
+
+After a workflow changes any visible wiki page's path, title, category, summary, or tags, rebuild the root index after all page writes succeed:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete. Do not use the manual fallback to hide a generator failure. Skip refresh during read-only, audit-only, dry-run, no-op, and staged-only flows that changed no visible page.
+
 ### `log.md`
 Chronological append-only record tracking every operation. Each entry is parseable:
 

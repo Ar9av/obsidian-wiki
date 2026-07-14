@@ -147,7 +147,14 @@ Skipped (consider next time):
 
 ## Step 7: Update Special Files
 
-**`index.md`** — Add entries for all new synthesis pages.
+**`index.md`** — After all new synthesis page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
 
 **`log.md`** — Append:
 ```
