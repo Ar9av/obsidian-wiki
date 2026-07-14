@@ -838,6 +838,22 @@ def cmd_trust_check(args: argparse.Namespace) -> int:
 
 
 _INDEX_DIFF_LIMIT = 40
+_INDEX_LINK_FORMATS = frozenset({"wikilink", "markdown"})
+
+
+def _resolve_index_link_format(cli_value: str | None) -> str:
+    value = (
+        cli_value
+        or os.environ.get("OBSIDIAN_LINK_FORMAT", "")
+        or _read_config_value("OBSIDIAN_LINK_FORMAT")
+        or "wikilink"
+    ).strip().lower()
+    if value not in _INDEX_LINK_FORMATS:
+        raise ValueError(
+            "invalid OBSIDIAN_LINK_FORMAT: "
+            f"{value!r}; expected wikilink or markdown"
+        )
+    return value
 
 
 def cmd_index(args: argparse.Namespace) -> int:
@@ -847,7 +863,13 @@ def cmd_index(args: argparse.Namespace) -> int:
     if vault is None:
         return 1
 
-    report = rebuild_index(vault, check=args.check)
+    try:
+        link_format = _resolve_index_link_format(args.link_format)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    report = rebuild_index(vault, check=args.check, link_format=link_format)
     if report["in_sync"]:
         print(f"index.md is up to date ({report['pages']} pages)")
         return 0
@@ -1090,6 +1112,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ix.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
     ix.add_argument("--check", action="store_true", help="don't write; exit non-zero if index.md is out of date")
+    ix.add_argument(
+        "--link-format",
+        choices=sorted(_INDEX_LINK_FORMATS),
+        help="index link syntax (defaults to environment/config, then wikilink)",
+    )
     ix.set_defaults(func=cmd_index)
 
     qq = sub.add_parser(

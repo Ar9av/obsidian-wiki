@@ -109,9 +109,15 @@ def test_index_renders_block_list_tags(tmp_path: Path) -> None:
     assert "[[concepts/block]] — Short summary. ( #ml #architecture)" in text
 
 
-def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    home: Path,
+    *args: str,
+    extra_env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    if extra_env:
+        env.update(extra_env)
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,
@@ -198,3 +204,52 @@ def test_index_cli_uses_configured_vault(tmp_path: Path) -> None:
 
     assert proc.returncode == 0
     assert "[[concepts/alpha]]" in (vault / "index.md").read_text(encoding="utf-8")
+
+
+def test_index_cli_link_format_precedence(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", title="Alpha")
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(
+        "OBSIDIAN_LINK_FORMAT=markdown\n",
+        encoding="utf-8",
+    )
+
+    assert _run(home, "index", str(vault)).returncode == 0
+    assert "[Alpha](concepts/alpha.md)" in (vault / "index.md").read_text()
+
+    assert _run(
+        home,
+        "index",
+        str(vault),
+        extra_env={"OBSIDIAN_LINK_FORMAT": "wikilink"},
+    ).returncode == 0
+    assert "[[concepts/alpha|Alpha]]" in (vault / "index.md").read_text()
+
+    assert _run(
+        home,
+        "index",
+        str(vault),
+        "--link-format",
+        "markdown",
+        extra_env={"OBSIDIAN_LINK_FORMAT": "wikilink"},
+    ).returncode == 0
+    assert "[Alpha](concepts/alpha.md)" in (vault / "index.md").read_text()
+
+
+def test_index_cli_rejects_invalid_configured_link_format(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+
+    proc = _run(
+        tmp_path / "home",
+        "index",
+        str(vault),
+        extra_env={"OBSIDIAN_LINK_FORMAT": "invalid"},
+    )
+
+    assert proc.returncode == 1
+    assert "invalid OBSIDIAN_LINK_FORMAT" in proc.stderr
+    assert not (vault / "index.md").exists()
