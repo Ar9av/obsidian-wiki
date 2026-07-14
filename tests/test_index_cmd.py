@@ -15,6 +15,7 @@ def _page(
     vault: Path,
     relpath: str,
     *,
+    title: str | None = None,
     category: str | None = None,
     summary: str | None = "Short summary.",
     tags: str | None = "[test]",
@@ -27,7 +28,7 @@ def _page(
         category = rel.parts[0] if len(rel.parts) > 1 else "concepts"
     lines = [
         "---",
-        f"title: {path.stem}",
+        f"title: {title or path.stem}",
         f"category: {category}",
     ]
     if tags is not None:
@@ -62,6 +63,52 @@ def test_index_renders_inline_and_block_list_tags(tmp_path: Path) -> None:
     assert _parse_page(block, vault)["tag_list"] == ["ml", "architecture"]
 
 
+def test_index_uses_full_paths_and_frontmatter_titles(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "projects/alpha/shared.md", title="Alpha Shared", category="project")
+    _page(vault, "projects/beta/shared.md", title="Beta Shared", category="project")
+
+    text = build_index(vault)
+
+    assert "[[projects/alpha/shared|Alpha Shared]]" in text
+    assert "[[projects/beta/shared|Beta Shared]]" in text
+    assert text.count("[[shared]]") == 0
+
+
+def test_index_renders_root_relative_markdown_links(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/friendly-slug.md", title="Friendly Name")
+
+    text = build_index(vault, link_format="markdown")
+
+    assert "[Friendly Name](concepts/friendly-slug.md)" in text
+    assert "[[" not in text
+
+
+def test_index_preserves_noncanonical_category_case(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "AI/guide.md", title="Guide", category="AI")
+
+    text = build_index(vault)
+
+    assert "## AI" in text
+    assert "## Ai" not in text
+
+
+def test_index_renders_block_list_tags(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(
+        vault,
+        "concepts/block.md",
+        tags=None,
+        frontmatter_lines=["tags:", "  - ml", "  - architecture"],
+    )
+
+    text = build_index(vault)
+
+    assert "[[concepts/block]] — Short summary. ( #ml #architecture)" in text
+
+
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
@@ -85,12 +132,12 @@ def test_index_rebuild_groups_and_sorts(tmp_path: Path) -> None:
     assert proc.returncode == 0
     assert "index.md rebuilt (4 pages)" in proc.stdout
     text = (vault / "index.md").read_text(encoding="utf-8")
-    assert "- [[alpha]] — Short summary. ( #test)" in text
-    assert "- [[beta]] — Short summary. ( #ml #architecture)" in text
-    assert "- [[proj]]\n" in text
+    assert "- [[concepts/alpha]] — Short summary. ( #test)" in text
+    assert "- [[concepts/beta]] — Short summary. ( #ml #architecture)" in text
+    assert "- [[projects/proj]]\n" in text
     # Canonical category order, with sorted entries inside each section.
     assert text.index("## Concepts") < text.index("## Entities") < text.index("## Projects")
-    assert text.index("[[alpha]]") < text.index("[[beta]]")
+    assert text.index("[[concepts/alpha]]") < text.index("[[concepts/beta]]")
     # Deterministic: a second build reproduces the same content.
     assert build_index(vault) == text
 
@@ -110,7 +157,7 @@ def test_index_check_passes_when_current_and_fails_when_stale(tmp_path: Path) ->
     proc = _run(home, "index", "--check", str(vault))
     assert proc.returncode == 1
     assert "out of date" in proc.stdout
-    assert "+- [[tool]]" in proc.stdout
+    assert "+- [[entities/tool]]" in proc.stdout
     # --check must not write.
     assert (vault / "index.md").read_text(encoding="utf-8") == before
 
@@ -133,7 +180,7 @@ def test_index_skips_excluded_dirs_and_special_files(tmp_path: Path) -> None:
 
     assert report["pages"] == 1
     text = (vault / "index.md").read_text(encoding="utf-8")
-    assert "[[alpha]]" in text
+    assert "[[concepts/alpha]]" in text
     for excluded in ("draft", "taxonomy", "narrate-out", "junk", "log", "hot", "_insights"):
         assert f"[[{excluded}]]" not in text
 
@@ -150,4 +197,4 @@ def test_index_cli_uses_configured_vault(tmp_path: Path) -> None:
     proc = _run(home, "index")
 
     assert proc.returncode == 0
-    assert "[[alpha]]" in (vault / "index.md").read_text(encoding="utf-8")
+    assert "[[concepts/alpha]]" in (vault / "index.md").read_text(encoding="utf-8")
