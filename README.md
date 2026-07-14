@@ -66,11 +66,12 @@ obsidian-wiki doctor --json
 obsidian-wiki query "what do I know about MCP security?"
 obsidian-wiki lint --strict
 obsidian-wiki index --check
+obsidian-wiki index --link-format markdown  # emit root-relative Markdown links
 obsidian-wiki graph-query /path/to/vault "transformer architecture"
 obsidian-wiki graph-analyse /path/to/vault --pretty
 ```
 
-Use `doctor` to catch broken setup, stale installs, or malformed vault state. Use `query` and `lint` when you want fast local answers without going through an agent prompt. Use `index` to regenerate `index.md` from page frontmatter (grouped by category, stable sort) instead of hand-editing it — `--check` verifies the index without writing and exits non-zero with a diff when it's stale. The lower-level `graph-query`, `graph-analyse`, `batch-plan`, `cache-*`, and `ast-extract` commands are still available for automation and debugging.
+Use `doctor` to catch broken setup, stale installs, or malformed vault state. Use `query` and `lint` when you want fast local answers without going through an agent prompt. Use `index` to regenerate `index.md` from page frontmatter (grouped by category, stable sort) instead of hand-editing it. Entries use full vault-relative paths and frontmatter titles, so same-named pages remain unambiguous. `--check` verifies the index without writing and exits non-zero with a diff when it's stale. Link-format precedence is `--link-format` → `OBSIDIAN_LINK_FORMAT` in the environment → global config → `wikilink`. The lower-level `graph-query`, `graph-analyse`, `batch-plan`, `cache-*`, and `ast-extract` commands are still available for automation and debugging.
 
 ### Multiple Vaults
 
