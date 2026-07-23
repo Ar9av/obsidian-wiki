@@ -752,7 +752,12 @@ def cmd_lint(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
 
-    report = lint_vault(vault, require_trust_ledger=True)
+    strict_trust = args.strict_trust or _read_config_value("OBSIDIAN_TRUST_STRICT").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    report = lint_vault(vault, require_trust_ledger=True, strict_trust=strict_trust)
     if args.json:
         if args.pretty:
             print(json.dumps(report, indent=2))
@@ -1022,6 +1027,15 @@ def build_parser() -> argparse.ArgumentParser:
     lt.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     lt.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     lt.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    lt.add_argument(
+        "--strict-trust",
+        action="store_true",
+        help=(
+            "fail lint on missing trust fields, ledger errors, stale reviews, and "
+            "score mismatches (default: legacy mode, these are warnings only). "
+            "Also settable per-vault via OBSIDIAN_TRUST_STRICT=1 in the config."
+        ),
+    )
     lt.set_defaults(func=cmd_lint)
 
     tr = sub.add_parser(

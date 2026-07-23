@@ -284,10 +284,15 @@ def test_lint_vault_requires_trust_ledger_by_default(tmp_path: Path) -> None:
 
     report = lint_vault(vault)
 
-    assert report["status"] == "fail"
+    # Staged migration (#28, #146): a missing ledger only warns until the
+    # vault owner opts into strict_trust.
+    assert report["status"] == "warn"
     assert report["findings"]["confidence_ledger_errors"] == [
         {"issue": "ledger_missing", "path": str(vault / "_meta" / "trust-ledger.json")}
     ]
+
+    strict_report = lint_vault(vault, strict_trust=True)
+    assert strict_report["status"] == "fail"
 
 
 def test_non_object_ledger_fails_cleanly(tmp_path: Path) -> None:
@@ -680,10 +685,16 @@ def test_lint_flags_content_page_missing_trust_schema(tmp_path: Path) -> None:
 
     report = lint_vault(vault)
 
-    assert report["status"] == "fail"
-    assert report["findings"]["missing_frontmatter"] == [
+    # Staged migration (#28, #146): legacy pages predating the trust schema
+    # warn instead of failing lint until the owner opts into strict_trust.
+    assert report["status"] == "warn"
+    assert report["findings"]["missing_frontmatter"] == []
+    assert report["findings"]["confidence_missing_fields"] == [
         {"page": "concepts/alpha.md", "missing": ["base_confidence", "lifecycle"]}
     ]
+
+    strict_report = lint_vault(vault, strict_trust=True)
+    assert strict_report["status"] == "fail"
 
 
 def test_required_trust_ledger_fails_closed_when_missing(tmp_path: Path) -> None:
@@ -692,10 +703,15 @@ def test_required_trust_ledger_fails_closed_when_missing(tmp_path: Path) -> None
 
     report = lint_vault(vault, require_trust_ledger=True)
 
-    assert report["status"] == "fail"
+    # require_trust_ledger controls whether the ledger check runs at all (and
+    # is thus reported); strict_trust controls whether its findings fail lint.
+    assert report["status"] == "warn"
     assert report["findings"]["confidence_ledger_errors"] == [
         {"issue": "ledger_missing", "path": str(vault / "_meta" / "trust-ledger.json")}
     ]
+
+    strict_report = lint_vault(vault, require_trust_ledger=True, strict_trust=True)
+    assert strict_report["status"] == "fail"
 
 
 def test_trust_record_cli_requires_explicit_approval(tmp_path: Path) -> None:

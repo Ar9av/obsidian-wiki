@@ -24,6 +24,7 @@ def _page(
     updated: str = "2026-07-01",
     links: list[str] | None = None,
     include_frontmatter: bool = True,
+    include_trust_fields: bool = True,
 ) -> Path:
     path = vault / relpath
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,10 +39,10 @@ def _page(
                 f"sources: {sources}",
                 f"created: {created}",
                 f"updated: {updated}",
-                "base_confidence: 0.80",
-                "lifecycle: reviewed",
             ]
         )
+        if include_trust_fields:
+            lines.extend(["base_confidence: 0.80", "lifecycle: reviewed"])
         if summary is not None:
             lines.append(f"summary: {summary}")
         lines.append("---")
@@ -124,3 +125,66 @@ def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
     data = json.loads(proc.stdout)
     assert data["status"] == "warn"
     assert "concepts/alpha.md" in data["findings"]["missing_summaries"]
+
+
+def test_lint_vault_legacy_pages_without_trust_schema_warn_by_default(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", include_trust_fields=False)
+
+    report = lint_vault(vault)
+
+    assert report["status"] == "warn"
+    assert report["findings"]["missing_frontmatter"] == []
+    assert report["findings"]["confidence_missing_fields"] == [
+        {"page": "concepts/alpha.md", "missing": ["base_confidence", "lifecycle"]}
+    ]
+    assert any(item["issue"] == "ledger_missing" for item in report["findings"]["confidence_ledger_errors"])
+
+
+def test_lint_vault_missing_ledger_is_warning_not_failure_by_default(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+
+    report = lint_vault(vault)
+
+    assert report["status"] == "warn"
+    assert report["findings"]["confidence_ledger_errors"]
+
+
+def test_lint_vault_strict_trust_fails_on_missing_fields_and_ledger(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", include_trust_fields=False)
+
+    report = lint_vault(vault, strict_trust=True)
+
+    assert report["status"] == "fail"
+
+
+def test_lint_vault_strict_trust_still_passes_clean_reviewed_vault(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+
+    report = lint_vault(vault, strict_trust=True)
+
+    assert report["status"] == "pass"
+
+
+def test_lint_cli_strict_trust_flag_fails_legacy_vault(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", include_trust_fields=False)
+
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+
+    default_proc = _run(home, "lint", "--json")
+    assert default_proc.returncode == 0
+    assert json.loads(default_proc.stdout)["status"] == "warn"
+
+    strict_proc = _run(home, "lint", "--json", "--strict-trust")
+    assert strict_proc.returncode == 1
+    assert json.loads(strict_proc.stdout)["status"] == "fail"

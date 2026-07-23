@@ -17,6 +17,13 @@ REQUIRED_FRONTMATTER = (
     "sources",
     "created",
     "updated",
+)
+# Introduced by the trust-ledger rollout (#28, #132). Legacy pages that predate
+# the schema are missing these by construction; enforcement is staged behind
+# lint_vault's strict_trust switch so upgrading obsidian-wiki doesn't fail-close
+# every pre-existing page until a vault owner explicitly opts into strict mode
+# after a backfill/review pass.
+TRUST_REQUIRED_FRONTMATTER = (
     "base_confidence",
     "lifecycle",
 )
@@ -168,7 +175,12 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     }
 
 
-def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, Any]:
+def lint_vault(
+    vault: Path,
+    *,
+    require_trust_ledger: bool = True,
+    strict_trust: bool = False,
+) -> dict[str, Any]:
     pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
     slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -189,12 +201,16 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
             incoming[target] += 1
 
     missing_frontmatter = []
+    confidence_missing_fields = []
     for page in pages:
         if page["slug"] in RESERVED_PAGE_STEMS:
             continue
         missing = [field for field in REQUIRED_FRONTMATTER if field not in page["fields"]]
         if missing:
             missing_frontmatter.append({"page": page["path"], "missing": missing})
+        missing_trust = [field for field in TRUST_REQUIRED_FRONTMATTER if field not in page["fields"]]
+        if missing_trust:
+            confidence_missing_fields.append({"page": page["path"], "missing": missing_trust})
 
     title_index: dict[str, list[str]] = defaultdict(list)
     for page in pages:
@@ -291,6 +307,7 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
         "missing_summaries": sorted(missing_summaries),
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
+        "confidence_missing_fields": confidence_missing_fields,
         "confidence_review_stale": trust_report["stale"] if trust_report else [],
         "confidence_unreviewed": trust_report["unreviewed"] if trust_report else [],
         "confidence_mismatches": trust_report["score_mismatches"] if trust_report else [],
@@ -298,23 +315,37 @@ def lint_vault(vault: Path, *, require_trust_ledger: bool = True) -> dict[str, A
     }
     counts = {name: len(items) for name, items in findings.items()}
 
-    if (
-        counts["broken_links"]
-        or counts["missing_frontmatter"]
-        or counts["confidence_mismatches"]
-        or counts["confidence_ledger_errors"]
-    ):
-        status = "fail"
-    elif any(
+    # Staged migration (#28, #146): a missing trust ledger or trust frontmatter
+    # on legacy pages only fails the vault when the owner has explicitly opted
+    # into strict_trust. Ledger presence alone never silently enables strict
+    # enforcement; core structural findings (broken links, missing core
+    # frontmatter) always fail regardless of trust mode.
+    trust_finding_names = (
+        "confidence_missing_fields",
+        "confidence_mismatches",
+        "confidence_ledger_errors",
+        "confidence_review_stale",
+        "confidence_unreviewed",
+    )
+    trust_findings_present = any(counts[name] for name in trust_finding_names)
+    trust_fails = strict_trust and any(
         counts[name]
         for name in (
-            "duplicate_titles",
-            "missing_summaries",
-            "orphan_pages",
-            "typed_relationship_issues",
+            "confidence_missing_fields",
+            "confidence_mismatches",
+            "confidence_ledger_errors",
             "confidence_review_stale",
-            "confidence_unreviewed",
         )
+    )
+
+    if counts["broken_links"] or counts["missing_frontmatter"] or trust_fails:
+        status = "fail"
+    elif (
+        any(
+            counts[name]
+            for name in ("duplicate_titles", "missing_summaries", "orphan_pages", "typed_relationship_issues")
+        )
+        or trust_findings_present
     ):
         status = "warn"
     else:
