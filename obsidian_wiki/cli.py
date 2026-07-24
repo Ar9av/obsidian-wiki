@@ -24,8 +24,8 @@ GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
 
 # Skills usable from any project (no vault context needed beyond the global
 # config). These are also installed globally for agents that only scope skills
-# per-project, so cross-project sync/query work everywhere.
-PORTABLE_SKILLS = ("wiki-update", "wiki-query")
+# per-project, so cross-project sync/query/context work everywhere.
+PORTABLE_SKILLS = ("wiki-update", "wiki-query", "wiki-context-pack")
 
 
 # ── Data resolution ──────────────────────────────────────────────────────────
@@ -614,6 +614,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print(" From any project:")
     print("   /wiki-update    → sync knowledge into your vault")
     print("   /wiki-query     → ask questions against your wiki")
+    print("   /wiki-context-pack → compile bounded context for another agent")
     print("───────────────────────────────────────────────────\n")
     return 0
 
@@ -771,7 +772,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 
 def _resolve_command_vault(vault_arg: str | None) -> Path | None:
-    resolved = vault_arg or _read_config_value("OBSIDIAN_VAULT_PATH")
+    resolved = (
+        vault_arg
+        if vault_arg is not None
+        else _read_config_value("OBSIDIAN_VAULT_PATH")
+    )
     if not resolved:
         print("error: vault not configured; pass a path or run obsidian-wiki setup", file=sys.stderr)
         return None
@@ -780,6 +785,41 @@ def _resolve_command_vault(vault_arg: str | None) -> Path | None:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return None
     return vault
+
+
+def _read_env_value(path: Path, key: str) -> tuple[bool, str]:
+    if not path.is_file():
+        return False, ""
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith(f"{key}="):
+            return True, line.split("=", 1)[1].strip().strip('"')
+    return False, ""
+
+
+def _resolve_context_pack_vault(vault_arg: str | None) -> Path | None:
+    if vault_arg is not None:
+        return _resolve_command_vault(vault_arg)
+
+    current = Path.cwd().resolve()
+    home = HOME.resolve()
+    while True:
+        found, local_vault = _read_env_value(
+            current / ".env",
+            "OBSIDIAN_VAULT_PATH",
+        )
+        if found:
+            if not local_vault:
+                print(
+                    "error: vault not configured; pass a path or run obsidian-wiki setup",
+                    file=sys.stderr,
+                )
+                return None
+            return _resolve_command_vault(local_vault)
+        if current == home or current.parent == current:
+            break
+        current = current.parent
+    return _resolve_command_vault(None)
 
 
 def cmd_trust_record(args: argparse.Namespace) -> int:
@@ -881,6 +921,31 @@ def cmd_query(args: argparse.Namespace) -> int:
             print(json.dumps(result))
     else:
         _print_query(result)
+    return 0
+
+
+def cmd_context_pack(args: argparse.Namespace) -> int:
+    from obsidian_wiki.context_pack import ContextError, build_context_pack, render_markdown
+
+    vault = _resolve_context_pack_vault(args.vault)
+    if vault is None:
+        return 1
+    try:
+        pack = build_context_pack(
+            vault,
+            args.topic or "",
+            budget=args.budget,
+            recent=args.recent,
+            public_only=args.public_only,
+            metadata_only=args.metadata_only,
+        )
+    except ContextError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(pack, indent=2 if args.pretty else None))
+    else:
+        print(render_markdown(pack), end="")
     return 0
 
 
@@ -1083,6 +1148,34 @@ def build_parser() -> argparse.ArgumentParser:
     qq.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
+
+    cp = sub.add_parser(
+        "context-pack",
+        aliases=["context"],
+        help="compile a token-bounded vault slice for a downstream agent",
+    )
+    cp.add_argument("topic", nargs="?", help="topic to retrieve; omit only with --recent")
+    cp.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH")
+    cp.add_argument(
+        "--budget",
+        type=int,
+        default=8_000,
+        help="maximum estimated output tokens, 256..100000 (default: 8000)",
+    )
+    cp.add_argument("--recent", action="store_true", help="select recently updated notes")
+    cp.add_argument(
+        "--public-only",
+        action="store_true",
+        help="exclude visibility/internal and visibility/pii notes",
+    )
+    cp.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="emit titles, provenance, and summaries without body excerpts",
+    )
+    cp.add_argument("--json", action="store_true", help="emit structured JSON")
+    cp.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cp.set_defaults(func=cmd_context_pack)
 
     return p
 

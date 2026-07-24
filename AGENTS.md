@@ -70,6 +70,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "what's the status" / "what's been ingested" / "show the delta" | `wiki-status` |
 | "wiki insights" / "hubs" / "wiki structure" | `wiki-status` (insights mode) |
 | "what do I know about X" / "find info on Y" / any question | `wiki-query` |
+| "use my vault as context" / "context pack for X" / "bounded context" | `wiki-context-pack` |
 | "narrate" / "briefing" / "explain this topic" / "/wiki-narrate" | `wiki-narrate` |
 | "audit" / "lint" / "find broken links" / "wiki health" | `wiki-lint` |
 | "dedup my wiki" / "find duplicate pages" / "merge duplicates" / "identity resolution" / "consolidate my wiki" | `wiki-dedup` |
@@ -99,7 +100,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 
 ## Cross-Project Usage
 
-The main use case: you're working in some other project and want to sync knowledge into your wiki or query it. Two global skills handle this — `wiki-update` and `wiki-query`. They work from any directory.
+The main use case: you're working in some other project and want to sync knowledge into your wiki, query it, or compile bounded context. Three portable skills handle this — `wiki-update`, `wiki-query`, and `wiki-context-pack`. They work from any directory.
 
 ### wiki-update (write to wiki)
 
@@ -117,6 +118,13 @@ On repeat runs, it checks `last_commit_synced` in `.manifest.json` and only proc
 2. Scan titles, tags, and `summary:` frontmatter fields first (cheap pass)
 3. Only open page bodies when the index pass can't answer
 4. Return a synthesized answer with `[[wikilink]]` citations
+
+### wiki-context-pack (read-only context)
+
+1. Resolve the target vault and read its owner `AGENTS.md`
+2. Rank existing notes without requiring schema migration
+3. Compile summaries and selected excerpts within a hard token budget
+4. Return a provenance-rich pack; never write it back to the vault
 
 ## Visibility Tags (optional)
 

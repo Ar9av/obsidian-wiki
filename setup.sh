@@ -173,8 +173,8 @@ for agent_dir in "${AGENT_DIRS[@]}"; do
 done
 
 # ── Step 3: Install global skills ────────────────────────────
-# ~/.claude/skills gets only the two portable skills (usable from any project).
-install_skills "$HOME/.claude/skills" "~/.claude/skills/ (wiki-update, wiki-query)" absolute wiki-update wiki-query
+# ~/.claude/skills gets only the portable skills (usable from any project).
+install_skills "$HOME/.claude/skills" "~/.claude/skills/ (portable wiki skills)" absolute wiki-update wiki-query wiki-context-pack
 
 # Steps 3b–3j: Install all skills for every supported agent.
 # OpenClaw discovers skills from ~/.agents/skills/ (per docs.openclaw.ai/skills);
@@ -329,6 +329,7 @@ echo ""
 echo " From any other project:"
 echo "   /wiki-update    → sync knowledge into your vault"
 echo "   /wiki-query     → ask questions against your wiki"
+echo "   /wiki-context-pack → compile bounded context for another agent"
 if $SYNC_CONFIGURED; then
 echo "   wiki-sync       → push all vault changes to GitHub"
 fi

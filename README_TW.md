@@ -419,6 +419,7 @@ git remote add origin https://github.com/you/my-wiki.git
 | `wiki-status` | 顯示已 ingest、pending 與 delta | `/wiki-status` |
 | `wiki-rebuild` | Archive、從頭 rebuild 或 restore | `/wiki-rebuild` |
 | `wiki-query` | 從 wiki 回答問題 | `/wiki-query` |
+| `wiki-context-pack` | 為下游 agent 編譯受 token 限制的 context | `/wiki-context-pack` |
 | `wiki-lint` | 找 broken links、orphans、contradictions | `/wiki-lint` |
 | `cross-linker` | 自動發現並插入 missing wikilinks | `/cross-linker` |
 | `tag-taxonomy` | 在 pages 間強制一致的 tag vocabulary | `/tag-taxonomy` |
@@ -502,7 +503,7 @@ obsidian-wiki/
 ├── .pi/skills/       → symlinks to .skills/*  (created by setup.sh)
 ├── .kiro/skills/     → symlinks to .skills/*  (created by setup.sh)
 │
-├── ~/.claude/skills/              → portable skills (wiki-update, wiki-query)
+├── ~/.claude/skills/              → portable skills (wiki-update, wiki-query, wiki-context-pack)
 ├── ~/.gemini/skills/              → global symlinks — Gemini CLI
 ├── ~/.gemini/antigravity/skills/  → global symlinks — Antigravity (legacy path)
 ├── ~/.codex/skills/               → global symlinks — Codex
@@ -524,12 +525,12 @@ obsidian-wiki/
 
 ## 從其他 projects 使用
 
-你的大腦應該隨著你在不同 codebases 工作而成長，而不是只有打開 obsidian-wiki repo 時才成長。因此 `setup.sh` 會安裝兩個能從任何 project 觸達 vault 的 global skills：`wiki-update` 與 `wiki-query`。
+你的大腦應該隨著你在不同 codebases 工作而成長，而不是只有打開 obsidian-wiki repo 時才成長。因此 `setup.sh` 會安裝三個能從任何 project 觸達 vault 的 global skills：`wiki-update`、`wiki-query` 與 `wiki-context-pack`。
 
 執行 `bash setup.sh` 時，它會做以下事情：
 
 1. 將 vault path 與 repo location 寫入 `~/.obsidian-wiki/config`。這是 skills 知道要去哪裡讀寫的方式。
-2. 把 `wiki-update` 與 `wiki-query` symlink 到 `~/.claude/skills/`，讓 Claude Code 在任何地方都能使用。
+2. 把 `wiki-update`、`wiki-query` 與 `wiki-context-pack` symlink 到 `~/.claude/skills/`，讓 Claude Code 在任何地方都能使用。
 3. 把所有 skills symlink 到每個 agent 的 global discovery path：
    - `~/.gemini/skills/` — Gemini CLI（canonical）
    - `~/.gemini/antigravity/skills/` — Google Antigravity（legacy）
@@ -555,6 +556,25 @@ claude
 # Read from the wiki: pull context about anything you've captured before
 > /wiki-query what do I know about rate limiting?
 ```
+
+### 將既有 vault 作為有界限的 agent context
+
+`wiki-context-pack` 會從既有 Markdown 編譯出 task-scoped snapshot。筆記不需
+搬進 wiki-generated folders，也不必先補齊完整 frontmatter schema；整個
+流程是 read-only。
+
+```bash
+obsidian-wiki context-pack "authentication architecture" --budget 8000
+obsidian-wiki context-pack --recent --budget 4000
+obsidian-wiki context-pack "release notes" --budget 8000 --public-only
+```
+
+省略 `--budget` 會使用預設的 8000 個估算 token。
+
+輸出包含 source paths、summaries、選定 excerpts 與不可超過的 token 估算
+上限。Vault excerpts 會明確標成 untrusted reference data：下游 agent
+可以使用其中的知識，但不得執行筆記內嵌的指令。使用 `--metadata-only`
+可產生最小 context，使用 `--json` 可供 tool-to-tool integration。
 
 `/wiki-update` 會讀取你的 project，判斷哪些內容值得保存，然後寫進大腦：architecture decisions、你發現的 patterns、key concepts、你評估過的 trade-offs。它會跳過 code 與 file listings，保存三個月後你可能會忘記的東西。從同一個 project 再跑一次時，它會檢查上次 sync 以來的變更（透過 git log），只處理 delta。
 

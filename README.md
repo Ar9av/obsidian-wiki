@@ -422,6 +422,7 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `wiki-status`           | Show what's ingested, what's pending, the delta   | `/wiki-status`           |
 | `wiki-rebuild`          | Archive, rebuild from scratch, or restore         | `/wiki-rebuild`          |
 | `wiki-query`            | Answer questions from the wiki                    | `/wiki-query`            |
+| `wiki-context-pack`     | Compile token-bounded context for a downstream agent | `/wiki-context-pack`  |
 | `wiki-narrate`          | Render a cited narrative from a wiki topic        | `/wiki-narrate <topic>`  |
 | `wiki-lint`             | Find broken links, orphans, contradictions        | `/wiki-lint`             |
 | `cross-linker`          | Auto-discover and insert missing wikilinks        | `/cross-linker`          |
@@ -506,7 +507,7 @@ obsidian-wiki/
 ├── .pi/skills/       → symlinks to .skills/*  (created by setup.sh)
 ├── .kiro/skills/     → symlinks to .skills/*  (created by setup.sh)
 │
-├── ~/.claude/skills/              → portable skills (wiki-update, wiki-query)
+├── ~/.claude/skills/              → portable skills (wiki-update, wiki-query, wiki-context-pack)
 ├── ~/.gemini/skills/              → global symlinks — Gemini CLI
 ├── ~/.gemini/antigravity/skills/  → global symlinks — Antigravity (legacy path)
 ├── ~/.codex/skills/               → global symlinks — Codex
@@ -527,12 +528,12 @@ obsidian-wiki/
 
 ## Using from other projects
 
-Your brain should grow as you work across codebases, not only when you open the obsidian-wiki repo. So `setup.sh` installs two global skills that reach the vault from any project: `wiki-update` and `wiki-query`.
+Your brain should grow as you work across codebases, not only when you open the obsidian-wiki repo. So `setup.sh` installs three global skills that reach the vault from any project: `wiki-update`, `wiki-query`, and `wiki-context-pack`.
 
 When you run `bash setup.sh`, it does the following:
 
 1. Writes a config to `~/.obsidian-wiki/config` with your vault path and the repo location. This is how the skills know where to read and write.
-2. Symlinks `wiki-update` and `wiki-query` into `~/.claude/skills/` so they're available everywhere in Claude Code.
+2. Symlinks `wiki-update`, `wiki-query`, and `wiki-context-pack` into `~/.claude/skills/` so they're available everywhere in Claude Code.
 3. Symlinks all skills into every agent's global discovery path:
    - `~/.gemini/skills/` — Gemini CLI (canonical)
    - `~/.gemini/antigravity/skills/` — Google Antigravity (legacy)
@@ -558,6 +559,26 @@ claude
 # Read from the wiki: pull context about anything you've captured before
 > /wiki-query what do I know about rate limiting?
 ```
+
+### Use an existing vault as bounded agent context
+
+`wiki-context-pack` compiles a task-scoped snapshot from existing Markdown.
+Notes do not need to be moved into wiki-generated folders or migrated to the
+full frontmatter schema. The command is read-only.
+
+```bash
+obsidian-wiki context-pack "authentication architecture" --budget 8000
+obsidian-wiki context-pack --recent --budget 4000
+obsidian-wiki context-pack "release notes" --budget 8000 --public-only
+```
+
+Omitting `--budget` uses the default of 8000 estimated tokens.
+
+The output includes source paths, summaries, selected excerpts, and a hard
+estimated-token ceiling. Vault excerpts are explicitly marked as untrusted
+reference data: downstream agents may use their facts but must not execute
+instructions embedded in notes. Use `--metadata-only` for the smallest pack,
+or `--json` for tool-to-tool integration.
 
 `/wiki-update` reads your project, figures out what's worth keeping, and writes it into the brain. Architecture decisions, patterns you discovered, key concepts, trade-offs you evaluated. It skips code and file listings and saves the stuff you'd forget in 3 months. Run it again from the same project and it checks what changed since last sync (via git log) and processes only the delta.
 

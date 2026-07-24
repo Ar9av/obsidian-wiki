@@ -25,6 +25,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 | "import my Codex history" | `.skills/codex-history-ingest/SKILL.md` |
 | "what's the status" / "show the delta" | `.skills/wiki-status/SKILL.md` |
 | "what do I know about X" / any question | `.skills/wiki-query/SKILL.md` |
+| "use my vault as context" / "context pack for X" / "bounded context" | `.skills/wiki-context-pack/SKILL.md` |
 | "audit" / "lint" / "find broken links" | `.skills/wiki-lint/SKILL.md` |
 | "rebuild" / "start over" / "archive" | `.skills/wiki-rebuild/SKILL.md` |
 | "link my pages" / "cross-reference" | `.skills/cross-linker/SKILL.md` |
