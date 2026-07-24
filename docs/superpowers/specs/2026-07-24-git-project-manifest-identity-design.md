@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-24
 
-**Status:** Awaiting written-spec review
+**Status:** Approved
 
 **Scope:** Git-backed project entries used by `wiki-update` and `wiki-query`
 
@@ -85,6 +85,7 @@ obsidian-wiki project-state <repo> \
 
 obsidian-wiki project-record <vault> \
   --repo <path> --slug <slug> \
+  --expected-commit <sha> \
   [--expected-repo-id <id>] \
   [--remote <name>] [--branch <name>] \
   [--page <vault-relative-path>]... [--json]
@@ -95,9 +96,10 @@ commit, safety status, and optional delta classification. When
 `--expected-repo-id` is supplied, it must find a local remote with that
 identity instead of applying new-project remote selection.
 
-`project-record` runs the same safety checks again, then atomically creates or
-updates one version 2 project entry. `wiki-update` calls it only after all page
-writes succeed.
+`project-record` runs the same safety checks again, requires `HEAD` to equal
+the preflight SHA supplied through `--expected-commit`, then atomically creates
+or updates one version 2 project entry. `wiki-update` calls it only after all
+page writes succeed.
 
 ## Repository Identity
 
