@@ -251,6 +251,14 @@ inconclusive sessions are skipped automatically.
    If `~/.claude/settings.json` already exists and has a `hooks.Stop` array, **append** the new
    entry rather than replacing — don't clobber existing hooks.
 
+   > **Note — expect a duplicate nudge inside this repo.** The obsidian-wiki repo ships its own
+   > git-tracked `.claude/settings.json` registering the same Stop hook at a relative path. Claude
+   > Code *merges* project-level and user-level hook config rather than letting one override the
+   > other, so sessions ending inside the repo itself fire both registrations. This is expected and
+   > harmless — the hook claims an atomic per-session sentinel, so only one nudge is emitted. Leave
+   > both in place: removing the project entry dirties a tracked framework file and disables capture
+   > for anyone who clones the repo without doing the global install.
+
 4. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-capture --quick` at the
    end of any session where you write files or run ≥ 4 shell commands."
 

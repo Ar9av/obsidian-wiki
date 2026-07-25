@@ -23,14 +23,22 @@ print('1' if d.get('stop_hook_active') else '0')
 " 2>/dev/null || echo "0")
 [[ "$IS_HOOK_TURN" == "1" ]] && exit 0
 
-# Fire at most once per session — sentinel file keyed to session_id prevents
+# Fire at most once per session — sentinel keyed to session_id prevents
 # repeated nudges after the threshold is crossed on the first turn.
+#
+# The sentinel is a DIRECTORY, claimed with mkdir at the moment we decide to
+# nudge (see below). mkdir is atomic on POSIX filesystems, so when several
+# invocations run concurrently — which happens whenever the hook is registered
+# in both project and user settings.json — exactly one wins and the rest exit
+# silently. The check here is only a cheap short-circuit to skip transcript
+# parsing; it is NOT the correctness guarantee, since concurrent invocations
+# can all pass it before any of them claims.
 SESSION_ID=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys; print(json.load(sys.stdin).get('session_id', ''))" 2>/dev/null || echo "")
 SENTINEL=""
 if [[ -n "$SESSION_ID" ]]; then
   SENTINEL="${TMPDIR:-/tmp}/wiki-stop-capture-${SESSION_ID}.done"
-  [[ -f "$SENTINEL" ]] && exit 0
+  [[ -e "$SENTINEL" ]] && exit 0
 fi
 
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | python3 -c "
@@ -80,7 +88,12 @@ BASH_COUNT=$(echo "$COUNTS" | awk '{print $2}')
 # Trigger if any file was written/edited, or if there were ≥ 4 shell calls
 # (suggesting investigation/debugging worth preserving).
 if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || [[ "${BASH_COUNT:-0}" -ge 4 ]]; then
-  [[ -n "$SENTINEL" ]] && : > "$SENTINEL" 2>/dev/null || true
+  # Atomically claim the right to nudge. Losers of the race exit silently so a
+  # duplicate registration produces one nudge, not two. Claimed here rather than
+  # earlier so that a below-threshold turn doesn't burn the session's one nudge.
+  if [[ -n "$SENTINEL" ]]; then
+    mkdir "$SENTINEL" 2>/dev/null || exit 0
+  fi
   echo "Session ended with ${WRITE_EDIT} file edit(s) and ${BASH_COUNT} shell call(s). Please run /wiki-capture --quick now to preserve any reusable findings before this context closes." >&2
   exit 2
 fi
