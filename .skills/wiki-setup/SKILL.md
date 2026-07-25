@@ -23,6 +23,9 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
 2. **Where are your source documents?** → `OBSIDIAN_SOURCES_DIR`
    - Can be multiple paths, comma-separated
    - Default: `~/Documents`
+   - Local git repo clones (public or private, any host) can be listed here too — clone
+     the repo locally first, then add its path. See "Ingesting Git Repositories" in
+     `wiki-ingest/SKILL.md` for how repo sources are handled.
 
 3. **Want to import Claude history?** → `CLAUDE_HISTORY_PATH`
    - Default: auto-discovers from `~/.claude`

@@ -113,6 +113,52 @@ class TestDiscoverSources:
 
 
 # ---------------------------------------------------------------------------
+# discover_sources — git repo awareness
+# ---------------------------------------------------------------------------
+
+def _git(repo_dir: Path, *args: str) -> None:
+    subprocess.run(["git", "-C", str(repo_dir), *args], check=True,
+                    capture_output=True)
+
+
+@pytest.fixture
+def git_repo(source_dir):
+    _git(source_dir, "init", "-q")
+    _git(source_dir, "config", "user.email", "test@example.com")
+    _git(source_dir, "config", "user.name", "Test")
+    return source_dir
+
+
+class TestDiscoverSourcesGitAware:
+    def test_respects_gitignore_for_custom_dirs(self, git_repo, vault):
+        # A dir name that isn't in the hardcoded SKIP_DIRS list, but is
+        # ignored by this repo's own .gitignore.
+        _write(git_repo / ".gitignore", "vendor_stuff/\n")
+        _write(git_repo / "vendor_stuff" / "generated.md")
+        _write(git_repo / "readme.md")
+        files = discover_sources(git_repo, vault=vault)
+        paths = [f["path"] for f in files]
+        assert not any("vendor_stuff" in p for p in paths)
+        assert any("readme.md" in p for p in paths)
+
+    def test_includes_untracked_uncommitted_files(self, git_repo, vault):
+        _write(git_repo / "draft.md")
+        files = discover_sources(git_repo, vault=vault)
+        assert any("draft.md" in f["path"] for f in files)
+
+    def test_still_skips_dot_git_dir(self, git_repo, vault):
+        _write(git_repo / "readme.md")
+        files = discover_sources(git_repo, vault=vault)
+        paths = [f["path"] for f in files]
+        assert not any(".git" in p for p in paths)
+
+    def test_non_git_dir_falls_back_to_walk(self, source_dir, vault):
+        _write(source_dir / "doc.md")
+        files = discover_sources(source_dir, vault=vault)
+        assert len(files) == 1
+
+
+# ---------------------------------------------------------------------------
 # _make_batches
 # ---------------------------------------------------------------------------
 
