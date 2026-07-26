@@ -569,6 +569,10 @@ Both skills follow the same Karpathy pattern as everything else. If a concept pa
 
 This is early. The skills work, but there's room to make the brain smarter: better cross-referencing, sharper deduplication, bigger vaults, new ingest sources. If you've been chewing on this problem or have a workflow that could be a skill, PRs are welcome.
 
+### Keeping both READMEs in sync
+
+`README.md` is the English documentation and `README_TW.md` is its Traditional Chinese translation; together they are one documentation surface. Keep headings, examples, links, and user-facing behavior structurally and semantically aligned. Syncing is advisory, not a merge gate: the `readme-translation-drift` CI job only reports when the translation falls behind. To catch up, run `python tools/check_readme_sync.py` — it lists the commits that changed `README.md` without a later `README_TW.md` update plus the pending English diff — then translate and backfill those changes into `README_TW.md`. Reviewers assess translation quality.
+
 ### Adding a new skill
 
 1. Create a folder in `.skills/your-skill-name/`

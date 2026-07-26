@@ -566,6 +566,10 @@ claude
 
 這還很早期。skills 已可用，但還有很多地方能讓這個大腦更聰明：更好的 cross-referencing、更精準的 deduplication、更大的 vaults、新的 ingest sources。如果你也一直在思考這個問題，或有某個 workflow 可以變成 skill，歡迎 PR。
 
+### 保持兩份 README 同步
+
+`README.md` 是英文文件，`README_TW.md` 是其繁體中文翻譯；兩者共同構成同一份文件介面。兩份翻譯的標題、範例、連結與面向使用者的行為，應在結構與語意上保持一致。同步是建議性的，不會擋下合併：`readme-translation-drift` CI job 只會在翻譯落後時提出回報。要補齊時，執行 `python tools/check_readme_sync.py` — 它會列出動到 `README.md` 但之後沒有更新 `README_TW.md` 的 commits，以及尚未翻譯的英文 diff — 接著將這些變更翻譯並補進 `README_TW.md`。翻譯品質由 reviewers 評估。
+
 ### 新增 skill
 
 1. 在 `.skills/your-skill-name/` 建立資料夾

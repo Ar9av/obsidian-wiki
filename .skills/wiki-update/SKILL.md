@@ -223,7 +223,7 @@ ${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/projects/<project-name>/<page>.m
 If the exact `qmd://` path is uncertain, use:
 
 ```bash
-${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<project-name>"
+${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | rg "<project-name>"
 ```
 
 Record QMD refresh in the final report as one of:

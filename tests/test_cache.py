@@ -119,6 +119,50 @@ class TestCheckSources:
         result = check_sources(vault, [src_file])
         assert str(src_file) in result["unchanged"]
 
+    def _write_relative_manifest(self, vault, rel_key, content_hash):
+        """Write a manifest whose source key is stored vault-relative."""
+        _manifest_path(vault).write_text(
+            json.dumps(
+                {"sources": {rel_key: {"content_hash": content_hash, "last_ingested": "2026-07-14"}}}
+            ),
+            encoding="utf-8",
+        )
+
+    def test_relative_manifest_key_unchanged_for_abs_path(self, vault):
+        # Manifest stores a vault-relative key; caller passes the absolute path.
+        src = vault / "_raw" / "articles" / "foo.md"
+        src.parent.mkdir(parents=True)
+        src.write_text("body", encoding="utf-8")
+        self._write_relative_manifest(vault, "_raw/articles/foo.md", sha256_file(src))
+        result = check_sources(vault, [src])
+        assert str(src) in result["unchanged"]
+        assert result["new"] == []
+        assert result["missing"] == []
+
+    def test_relative_manifest_key_not_falsely_missing(self, vault):
+        # A relative key whose file exists under the vault must not be flagged missing,
+        # even when CWD != vault root.
+        src = vault / "_raw" / "articles" / "foo.md"
+        src.parent.mkdir(parents=True)
+        src.write_text("body", encoding="utf-8")
+        self._write_relative_manifest(vault, "_raw/articles/foo.md", sha256_file(src))
+        result = check_sources(vault, [])
+        assert "_raw/articles/foo.md" not in result["missing"]
+
+    def test_relative_manifest_key_modified(self, vault):
+        src = vault / "_raw" / "articles" / "foo.md"
+        src.parent.mkdir(parents=True)
+        src.write_text("body", encoding="utf-8")
+        self._write_relative_manifest(vault, "_raw/articles/foo.md", "stale-hash")
+        result = check_sources(vault, [src])
+        assert str(src) in result["modified"]
+
+    def test_relative_manifest_key_genuinely_missing(self, vault):
+        # A relative key with no file on disk is still reported missing.
+        self._write_relative_manifest(vault, "_raw/articles/gone.md", "abc")
+        result = check_sources(vault, [])
+        assert "_raw/articles/gone.md" in result["missing"]
+
 
 # ---------------------------------------------------------------------------
 # update_source / manifest

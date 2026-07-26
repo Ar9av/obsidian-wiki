@@ -35,7 +35,7 @@ Build a co-occurrence matrix: for every pair of concept/entity pages (A, B), cou
 You don't need to be exhaustive — aim for the top 20-30 pairs by co-occurrence score. Use Grep to find backlinks efficiently:
 
 ```bash
-grep -rl "\[\[ConceptA\]\]" "$OBSIDIAN_VAULT_PATH" --include="*.md"
+rg -l --glob '*.md' "\[\[ConceptA\]\]" "$OBSIDIAN_VAULT_PATH"
 ```
 
 Run this for your top candidate concepts and intersect the result sets.

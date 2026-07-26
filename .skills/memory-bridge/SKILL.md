@@ -87,7 +87,7 @@ Read frontmatter for the listed pages (grep for `^(title|category|tags|updated):
 
 Within the filtered page set, run:
 ```
-grep -l "<topic>" <pages in tool set>
+rg -l "<topic>" <pages in tool set>
 ```
 Then grep section headers (`^##`) around matches to give context without full reads. Present results as a ranked list with the matching excerpt.
 

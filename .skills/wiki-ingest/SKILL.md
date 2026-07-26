@@ -428,17 +428,14 @@ After writing pages, check that wikilinks work in both directions. If page A lin
 **`.manifest.json`** — For each source file ingested, add or update its entry:
 ```json
 {
-  "ingested_at": "TIMESTAMP",
-  "size_bytes": FILE_SIZE,
-  "modified_at": FILE_MTIME,
   "content_hash": "sha256:<64-char-hex>",
+  "last_ingested": "TIMESTAMP",
+  "pages_produced": ["list/of/pages.md"],
   "source_type": "document",  // or "image" for png/jpg/webp/gif and image-only PDFs; "data" for chat/log/CSV/JSON sources
-  "project": "project-name-or-null",
-  "pages_created": ["list/of/pages.md"],
-  "pages_updated": ["list/of/pages.md"]
+  "project": "project-name-or-null"
 }
 ```
-`content_hash` is the SHA-256 of the file contents at ingest time. Always write it — it's the primary skip signal on subsequent runs.
+`content_hash`, `last_ingested`, and `pages_produced` are the three fields `cache.py` reads and writes (`cache-check` / `cache-update`) — the field names must match exactly or incremental-skip detection breaks. `content_hash` is the SHA-256 of the file contents at ingest time; it's the primary skip signal on subsequent runs, so always write it. `source_type` and `project` are advisory metadata for your own bookkeeping — the cache layer doesn't read them.
 
 Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
@@ -496,7 +493,7 @@ ${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/projects/<project>/<category>/<p
 If the exact `qmd://` path is uncertain, use:
 
 ```bash
-${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
+${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | rg "<page-slug>"
 ```
 
 Record QMD refresh in the final report as one of:

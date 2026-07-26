@@ -1,0 +1,32 @@
+name: README sync
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  readme-translation-drift:
+    name: readme-translation-drift (advisory)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Test README sync checker
+        run: python -m unittest discover -s tests -p 'test_readme_sync.py' -v
+
+      - name: Report README translation drift (never blocks merge)
+        run: |
+          python tools/check_readme_sync.py || echo "::warning file=README_TW.md::README_TW.md is behind README.md. Run 'python tools/check_readme_sync.py' locally, then translate and backfill the pending changes."

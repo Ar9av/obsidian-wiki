@@ -131,20 +131,20 @@ Open each selected session file and extract only the content relevant to the que
 
 **Claude** (JSONL conversation):
 - Each line: `{role, content, timestamp, ...}`
-- Search with: `grep -i "<query terms>" <session.jsonl>` to find the relevant lines
+- Search with: `rg -i "<query terms>" <session.jsonl>` to find the relevant lines
 - Extract: the surrounding conversation window (10 lines before + 20 lines after each hit)
 - Special signal: tool calls (Read/Write/Bash/Edit) reveal what was actually done — extract these even without keyword matches if they're in the relevant window
 
 **Codex** (rollout JSONL):
 - Each line: `{type: "session_meta|turn_context|event_msg|response_item", ...}`
 - Filter to `type: "event_msg"` (user turns) and `type: "response_item"` (model output)
-- Search with: `grep -i "<query terms>" <rollout.jsonl>`
+- Search with: `rg -i "<query terms>" <rollout.jsonl>`
 - Extract: matching turns + their parent context (the `turn_context` preceding the match)
 - Skip: `session_meta` events (operational metadata, not knowledge)
 
 **Hermes** (memory files + session JSONL):
 - For memory files: read the full file (they're short — typically <500 words each)
-- For session JSONL: `grep -i "<query terms>"` + surrounding window
+- For session JSONL: `rg -i "<query terms>"` + surrounding window
 - Memory files with title matches → read fully; others → grep only
 
 **OpenClaw** (MEMORY.md + daily notes + session JSONL):
@@ -160,7 +160,7 @@ Open each selected session file and extract only the content relevant to the que
 **Pi** (structured JSONL with tree layout):
 - Each line is a tree entry: `{type, id, parentId, timestamp, message?, ...}`
 - Build the active branch: map entries by `id`, find leaf (last entry with no children), walk `parentId` to root
-- Search with: `grep -i "<query terms>" <session.jsonl>` to find matching entries
+- Search with: `rg -i "<query terms>" <session.jsonl>` to find matching entries
 - Extract: the matching entries + their ancestors on the active branch (follow parent chain)
 - Special signal: `toolCall` blocks inside assistant messages reveal what was actually done — extract these even without keyword matches if they're in the relevant window
 - Prefer `compaction` and `branch_summary` entries when available — they're pre-synthesized summaries

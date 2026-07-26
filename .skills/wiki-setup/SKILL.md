@@ -127,6 +127,16 @@ updated: TIMESTAMP
 *None yet.*
 ```
 
+### .manifest.json
+
+Create an empty manifest so ingest skills have a tracking file to append to and
+`obsidian-wiki doctor` reports the vault as complete (it treats `.manifest.json`
+as a required core file):
+
+```bash
+printf '{}\n' > "$OBSIDIAN_VAULT_PATH/.manifest.json"
+```
+
 ## Step 4: Create .obsidian Configuration
 
 Create minimal Obsidian config for a good out-of-box experience:
@@ -164,6 +174,7 @@ Run a quick sanity check:
 - [ ] `index.md` exists at vault root
 - [ ] `log.md` exists at vault root
 - [ ] `hot.md` exists at vault root
+- [ ] `.manifest.json` exists at vault root (empty `{}` is fine)
 - [ ] `.env` has `OBSIDIAN_VAULT_PATH` set
 - [ ] `.obsidian/` directory exists
 - [ ] `_staging/` directory exists (required even when `WIKI_STAGED_WRITES` is not set — created on setup for future use)
@@ -191,11 +202,30 @@ inconclusive sessions are skipped automatically.
 
 **Installation steps:**
 
-1. Find the obsidian-wiki repo path (the directory where this skill lives). If
-   `OBSIDIAN_WIKI_REPO` is set in config, use that. Otherwise, check common locations:
-   `~/Documents/projects/obsidian-wiki`, `~/obsidian-wiki`, or ask the user.
+1. Find the obsidian-wiki repo path. If `OBSIDIAN_WIKI_REPO` is set in config, use that.
+   Otherwise, check common locations: `~/Documents/projects/obsidian-wiki`, `~/obsidian-wiki`,
+   or ask the user.
 
-2. Merge the hook entry into `~/.claude/settings.json`:
+2. Locate the `wiki-stop-capture.sh` script. Its path differs between a pip/uv install and a
+   source checkout, so check both layouts under `<REPO_PATH>` and use the first that exists:
+
+   - `<REPO_PATH>/hooks/wiki-stop-capture.sh` — packaged install (`OBSIDIAN_WIKI_REPO`
+     points at the bundled `_data/` dir, which ships the hook under `hooks/`).
+   - `<REPO_PATH>/.claude/hooks/wiki-stop-capture.sh` — source checkout.
+
+   If neither exists (e.g. an older wheel that predates bundling the hook), fetch the canonical
+   copy to a stable location and point at that instead:
+
+   ```bash
+   mkdir -p ~/.obsidian-wiki/hooks
+   curl -fsSL https://raw.githubusercontent.com/Ar9av/obsidian-wiki/main/.claude/hooks/wiki-stop-capture.sh \
+     -o ~/.obsidian-wiki/hooks/wiki-stop-capture.sh
+   chmod +x ~/.obsidian-wiki/hooks/wiki-stop-capture.sh
+   ```
+
+   Use the resolved absolute path as `<HOOK_PATH>` below.
+
+3. Merge the hook entry into `~/.claude/settings.json`:
 
 ```json
 {
@@ -206,7 +236,7 @@ inconclusive sessions are skipped automatically.
         "hooks": [
           {
             "type": "command",
-            "command": "bash <REPO_PATH>/.claude/hooks/wiki-stop-capture.sh"
+            "command": "bash <HOOK_PATH>"
           }
         ]
       }
@@ -218,7 +248,7 @@ inconclusive sessions are skipped automatically.
    If `~/.claude/settings.json` already exists and has a `hooks.Stop` array, **append** the new
    entry rather than replacing — don't clobber existing hooks.
 
-3. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-capture --quick` at the
+4. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-capture --quick` at the
    end of any session where you write files or run ≥ 4 shell commands."
 
 **To uninstall later:** remove the hook entry from `~/.claude/settings.json` or set

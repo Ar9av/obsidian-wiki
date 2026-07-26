@@ -64,6 +64,7 @@ packages = ["obsidian_wiki"]
 
 [tool.hatch.build.targets.wheel.force-include]
 ".skills" = "obsidian_wiki/_data/skills"
+".claude/hooks/wiki-stop-capture.sh" = "obsidian_wiki/_data/hooks/wiki-stop-capture.sh"
 ".env.example" = "obsidian_wiki/_data/.env.example"
 "AGENTS.md" = "obsidian_wiki/_data/bootstrap/AGENTS.md"
 ".cursor/rules/obsidian-wiki.mdc" = "obsidian_wiki/_data/bootstrap/cursor/rules/obsidian-wiki.mdc"
@@ -90,5 +91,9 @@ exclude = [
 
 # Force the real .skills/ tree into the sdist regardless of the VCS walker, so
 # the wheel (built from the sdist) can in turn force-include it under _data/.
+# The Stop hook lives under /.claude (excluded above), so re-add just the one
+# script the wiki-setup skill wires up — otherwise the wheel force-include has
+# nothing to copy and the published package ships a dangling hook reference.
 [tool.hatch.build.targets.sdist.force-include]
 ".skills" = ".skills"
+".claude/hooks/wiki-stop-capture.sh" = ".claude/hooks/wiki-stop-capture.sh"

@@ -338,8 +338,8 @@ Identify high-value synthesis opportunities the wiki is missing — concept pair
 - Pick 10-15 frequently linked concepts from `concepts/` and `entities/`
 - For each pair, run a quick grep to count pages that link to both:
   ```bash
-  grep -rl "\[\[ConceptA\]\]" "$OBSIDIAN_VAULT_PATH" --include="*.md" > /tmp/a.txt
-  grep -rl "\[\[ConceptB\]\]" "$OBSIDIAN_VAULT_PATH" --include="*.md" > /tmp/b.txt
+  rg -l --glob '*.md' "\[\[ConceptA\]\]" "$OBSIDIAN_VAULT_PATH" > /tmp/a.txt
+  rg -l --glob '*.md' "\[\[ConceptB\]\]" "$OBSIDIAN_VAULT_PATH" > /tmp/b.txt
   comm -12 <(sort /tmp/a.txt) <(sort /tmp/b.txt) | wc -l
   ```
 - Flag pairs with co-occurrence ≥ 3 that have no existing synthesis page
@@ -437,6 +437,41 @@ Triggered by `wiki-lint --consolidate`. Switches from report-only to **act-and-r
 5. Never merge pages — use `wiki-dedup` for that. Only link, promote, demote, and flag.
 
 ### Consolidation actions (in order, after confirmation)
+
+**Pre-write snapshot** — before the first file write, check whether the vault itself is the root of a Git repository. Merely being a subdirectory of a larger repository does not qualify: running `git add -A` there could capture unrelated files. If the vault is not a standalone Git repository, skip this step silently — no nagging, no suggesting `git init`.
+
+```bash
+VAULT_REAL_PATH=$(cd "$OBSIDIAN_VAULT_PATH" && pwd -P)
+VAULT_GIT_ROOT=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse --show-toplevel 2>/dev/null || true)
+SNAPSHOT_SHA=""
+
+if [ -n "$VAULT_GIT_ROOT" ] && [ "$VAULT_GIT_ROOT" = "$VAULT_REAL_PATH" ]; then
+  if git -C "$OBSIDIAN_VAULT_PATH" diff --quiet \
+    && git -C "$OBSIDIAN_VAULT_PATH" diff --cached --quiet \
+    && [ -z "$(git -C "$OBSIDIAN_VAULT_PATH" ls-files --others --exclude-standard)" ]; then
+    SNAPSHOT_SHA=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD)
+  else
+    if ! git -C "$OBSIDIAN_VAULT_PATH" add -A; then
+      echo "Pre-write snapshot failed; abort the skill without writing any vault files." >&2
+      exit 1
+    fi
+    if ! git -C "$OBSIDIAN_VAULT_PATH" commit -m "pre-wiki-lint snapshot" --quiet; then
+      echo "Pre-write snapshot failed; abort the skill without writing any vault files." >&2
+      exit 1
+    fi
+    SNAPSHOT_SHA=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD)
+  fi
+fi
+```
+
+The clean-repository branch deliberately avoids calling `git commit`, so "nothing to commit" is not treated as an error. If `git add` or `git commit` fails, stop before editing the vault; never continue without the promised snapshot.
+
+If `SNAPSHOT_SHA` is non-empty and the skill writes files, include the SHA in the final report. To discard the entire run, after confirming there are no later changes worth keeping, the user can run:
+
+```bash
+git -C "$OBSIDIAN_VAULT_PATH" reset --hard "$SNAPSHOT_SHA"
+git -C "$OBSIDIAN_VAULT_PATH" clean -fd
+```
 
 #### Action 1: Fix broken wikilinks
 

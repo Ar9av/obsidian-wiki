@@ -97,6 +97,41 @@ Only act on **EXTRACTED** and **INFERRED** candidates. Include the confidence la
 
 ## Step 4: Apply Links
 
+**Pre-write snapshot** — before the first file write, check whether the vault itself is the root of a Git repository. Merely being a subdirectory of a larger repository does not qualify: running `git add -A` there could capture unrelated files. If the vault is not a standalone Git repository, skip this step silently — no nagging, no suggesting `git init`.
+
+```bash
+VAULT_REAL_PATH=$(cd "$OBSIDIAN_VAULT_PATH" && pwd -P)
+VAULT_GIT_ROOT=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse --show-toplevel 2>/dev/null || true)
+SNAPSHOT_SHA=""
+
+if [ -n "$VAULT_GIT_ROOT" ] && [ "$VAULT_GIT_ROOT" = "$VAULT_REAL_PATH" ]; then
+  if git -C "$OBSIDIAN_VAULT_PATH" diff --quiet \
+    && git -C "$OBSIDIAN_VAULT_PATH" diff --cached --quiet \
+    && [ -z "$(git -C "$OBSIDIAN_VAULT_PATH" ls-files --others --exclude-standard)" ]; then
+    SNAPSHOT_SHA=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD)
+  else
+    if ! git -C "$OBSIDIAN_VAULT_PATH" add -A; then
+      echo "Pre-write snapshot failed; abort the skill without writing any vault files." >&2
+      exit 1
+    fi
+    if ! git -C "$OBSIDIAN_VAULT_PATH" commit -m "pre-cross-linker snapshot" --quiet; then
+      echo "Pre-write snapshot failed; abort the skill without writing any vault files." >&2
+      exit 1
+    fi
+    SNAPSHOT_SHA=$(git -C "$OBSIDIAN_VAULT_PATH" rev-parse HEAD)
+  fi
+fi
+```
+
+The clean-repository branch deliberately avoids calling `git commit`, so "nothing to commit" is not treated as an error. If `git add` or `git commit` fails, stop before editing the vault; never continue without the promised snapshot.
+
+If `SNAPSHOT_SHA` is non-empty and the skill writes files, include the SHA in the final report. To discard the entire run, after confirming there are no later changes worth keeping, the user can run:
+
+```bash
+git -C "$OBSIDIAN_VAULT_PATH" reset --hard "$SNAPSHOT_SHA"
+git -C "$OBSIDIAN_VAULT_PATH" clean -fd
+```
+
 For each page with missing links:
 
 ### 4a: Inline linking (preferred)
