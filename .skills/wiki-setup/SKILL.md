@@ -257,6 +257,30 @@ inconclusive sessions are skipped automatically.
 **To uninstall later:** remove the hook entry from `~/.claude/settings.json` or set
 `HIVEMIND_CAPTURE=false` in your shell to skip capture for a single session.
 
+## Optional: Configure GitHub Sync
+
+Ask the user: **"Want to sync your vault to a private GitHub repo?"**
+
+The vault is plain markdown, so pushing it to git gets you version history, backup, and
+cross-device sync for free. This is opt-in — skip it if the user declines or has no repo ready.
+
+If yes:
+
+1. Ask for the repo URL (e.g. `https://github.com/you/my-wiki.git`). Recommend it be **private**
+   if the vault holds personal notes.
+2. Run the CLI, which handles `git init`, a default `.gitignore`, and wiring the `origin` remote —
+   this is the same code path `obsidian-wiki setup`'s interactive prompt and `setup.sh` use, so
+   there's one implementation to keep correct (see issue #153 for why that matters):
+   ```bash
+   obsidian-wiki sync-setup "<repo-url>" --vault "$OBSIDIAN_VAULT_PATH"
+   ```
+   If the `obsidian-wiki` binary isn't on PATH (source checkout without an install), run it from
+   the repo instead: `PYTHONPATH="$OBSIDIAN_WIKI_REPO" python3 -m obsidian_wiki.cli sync-setup ...`
+   using whichever of `OBSIDIAN_WIKI_REPO` or a local checkout path is available.
+3. Tell the user they can run `obsidian-wiki sync` any time afterward to commit and push pending
+   vault changes (stages everything, commits with a timestamp, pushes). There's no config file to
+   check for sync status — the vault's own `git remote` is the source of truth.
+
 ## Optional: Refresh QMD After Setup
 
 If `QMD_WIKI_COLLECTION` is configured and the local QMD CLI is available, run `qmd update` after the initial vault files exist so the fresh vault is immediately queryable. No embedding pass is usually needed at setup time because the vault starts empty, so a plain update is enough unless you have already populated pages.

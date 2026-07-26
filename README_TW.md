@@ -79,7 +79,7 @@ obsidian-wiki graph-analyse /path/to/vault --pretty
 npx skills add Ar9av/obsidian-wiki
 ```
 
-這只會把 markdown skills 安裝到目前 agent。它**不會**寫入 `~/.obsidian-wiki/config`、安裝 `~/.obsidian-wiki/sync.sh`，也不會接上 `obsidian-wiki setup` / `setup.sh` 會設定的全域 multi-agent bootstrap。
+這只會把 markdown skills 安裝到目前 agent。它**不會**寫入 `~/.obsidian-wiki/config`、設定 GitHub sync，也不會接上 `obsidian-wiki setup` / `setup.sh` 會設定的全域 multi-agent bootstrap。
 
 只有在你明確想要部分、agent-local 的安裝，並且願意自行管理 config 時，才使用這條路徑。若要完整設定，請使用 **透過 pip 安裝** 或 **透過 git clone 安裝**。
 
@@ -361,40 +361,39 @@ awk -F= '/^OBSIDIAN_VAULT_PATH=/{print $2 "/_raw"; exit}' "$(git rev-parse --sho
 
 ## 將 vault 同步到 GitHub
 
-你的 vault 是 plain markdown files 的目錄；把它 push 到 private GitHub repo，就能免費得到 version history、backup 與 cross-device sync。`setup.sh`（以及 `obsidian-wiki setup`）會在初始安裝時詢問你是否設定。
+你的 vault 是 plain markdown files 的目錄；把它 push 到 private GitHub repo，就能免費得到 version history、backup 與 cross-device sync。`obsidian-wiki setup` 和 `setup.sh` 都會在初始安裝時詢問你是否設定——兩者共用同一套實作（`obsidian_wiki/sync.py`），所以 pip/uv 安裝和 source/curl 安裝拿到的是完全一樣的流程。
 
 **setup 會做什麼：**
 
 1. 如果 vault 還不是 repo，執行 `git init`
 2. 建立 `.gitignore`，排除 Obsidian workspace/cache files
-3. 設定你提供的 GitHub remote
-4. 寫入 `~/.obsidian-wiki/sync.sh`，這是一個 one-shot script，會 stage 所有 changes、用 timestamp commit，並 push
-5. 可選擇加入 `wiki-sync` shell alias
-6. 可選擇安裝 hourly cron job
+3. 設定你提供的 GitHub remote（vault 本身的 `git remote` 才是同步是否已設定的唯一依據，不是某個設定檔）
+4. 可選擇加入 `wiki-sync` shell alias，對應到 `obsidian-wiki sync`
+5. 可選擇安裝 hourly cron job
 
 **隨時執行同步：**
 
 ```bash
-wiki-sync                    # setup 加入的 alias
-~/.obsidian-wiki/sync.sh     # 或直接呼叫 script
+wiki-sync           # setup 加入的 alias
+obsidian-wiki sync  # 或直接呼叫
 ```
 
-每次執行都會以 `sync 2026-06-08 14:00` 這樣的訊息 commit staged changes 並 push。
+每次執行都會 stage 所有 changes，以 `sync 2026-06-08 14:00` 這樣的訊息 commit，並 push。
 
 **手動設定（略過 prompt）：**
 
 ```bash
+obsidian-wiki sync-setup https://github.com/you/my-wiki.git
+# 或手動處理：
 cd /path/to/your/vault
 git init
 git remote add origin https://github.com/you/my-wiki.git
-
-# then commit and push manually, or re-run setup.sh to get the sync script
 ```
 
 **透過 cron 每小時自動同步（可於 setup 時啟用）：**
 
 ```cron
-0 * * * * ~/.obsidian-wiki/sync.sh >> ~/.obsidian-wiki/sync.log 2>&1
+0 * * * * obsidian-wiki sync --vault /path/to/your/vault >> ~/.obsidian-wiki/sync.log 2>&1
 ```
 
 > 如果你的 vault 包含個人筆記，請保持 repo **private**。不會傳送任何內容到第三方服務；vault 只存在你的機器與你的 GitHub account 中。

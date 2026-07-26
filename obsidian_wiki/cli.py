@@ -582,6 +582,48 @@ def _print_doctor(report: dict[str, object]) -> None:
 
 
 # ── Commands ─────────────────────────────────────────────────────────────────
+def _maybe_configure_sync(vault_path: Path, remote_arg: str | None) -> bool:
+    """Offer (or apply) GitHub sync setup for the vault.
+
+    Non-interactive (`--remote` passed, or no TTY and no remote given): only
+    acts when a remote was explicitly supplied. Interactive: prompts, mirroring
+    setup.sh's flow, so pip/uv installs get the same offer shell/curl installs
+    always had (see #153).
+    """
+    from obsidian_wiki.sync import configure_sync, get_remote
+
+    if get_remote(vault_path):
+        return True  # already configured — nothing to do
+
+    remote = remote_arg
+    if not remote:
+        if not sys.stdin.isatty():
+            return False
+        print()
+        try:
+            answer = input("  Set up GitHub sync for your vault? [y/N]: ").strip()
+        except EOFError:
+            answer = ""
+        if answer.lower() != "y":
+            return False
+        try:
+            remote = input("  GitHub repo URL (e.g. https://github.com/you/my-wiki.git): ").strip()
+        except EOFError:
+            remote = ""
+        if not remote:
+            return False
+
+    try:
+        messages = configure_sync(vault_path, remote)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"⚠️  GitHub sync setup skipped: {exc}", file=sys.stderr)
+        return False
+    for m in messages:
+        print(f"✅  {m}")
+    print("✅  Run `obsidian-wiki sync` any time to commit and push vault changes.")
+    return True
+
+
 def cmd_setup(args: argparse.Namespace) -> int:
     mode = "copy" if args.copy else "symlink"
     print("\n╔══════════════════════════════════════════════════╗")
@@ -602,12 +644,18 @@ def cmd_setup(args: argparse.Namespace) -> int:
         project_dir = Path(args.project or os.getcwd()).expanduser().resolve()
         install_project(project_dir, mode)
 
+    sync_configured = False
+    if vault_path and Path(vault_path).expanduser().is_dir():
+        sync_configured = _maybe_configure_sync(Path(vault_path).expanduser(), args.remote)
+
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
     print(f" Skills installed: {n}  (mode: {mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
+    if sync_configured:
+        print(" GitHub sync:      obsidian-wiki sync")
     print("\n Next steps:")
     print("   1. Open a project in your agent")
     print('   2. Say: "set up my wiki"\n')
@@ -616,6 +664,37 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print("   /wiki-query     → ask questions against your wiki")
     print("───────────────────────────────────────────────────\n")
     return 0
+
+
+def cmd_sync_setup(args: argparse.Namespace) -> int:
+    from obsidian_wiki.sync import configure_sync
+
+    vault_str = resolve_vault_path(args.vault)
+    if not vault_str:
+        print("error: no vault configured — pass --vault or run `obsidian-wiki setup` first", file=sys.stderr)
+        return 1
+    vault_path = Path(vault_str).expanduser()
+    try:
+        messages = configure_sync(vault_path, args.remote)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for m in messages:
+        print(f"✅  {m}")
+    print("✅  Run `obsidian-wiki sync` any time to commit and push vault changes.")
+    return 0
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    from obsidian_wiki.sync import run_sync
+
+    vault_str = resolve_vault_path(args.vault)
+    if not vault_str:
+        print("error: no vault configured — pass --vault or run `obsidian-wiki setup` first", file=sys.stderr)
+        return 1
+    code, message = run_sync(Path(vault_str).expanduser())
+    print(message)
+    return code
 
 
 def cmd_graph_query(args: argparse.Namespace) -> int:
@@ -902,6 +981,10 @@ def cmd_info(args: argparse.Namespace) -> int:
         setup_ver = _read_config_value("OBSIDIAN_WIKI_VERSION")
         print(f"vault:     {vp or '(unset)'}")
         print(f"setup ran: {setup_ver or '(never)'}")
+        if vp:
+            from obsidian_wiki.sync import get_remote
+            remote = get_remote(Path(vp).expanduser())
+            print(f"sync:      {remote if remote else '(not configured — run: obsidian-wiki sync-setup <url>)'}")
     print(f"bundled skills: {len(bundled)}")
     print()
     print("Agent skill install status:")
@@ -935,6 +1018,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("setup", help="install skills into your agents and write config (default)")
     _add_setup_args(sp)
     sp.set_defaults(func=cmd_setup)
+
+    ssp = sub.add_parser(
+        "sync-setup",
+        help="configure GitHub sync for your vault (git init, .gitignore, remote)",
+    )
+    ssp.add_argument("remote", help="GitHub (or any git host) repo URL, e.g. https://github.com/you/my-wiki.git")
+    ssp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    ssp.set_defaults(func=cmd_sync_setup)
+
+    syp = sub.add_parser("sync", help="commit and push pending vault changes (git add -A, commit, push)")
+    syp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    syp.set_defaults(func=cmd_sync)
 
     lp = sub.add_parser("list", help="list bundled skills")
     lp.set_defaults(func=cmd_list)
@@ -1107,6 +1202,12 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
         "--copy",
         action="store_true",
         help="copy skill files instead of symlinking to the installed package",
+    )
+    sp.add_argument(
+        "--remote",
+        metavar="URL",
+        help="GitHub (or any git host) repo URL for vault sync — skips the interactive "
+        "prompt and configures it non-interactively (see also: obsidian-wiki sync-setup)",
     )
 
 

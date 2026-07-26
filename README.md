@@ -82,7 +82,7 @@ All supported agents can use this syntax after `obsidian-wiki setup` or `setup.s
 npx skills add Ar9av/obsidian-wiki
 ```
 
-This only installs the markdown skills into the current agent. It does **not** write `~/.obsidian-wiki/config`, install `~/.obsidian-wiki/sync.sh`, or wire the global multi-agent bootstrap that `obsidian-wiki setup` / `setup.sh` performs.
+This only installs the markdown skills into the current agent. It does **not** write `~/.obsidian-wiki/config`, configure GitHub sync, or wire the global multi-agent bootstrap that `obsidian-wiki setup` / `setup.sh` performs.
 
 Use this path only if you intentionally want a partial, agent-local install and are prepared to manage config yourself. For a complete setup, use **Install via pip** or **Install via git clone** instead.
 
@@ -364,40 +364,39 @@ After capturing pages into `_raw/`, ask your agent to process them:
 
 ## Syncing your vault to GitHub
 
-Your vault is a directory of plain markdown files — push it to a private GitHub repo and you get version history, backup, and cross-device sync for free. `setup.sh` (and `obsidian-wiki setup`) will ask you to configure this during the initial install.
+Your vault is a directory of plain markdown files — push it to a private GitHub repo and you get version history, backup, and cross-device sync for free. `obsidian-wiki setup` and `setup.sh` both ask you to configure this during the initial install — they share one implementation (`obsidian_wiki/sync.py`), so pip/uv and source/curl installs get the identical flow.
 
 **What setup does:**
 
 1. `git init` your vault if it isn't already a repo
 2. Creates a `.gitignore` that excludes Obsidian workspace/cache files
-3. Sets the GitHub remote you supply
-4. Writes `~/.obsidian-wiki/sync.sh` — a one-shot script that stages all changes, commits with a timestamp, and pushes
-5. Optionally adds a `wiki-sync` shell alias
-6. Optionally installs an hourly cron job
+3. Sets the GitHub remote you supply (the vault's `git remote` — not a config file — is the source of truth for whether sync is configured)
+4. Optionally adds a `wiki-sync` shell alias for `obsidian-wiki sync`
+5. Optionally installs an hourly cron job
 
 **Run a sync at any time:**
 
 ```bash
-wiki-sync                    # alias added by setup
-~/.obsidian-wiki/sync.sh     # or call the script directly
+wiki-sync           # alias added by setup
+obsidian-wiki sync  # or call it directly
 ```
 
-Each run commits staged changes as `sync 2026-06-08 14:00` and pushes.
+Each run stages all changes, commits as `sync 2026-06-08 14:00`, and pushes.
 
 **Manual setup (skip the prompt):**
 
 ```bash
+obsidian-wiki sync-setup https://github.com/you/my-wiki.git
+# or do it by hand:
 cd /path/to/your/vault
 git init
 git remote add origin https://github.com/you/my-wiki.git
-
-# then commit and push manually, or re-run setup.sh to get the sync script
 ```
 
 **Hourly auto-sync via cron (can be enabled during setup):**
 
 ```
-0 * * * * ~/.obsidian-wiki/sync.sh >> ~/.obsidian-wiki/sync.log 2>&1
+0 * * * * obsidian-wiki sync --vault /path/to/your/vault >> ~/.obsidian-wiki/sync.log 2>&1
 ```
 
 > Keep the repo **private** if your vault contains personal notes. Nothing is sent to any third-party service — your vault lives on your machines and your GitHub account only.
