@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ar9av-obsidian-wiki-badge.png)](https://mseep.ai/app/ar9av-obsidian-wiki)
+
 # obsidian-wiki
 
 
