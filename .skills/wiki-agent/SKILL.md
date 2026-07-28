@@ -34,7 +34,7 @@ If no query is given, default to **recent sessions mode**: ingest the last 5 unp
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default `wikilink`).
 2. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` → know what's already ingested.
 3. Read `$OBSIDIAN_VAULT_PATH/hot.md` if it exists → warm context on recent wiki activity.
 
@@ -231,6 +231,15 @@ If a query was given but no relevant sessions were found, say so explicitly: "No
 ---
 
 ## Step 7: Update Tracking Files
+
+**`index.md`** — When pages were created or updated, after all visible page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
 
 Update `.manifest.json` for each session file processed:
 ```json

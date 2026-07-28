@@ -17,7 +17,7 @@ You are finding and merging wiki pages that cover the same concept under differe
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default `wikilink`).
 2. Read `index.md` to get the full page inventory with one-line descriptions and tags.
 3. Read `log.md` briefly — if a dedup run just happened, note what was already merged.
 
@@ -247,7 +247,14 @@ Grep the entire vault for any link pointing at the secondary slug:
 
 ### 5e: Update tracking files
 
-**`index.md`** — Remove the secondary page's entry. Update the canonical page's entry with the merged summary.
+**`index.md`** — Merge and auto-merge modes only: once after all accepted merge writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete. Audit Mode remains read-only and does not refresh the index.
 
 **`.manifest.json`** — For the secondary page's source entries: add `"merged_into": "<canonical node_id>"` to each. For the canonical page: merge in the secondary's `pages_created` and `pages_updated` lists.
 

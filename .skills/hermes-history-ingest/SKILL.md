@@ -16,7 +16,7 @@ This skill can be invoked directly or via the `wiki-history-ingest` router (`/wi
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `HERMES_HISTORY_PATH` (defaults to `~/.hermes`)
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_LINK_FORMAT` (default `wikilink`), and `HERMES_HISTORY_PATH` (defaults to `~/.hermes`)
 2. Read `.manifest.json` at the vault root to check what has already been ingested
 3. Read `index.md` at the vault root to understand what the wiki already contains
 
@@ -186,6 +186,15 @@ Update `index.md` and `log.md`:
 ```
 - [TIMESTAMP] HERMES_HISTORY_INGEST memories=N sessions=M pages_updated=X pages_created=Y mode=append|full
 ```
+
+**`index.md`** — When pages were created or updated, after all visible page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
 
 **`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary — e.g. "Ingested 42 Hermes memories and 7 sessions; dominant themes: reasoning strategies, tool use patterns." Keep the last 3 operations. Update `updated` timestamp.
 

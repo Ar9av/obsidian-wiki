@@ -253,6 +253,15 @@ To promote: move the page to `projects/<project-name>/references/` and update al
 - `_readouts/*` — derived readouts (wiki-narrate output)
 ```
 
+**`index.md`** — If link application or page promotion wrote visible files, after all visible page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
+
 ## Step 7: Update Log and Hot Cache
 
 Append to `log.md`:

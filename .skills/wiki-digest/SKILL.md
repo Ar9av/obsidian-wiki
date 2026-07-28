@@ -15,7 +15,7 @@ You are generating a human-readable digest of recent wiki activity: what was lea
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default `wikilink`).
 2. **Parse the period** from the user's request:
    - "daily" / "today" / "yesterday" → last 24 hours
    - "weekly" / "this week" / no argument (default) → last 7 days
@@ -178,7 +178,12 @@ Most active category: **[category/]** ([N pages added or updated])
   summary: "Weekly knowledge digest: [N new, M updated pages]. Top themes: [tag1], [tag2]."
   ---
   ```
-- Update `index.md` with the new entry under Journal
+- **`index.md`** — After the saved digest page write succeeds, run:
+  ```bash
+  obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+  ```
+  If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+  If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete. Conversational digest mode remains read-only and does not refresh the index.
 - Do **not** add to `.manifest.json` (digests aren't source ingestions)
 
 Either way, append to `log.md`:

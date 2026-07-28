@@ -83,6 +83,45 @@ def _parse_frontmatter_values(frontmatter: str) -> dict[str, str]:
     return values
 
 
+def _strip_frontmatter_scalar(raw: str) -> str:
+    value = raw.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    return value.split(" #", 1)[0].strip().lstrip("#")
+
+
+def _parse_frontmatter_list(frontmatter: str, key: str) -> list[str]:
+    values = _parse_frontmatter_values(frontmatter)
+    inline = values.get(key, "").strip()
+    if inline:
+        if inline.startswith("[") and inline.endswith("]"):
+            inline = inline[1:-1]
+        return [
+            value
+            for part in inline.split(",")
+            if (value := _strip_frontmatter_scalar(part))
+        ]
+
+    lines = frontmatter.splitlines()
+    for index, line in enumerate(lines):
+        if line.strip() != f"{key}:":
+            continue
+        items: list[str] = []
+        for child in lines[index + 1 :]:
+            if child and not child.startswith((" ", "\t")):
+                break
+            stripped = child.strip()
+            if not stripped:
+                continue
+            if not stripped.startswith("-"):
+                break
+            value = _strip_frontmatter_scalar(stripped[1:])
+            if value:
+                items.append(value)
+        return items
+    return []
+
+
 def _relationship_scalar(raw: str) -> str:
     value = raw.strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
@@ -169,6 +208,9 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "slug": _slug(path.stem),
         "title": values.get("title", "").strip() or path.stem,
         "summary": values.get("summary", "").strip(),
+        "category": values.get("category", "").strip(),
+        "tags": values.get("tags", "").strip(),
+        "tag_list": _parse_frontmatter_list(frontmatter, "tags"),
         "fields": fields,
         "links": links,
         "relationships": _parse_relationships(frontmatter),

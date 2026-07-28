@@ -14,7 +14,7 @@ You are reviewing LLM-written pages that are waiting in `_staging/` for human ap
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. This gives `OBSIDIAN_VAULT_PATH` and `WIKI_STAGED_WRITES`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_LINK_FORMAT` (default `wikilink`), and `WIKI_STAGED_WRITES`.
 2. If `WIKI_STAGED_WRITES` is not set or is `false`, tell the user: "Staged writes mode is not enabled. Set `WIKI_STAGED_WRITES=true` in your `.env` to use this feature." Then stop.
 3. Read the `_staging/` directory inventory.
 
@@ -103,16 +103,14 @@ If `--list` flag is set, stop after printing the inventory (Step 1).
 ### Accepting a new page
 
 1. Move `_staging/<category>/page.md` → `<category>/page.md` (the final location)
-2. Update `index.md` with the new page entry
-3. Remove the staged file
+2. Remove the staged file
 
 ### Accepting a patch/update
 
 1. Read the current page at the target path
 2. Apply the proposed additions and deletions (merge, don't just overwrite)
 3. Update the `updated` frontmatter timestamp
-4. Update `index.md` if the summary changed
-5. Remove the staged patch file
+4. Remove the staged patch file
 
 ### Rejecting a file
 
@@ -131,8 +129,14 @@ Before applying a patch, check whether the target page's `updated` frontmatter i
 
 After processing all staged files:
 
-1. **`hot.md`** — update the Recent Activity section: "Committed N staged pages; rejected M."
-2. **`log.md`** — append:
+1. **`index.md`** — If at least one file was accepted, run once after the accepted batch has been written:
+   ```bash
+   obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+   ```
+   If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+   If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete. Skip the refresh when all files were rejected or skipped.
+2. **`hot.md`** — update the Recent Activity section: "Committed N staged pages; rejected M."
+3. **`log.md`** — append:
    ```
    - [TIMESTAMP] STAGE_COMMIT accepted=N rejected=M skipped=K
    ```

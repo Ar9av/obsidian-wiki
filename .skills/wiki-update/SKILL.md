@@ -179,7 +179,14 @@ Add or update this project's entry:
 
 ### Update `index.md`
 
-Add entries for any new pages created.
+If pages were created or updated, after all visible page writes succeed, run:
+
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete. Skip this refresh when the delta check exits with no meaningful changes.
 
 ### Update `log.md`
 

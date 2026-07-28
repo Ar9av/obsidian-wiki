@@ -19,7 +19,7 @@ Either way, the import writes pages with correct frontmatter and wikilinks, then
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_LINK_FORMAT` (default `wikilink`).
 2. Read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists — apply any owner-specific conventions.
 
 ## Step 1: Locate and Detect Source Type
@@ -229,12 +229,14 @@ If `.manifest.json` doesn't exist, create it with the standard structure:
 
 ### `index.md`
 
-For each **created** or **merged** page:
-- Add or update the entry under its category section using the format:
-  `- [[<id>]] — <summary or title> ( #tag1 #tag2)`
-  (Note: space before `(` — `description ( #tag)` not `description(#tag)`)
+After all created and merged page writes succeed, run once:
 
-Keep categories sorted alphabetically. Create the category section if it doesn't exist.
+```bash
+obsidian-wiki index "$OBSIDIAN_VAULT_PATH" --link-format "$OBSIDIAN_LINK_FORMAT"
+```
+
+If the `obsidian-wiki` executable is unavailable, manually reconcile `index.md` using the format in `llm-wiki/SKILL.md`.
+If the executable exists but the command fails, report the failure and stop before claiming bookkeeping is complete.
 
 ### `log.md`
 
