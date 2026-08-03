@@ -38,6 +38,23 @@ def _edit_entry(tool="Edit"):
     }
 
 
+def _tool_entry(name):
+    return {
+        "message": {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "name": name, "input": {}}],
+        }
+    }
+
+
+_READONLY_BASH = [
+    _bash_entry("git status"),
+    _bash_entry("ls -la"),
+    _bash_entry("grep foo bar.txt"),
+    _bash_entry("cat notes.md"),
+]
+
+
 @unittest.skipIf(shutil.which("bash") is None, "requires bash")
 class StopHookBehaviorTest(unittest.TestCase):
     def setUp(self):
@@ -230,6 +247,51 @@ class StopHookBehaviorTest(unittest.TestCase):
     def test_curl_plain_get_flags_stay_readonly(self):
         entries = [_bash_entry("curl -fsSL https://api.example.com/status")] * 4
         self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_mcp_write_tool_disables_exemption(self):
+        # A real system mutation hides behind an MCP call: read-only bash
+        # alone must not exempt the session.
+        entries = _READONLY_BASH + [_tool_entry("mcp__notion__notion-update-page")]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_mcp_read_tools_keep_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry("mcp__postgres__list_schemas"),
+            _tool_entry("mcp__notion__notion-search"),
+            _tool_entry("Read"),
+            _tool_entry("Grep"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_mcp_write_alone_matches_upstream_threshold(self):
+        # Upstream never triggered on MCP-only sessions (no edits, < 4 bash);
+        # suspicious tools only disable the exemption, they don't nudge alone.
+        entries = [_tool_entry("mcp__notion__notion-update-page")] * 3
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_mcp_get_or_create_counts_as_write(self):
+        entries = _READONLY_BASH + [_tool_entry("mcp__x__get-or-create-session")]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_unknown_harness_tool_disables_exemption(self):
+        entries = _READONLY_BASH + [_tool_entry("Artifact")]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_hostname_with_argument_counts_as_mutating(self):
+        entries = [_bash_entry("hostname build-box-7")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_bare_hostname_stays_readonly(self):
+        entries = [_bash_entry("hostname"), _bash_entry("hostname -f")] * 2
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_fd_exec_counts_as_mutating(self):
+        entries = [_bash_entry("fd -e tmp -x rm {}")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_tree_output_flag_counts_as_mutating(self):
+        entries = [_bash_entry("tree -o listing.txt src/")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
 
 
 if __name__ == "__main__":

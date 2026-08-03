@@ -12,8 +12,9 @@
 # fire again for the follow-up capture turn).
 #
 # Sessions with zero file edits whose shell commands are all read-only
-# (grep/log/status style research) are exempt: nudging them only costs a full
-# skill invocation that ends in SKIP. The classifier is conservative — any
+# (grep/log/status style research) — and whose other tool calls are provably
+# read-only too — are exempt: nudging them only costs a full skill invocation
+# that ends in SKIP. The classifier is conservative — any
 # command it can't prove read-only counts as mutating, which preserves the
 # pre-exemption behavior for that session. In particular, command/process
 # substitution ($(…), `…`, <(…)) is treated as mutating without inspecting
@@ -72,6 +73,7 @@ path = sys.argv[1]
 write_edit = 0
 bash_count = 0
 mutating_bash = 0
+suspicious_tools = 0
 
 # Commands that never mutate state on their own (writes would need a shell
 # redirect or substitution, both detected separately). Anything absent from
@@ -101,6 +103,37 @@ GIT_READONLY = {
     "cat-file", "count-objects",
 }
 GH_READONLY = {"view", "list", "status", "diff", "checks"}
+# Harness tools that never mutate anything outside the session: file/web
+# reading, planning, task bookkeeping. Any other non-Bash tool call —
+# notably MCP tools without a clear read verb — makes the session
+# ineligible for the read-only exemption, because a real system mutation
+# (a CRM update, an SQL INSERT) may hide behind it.
+CORE_READONLY_TOOLS = {
+    "Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "TodoWrite",
+    "TodoRead", "NotebookRead", "Task", "Agent", "AskUserQuestion",
+    "ToolSearch", "Skill", "SkillSearch", "SlashCommand", "EnterPlanMode",
+    "ExitPlanMode", "EnterWorktree", "ExitWorktree", "Explore", "Plan",
+    "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput",
+    "TaskStop", "BashOutput", "KillShell", "SendUserFile", "Monitor",
+    "ScheduleWakeup", "ListMcpResourcesTool", "ReadMcpResourceTool",
+    "ReadMcpResourceDirTool",
+}
+MCP_READ_VERBS = {
+    "get", "list", "search", "read", "query", "fetch", "find", "describe",
+    "inspect", "explain", "compare", "view", "check", "status", "whoami",
+    "resolve", "analyze", "show", "health", "info", "download", "lookup",
+    "browse", "watch", "screenshot",
+}
+# Write verbs take priority over read verbs for names carrying both
+# ("get-or-create-session" creates).
+MCP_WRITE_VERBS = {
+    "create", "update", "delete", "remove", "write", "insert", "upsert",
+    "execute", "run", "send", "post", "put", "patch", "move", "add", "set",
+    "complete", "archive", "clone", "push", "upload", "provision", "reset",
+    "apply", "schedule", "cancel", "start", "stop", "restart", "deploy",
+    "publish", "merge", "commit", "approve", "assign", "register", "enable",
+    "disable", "duplicate",
+}
 # Wrappers whose real command comes later in the token list. env belongs here,
 # not in READONLY_CMDS: `env FOO=1 cmd` runs cmd, so it must be unwrapped
 # (a bare `env` unwraps to nothing and stays read-only).
@@ -216,6 +249,18 @@ def segment_readonly(seg, unquoted, expandable):
     args = tokens[1:]
     if cmd == "find":
         return not any(t in FIND_MUTATING_FLAGS or t.startswith("-fprint") for t in args)
+    if cmd == "fd":
+        return not any(t in ("-x", "--exec", "-X", "--exec-batch") for t in args)
+    if cmd == "rg":
+        return not any(t == "--pre" or t.startswith("--pre=") for t in args)
+    if cmd == "tree":
+        return not any(t == "-o" for t in args)
+    if cmd == "hostname":
+        # Bare hostname prints; with a non-flag argument it SETS the hostname.
+        return not [t for t in args if not t.startswith("-")]
+    if cmd == "xxd":
+        # A second positional argument is an output file (xxd -r patch.hex bin).
+        return len([t for t in args if not t.startswith("-")]) < 2
     if cmd == "sort":
         return not any(t == "-o" or t.startswith("--output") or (t.startswith("-o") and len(t) > 2) for t in args)
     if cmd == "uniq":
@@ -304,8 +349,19 @@ with open(path) as f:
                 command = (block.get("input") or {}).get("command", "")
                 if not command_readonly(command):
                     mutating_bash += 1
+            elif name in CORE_READONLY_TOOLS:
+                continue
+            elif name.startswith("mcp__"):
+                words = re.split(r"[-_]", name.rsplit("__", 1)[-1].lower())
+                if any(w in MCP_WRITE_VERBS for w in words) or not any(
+                    w in MCP_READ_VERBS for w in words
+                ):
+                    suspicious_tools += 1
+            else:
+                # Unknown harness tool — assume it mutated something.
+                suspicious_tools += 1
 
-print(write_edit, bash_count, mutating_bash)
+print(write_edit, bash_count, mutating_bash, suspicious_tools)
 PYEOF
 
 COUNTS=$(python3 "$CLASSIFIER" "$TRANSCRIPT_PATH" 2>/dev/null) || COUNTS="0 0 0"
@@ -314,12 +370,16 @@ rm -f "$CLASSIFIER"
 WRITE_EDIT=$(echo "$COUNTS" | awk '{print $1}')
 BASH_COUNT=$(echo "$COUNTS" | awk '{print $2}')
 MUTATING_BASH=$(echo "$COUNTS" | awk '{print $3}')
+SUSPICIOUS_TOOLS=$(echo "$COUNTS" | awk '{print $4}')
 
 # Trigger if any file was written/edited, or if there were ≥ 4 shell calls at
 # least one of which mutated state (suggesting investigation/debugging worth
 # preserving). Edit-free sessions whose shell activity is entirely read-only
-# are exempt — see the header note.
-if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && [[ "${MUTATING_BASH:-0}" -ge 1 ]]; }; then
+# are exempt — but only when no other tool call could have mutated a real
+# system (MCP writes, unknown harness tools). Suspicious tool calls never
+# trigger on their own — they only disable the exemption, so this hook never
+# nudges where the pre-exemption threshold (edits >= 1 or bash >= 4) wouldn't.
+if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && { [[ "${MUTATING_BASH:-0}" -ge 1 ]] || [[ "${SUSPICIOUS_TOOLS:-0}" -ge 1 ]]; }; }; then
   # Atomically claim the right to nudge. Losers of the race exit silently so a
   # duplicate registration produces one nudge, not two. Claimed here rather than
   # earlier so that a below-threshold turn doesn't burn the session's one nudge.
