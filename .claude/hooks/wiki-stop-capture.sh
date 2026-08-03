@@ -15,7 +15,9 @@
 # (grep/log/status style research) are exempt: nudging them only costs a full
 # skill invocation that ends in SKIP. The classifier is conservative — any
 # command it can't prove read-only counts as mutating, which preserves the
-# pre-exemption behavior for that session.
+# pre-exemption behavior for that session. In particular, command/process
+# substitution ($(…), `…`, <(…)) is treated as mutating without inspecting
+# the inner command.
 
 set -euo pipefail
 
@@ -58,8 +60,13 @@ print(d.get('transcript_path', ''))
 # Count meaningful tool uses: Write/Edit = file mutations, Bash = shell work.
 # Bash commands are additionally classified read-only vs mutating so that
 # edit-free research sessions can be exempted below.
-COUNTS=$(python3 - "$TRANSCRIPT_PATH" <<'PYEOF'
-import json, re, sys
+#
+# The classifier is written to a temp file rather than fed inline through
+# $(python3 <<heredoc): bash 3.2 (macOS /bin/bash) scans a $() body naively
+# and chokes on backticks or unbalanced quotes inside the heredoc text.
+CLASSIFIER="${TMPDIR:-/tmp}/wiki-stop-capture-classify-$$.py"
+cat > "$CLASSIFIER" <<'PYEOF'
+import json, re, shlex, sys
 
 path = sys.argv[1]
 write_edit = 0
@@ -67,17 +74,19 @@ bash_count = 0
 mutating_bash = 0
 
 # Commands that never mutate state on their own (writes would need a shell
-# redirect, which is detected separately). Anything absent from every list
-# below counts as mutating — unknown means "assume it changed something".
+# redirect or substitution, both detected separately). Anything absent from
+# every list below counts as mutating — unknown means "assume it changed
+# something". Commands with a mutating flag form (find -delete, sort -o,
+# date -s, …) get an explicit flag check instead of a blanket entry.
 READONLY_CMDS = {
-    "cat", "ls", "head", "tail", "grep", "egrep", "fgrep", "rg", "find", "fd",
+    "cat", "ls", "head", "tail", "grep", "egrep", "fgrep", "rg", "fd",
     "wc", "echo", "printf", "pwd", "which", "whereis", "type", "file", "stat",
-    "du", "df", "ps", "env", "printenv", "id", "whoami", "uname", "date",
+    "du", "df", "ps", "printenv", "id", "whoami", "uname",
     "true", "false", "test", "[", "diff", "cmp", "tree", "basename", "dirname",
-    "readlink", "realpath", "sort", "uniq", "cut", "tr", "column", "jq", "awk",
+    "readlink", "realpath", "cut", "tr", "column", "jq",
     "md5", "md5sum", "shasum", "sha256sum", "hexdump", "xxd", "strings",
     "less", "more", "nl", "od", "seq", "sleep", "uptime", "dig", "host",
-    "nslookup", "sw_vers", "sysctl", "history",
+    "nslookup", "sw_vers", "history",
 }
 GIT_READONLY = {
     "status", "log", "diff", "show", "rev-parse", "describe", "blame",
@@ -85,27 +94,55 @@ GIT_READONLY = {
     "cat-file", "count-objects",
 }
 GH_READONLY = {"view", "list", "status", "diff", "checks"}
-# Wrappers whose real command is the next token.
-WRAPPERS = {"sudo", "command", "nohup", "time", "xargs"}
+# Wrappers whose real command comes later in the token list. env belongs here,
+# not in READONLY_CMDS: `env FOO=1 cmd` runs cmd, so it must be unwrapped
+# (a bare `env` unwraps to nothing and stays read-only).
+WRAPPERS = {"sudo", "command", "nohup", "time", "xargs", "env", "nice", "stdbuf"}
+FIND_MUTATING_FLAGS = {"-delete", "-exec", "-execdir", "-ok", "-okdir", "-fls"}
 
 # Harmless stderr/dev-null redirects, stripped before the generic ">" check.
 HARMLESS_REDIRECTS = re.compile(r"\s*(2>&1|&?>{1,2}\s*/dev/null|2>{1,2}\s*/dev/null)")
-ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=\S*\s+")
+ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Write/exec patterns inside an inline python -c payload. Heuristic: parsing
+# and printing stay read-only; anything that touches the filesystem, spawns
+# processes, or issues writing HTTP verbs counts as mutating.
+PY_RISKY = re.compile(
+    r"subprocess|shutil\.|socket"
+    r"|os\.(system|popen|remove|unlink|rename|replace|rmdir|mkdir|makedirs"
+    r"|chmod|chown|symlink|link|truncate|environ\[)"
+    r"|\.write\w*\(|\.unlink\(|\.touch\(|\.mkdir\(|\.rename\(|\.rmdir\("
+    r"|open\([^()]*,\s*[\"']?[wax]"
+    r"|urlopen\([^()]*data|requests\.(post|put|patch|delete)"
+)
+# awk writing through its own redirection or shelling out: `print > "file"`,
+# `system("…")`. Checked on the raw segment because the awk program is quoted.
+AWK_RISKY = re.compile(r">>?\s*[\"']|system\s*\(")
 
 
 def split_segments(cmd):
     """Split on |, ||, &&, ;, newline — but never inside quotes.
 
-    Returns (segment, unquoted_text) pairs; redirects are only meaningful in
-    the unquoted portion, so ">" inside a quoted argument doesn't misclassify.
+    Returns (segment, unquoted, expandable) triples. Redirects only count in
+    the unquoted portion (">" inside a quoted argument is literal), while
+    substitution markers count anywhere the shell expands them — outside
+    quotes and inside double quotes, but not inside single quotes.
     """
-    segs, buf, ubuf = [], [], []
+    segs, buf, ubuf, ebuf = [], [], [], []
     quote = None
     i, n = 0, len(cmd)
+
+    def close():
+        segs.append(("".join(buf), "".join(ubuf), "".join(ebuf)))
+        buf.clear()
+        ubuf.clear()
+        ebuf.clear()
+
     while i < n:
         c = cmd[i]
         if quote:
             buf.append(c)
+            if quote == '"':
+                ebuf.append(c)
             if c == quote and cmd[i - 1] != "\\":
                 quote = None
             i += 1
@@ -121,71 +158,97 @@ def split_segments(cmd):
             i += 2
             continue
         if cmd[i : i + 2] in ("||", "&&"):
-            segs.append(("".join(buf), "".join(ubuf)))
-            buf, ubuf = [], []
+            close()
             i += 2
             continue
         if c in (";", "|", "\n"):
-            segs.append(("".join(buf), "".join(ubuf)))
-            buf, ubuf = [], []
+            close()
             i += 1
             continue
         buf.append(c)
         ubuf.append(c)
+        ebuf.append(c)
         i += 1
-    segs.append(("".join(buf), "".join(ubuf)))
+    close()
     return segs
 
 
-def segment_readonly(seg, unquoted):
+def tokenize(text):
+    try:
+        return shlex.split(text)
+    except ValueError:
+        return text.split()
+
+
+def segment_readonly(seg, unquoted, expandable):
     seg = seg.strip().lstrip("(!").strip()
     if not seg:
         return True
     if ">" in HARMLESS_REDIRECTS.sub(" ", unquoted):  # writes a file
         return False
-    stripped = seg
-    while True:
-        replaced = ENV_ASSIGNMENT.sub("", stripped, count=1)
-        if replaced == stripped:
-            break
-        stripped = replaced
-    tokens = stripped.split()
-    if not tokens:
-        return True
-    while tokens and tokens[0].rsplit("/", 1)[-1] in WRAPPERS:
-        tokens = tokens[1:]
-    if tokens and tokens[0].rsplit("/", 1)[-1] == "timeout":
-        tokens = tokens[2:]
+    # Command/process substitution runs an arbitrary inner command — treat as
+    # mutating rather than trying to classify the payload.
+    if "$(" in expandable or "`" in expandable or "<(" in expandable or ">(" in expandable:
+        return False
+    tokens = tokenize(seg)
+    while tokens:
+        head = tokens[0].rsplit("/", 1)[-1]
+        if head in WRAPPERS or ENV_TOKEN.match(tokens[0]):
+            tokens = tokens[1:]
+            continue
+        if head == "timeout":
+            tokens = tokens[2:]
+            continue
+        break
     if not tokens:
         return True
     cmd = tokens[0].rsplit("/", 1)[-1]
-    if cmd in READONLY_CMDS:
-        if cmd == "awk" and any(t == "-i" or t.startswith("inplace") for t in tokens[1:]):
+    args = tokens[1:]
+    if cmd == "find":
+        return not any(t in FIND_MUTATING_FLAGS or t.startswith("-fprint") for t in args)
+    if cmd == "sort":
+        return not any(t == "-o" or t.startswith("--output") or (t.startswith("-o") and len(t) > 2) for t in args)
+    if cmd == "uniq":
+        return len([t for t in args if not t.startswith("-")]) < 2
+    if cmd == "date":
+        return not any(t == "-s" or t.startswith("--set") for t in args)
+    if cmd == "sysctl":
+        return not any(t == "-w" or "=" in t for t in args)
+    if cmd == "awk":
+        if any(t == "-i" or t.startswith("inplace") for t in args):
             return False
+        return not AWK_RISKY.search(seg)
+    if cmd in READONLY_CMDS:
         return True
     if cmd == "sed":
-        return not any(t.startswith("-i") or t == "--in-place" for t in tokens[1:])
+        return not any(t.startswith("-i") or t == "--in-place" for t in args)
     if cmd == "git":
-        sub = next((t for t in tokens[1:] if not t.startswith("-")), "")
+        sub = next((t for t in args if not t.startswith("-")), "")
         return sub in GIT_READONLY
     if cmd == "gh":
-        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        rest = [t for t in args if not t.startswith("-")]
         return bool(rest) and (rest[0] in GH_READONLY or (len(rest) > 1 and rest[1] in GH_READONLY))
     if cmd in ("python", "python3"):
-        return "-c" in tokens or "-V" in tokens or "--version" in tokens
+        if "-V" in args or "--version" in args:
+            return True
+        return "-c" in args and not PY_RISKY.search(seg)
     if cmd == "curl":
-        writes = {"-o", "-O", "--output", "-T", "--upload-file", "-F", "--form"}
-        if any(t in writes or t.startswith("-d") or t.startswith("--data") for t in tokens[1:]):
-            return False
-        if "-X" in tokens:
-            method = tokens[tokens.index("-X") + 1] if tokens.index("-X") + 1 < len(tokens) else ""
-            return method.upper() in ("GET", "HEAD")
+        writes = {"-o", "-O", "--output", "-T", "--upload-file", "-F", "--form", "--form-string", "--json"}
+        for idx, t in enumerate(args):
+            if t in writes or t.startswith("-d") or t.startswith("--data"):
+                return False
+            if t == "-X" or t == "--request":
+                method = args[idx + 1] if idx + 1 < len(args) else ""
+                if method.upper() not in ("GET", "HEAD"):
+                    return False
+            elif t.startswith("-X") and t[2:].upper() not in ("GET", "HEAD"):
+                return False
         return True
     return False
 
 
 def command_readonly(cmd):
-    return all(segment_readonly(seg, unquoted) for seg, unquoted in split_segments(cmd))
+    return all(segment_readonly(*parts) for parts in split_segments(cmd))
 
 
 with open(path) as f:
@@ -214,7 +277,9 @@ with open(path) as f:
 
 print(write_edit, bash_count, mutating_bash)
 PYEOF
-) || COUNTS="0 0 0"
+
+COUNTS=$(python3 "$CLASSIFIER" "$TRANSCRIPT_PATH" 2>/dev/null) || COUNTS="0 0 0"
+rm -f "$CLASSIFIER"
 
 WRITE_EDIT=$(echo "$COUNTS" | awk '{print $1}')
 BASH_COUNT=$(echo "$COUNTS" | awk '{print $2}')

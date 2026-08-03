@@ -135,6 +135,60 @@ class StopHookBehaviorTest(unittest.TestCase):
         busy = self._run([_edit_entry()], session_id="keep")
         self.assertEqual(busy.returncode, 2)
 
+    def test_command_substitution_counts_as_mutating(self):
+        # $(…) runs an arbitrary inner command — even inside double quotes.
+        entries = [_bash_entry('echo "$(rm -rf /tmp/x)"')] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_single_quoted_substitution_stays_literal(self):
+        entries = [_bash_entry("grep -F '$(not executed)' file.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_find_delete_counts_as_mutating(self):
+        entries = [_bash_entry("find . -name '*.tmp' -delete")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_find_exec_counts_as_mutating(self):
+        entries = [_bash_entry("find . -name '*.log' -exec rm {} +")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_plain_find_stays_readonly(self):
+        entries = [_bash_entry("find . -name '*.md' -type f")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_curl_glued_method_counts_as_mutating(self):
+        entries = [
+            _bash_entry("curl -XPOST https://api.example.com/things"),
+            _bash_entry("curl --request DELETE https://api.example.com/things/1"),
+            _bash_entry("curl --json '{}' https://api.example.com/things"),
+            _bash_entry("curl -XPUT https://api.example.com/things/2"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_sort_output_flag_counts_as_mutating(self):
+        entries = [_bash_entry("sort -o sorted.txt input.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_env_unwraps_to_real_command(self):
+        entries = [_bash_entry("env FOO=1 python3 build.py")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_bare_env_stays_readonly(self):
+        entries = [_bash_entry("env | grep PATH")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_python_inline_write_counts_as_mutating(self):
+        entries = [_bash_entry("python3 -c \"import os; os.remove('x')\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_inline_parse_stays_readonly(self):
+        entries = [_bash_entry("python3 -c \"import json,sys; print(json.load(sys.stdin)['a'])\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_awk_internal_redirect_counts_as_mutating(self):
+        entries = [_bash_entry("awk '{print > \"split.txt\"}' data.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
