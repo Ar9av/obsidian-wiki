@@ -28,7 +28,7 @@ You solve a hard problem on a Tuesday. Three months later, in a different repo, 
 
 This fixes that. Point it at a folder, tell your agent what to remember, and it compiles what you learn into interconnected markdown you own. The pattern comes from Andrej Karpathy's [LLM Wiki gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f): compile knowledge once and keep it current, instead of asking an LLM the same questions forever or re-running RAG every time.
 
-**Obsidian is how you see the brain. Your AI agent is how you grow it.**
+**Your second brain. Your AI agent is how you grow it.**
 
 Every skill here is a markdown file that any agent — Claude Code, Cursor, Codex, Windsurf, Gemini CLI, and [a dozen more](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/agents.md) — reads and runs. No runtime, no API keys, no vendor.
 
