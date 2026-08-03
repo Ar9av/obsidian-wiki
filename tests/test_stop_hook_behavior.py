@@ -189,6 +189,48 @@ class StopHookBehaviorTest(unittest.TestCase):
         entries = [_bash_entry("awk '{print > \"split.txt\"}' data.txt")] * 4
         self.assertEqual(self._run(entries).returncode, 2)
 
+    def test_cd_chain_stays_readonly(self):
+        entries = [_bash_entry("cd /repo && git log --oneline -5")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_python_exec_counts_as_mutating(self):
+        entries = [_bash_entry("python3 -c \"exec(open('payload.py').read())\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_open_mode_kwarg_counts_as_mutating(self):
+        entries = [_bash_entry("python3 -c \"open('f', mode='w')\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_sed_write_command_counts_as_mutating(self):
+        entries = [
+            _bash_entry("sed -n 'w /tmp/out.txt' input.txt"),
+            _bash_entry("sed 's/a/b/w changed.txt' input.txt"),
+            _bash_entry("sed -n 'w /tmp/out2.txt' input.txt"),
+            _bash_entry("sed 's/x/y/w other.txt' input.txt"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_plain_sed_stays_readonly(self):
+        entries = [_bash_entry("sed -n '5,10p' input.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_git_output_flag_counts_as_mutating(self):
+        entries = [_bash_entry("git diff --output=changes.patch main")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_curl_short_flag_clusters_count_as_mutating(self):
+        entries = [
+            _bash_entry("curl -sd '{\"a\":1}' https://api.example.com/x"),
+            _bash_entry("curl -sLo out.json https://api.example.com/x"),
+            _bash_entry("curl -sT upload.bin https://api.example.com/x"),
+            _bash_entry("curl -sD headers.txt https://api.example.com/x"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_curl_plain_get_flags_stay_readonly(self):
+        entries = [_bash_entry("curl -fsSL https://api.example.com/status")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

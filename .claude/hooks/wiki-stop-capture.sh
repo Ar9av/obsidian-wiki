@@ -87,6 +87,13 @@ READONLY_CMDS = {
     "md5", "md5sum", "shasum", "sha256sum", "hexdump", "xxd", "strings",
     "less", "more", "nl", "od", "seq", "sleep", "uptime", "dig", "host",
     "nslookup", "sw_vers", "history",
+    # Shell-session state only — nothing durable outside the (already
+    # finished) shell process, so treating these as read-only keeps common
+    # research chains like `cd repo && git log` in the exemption.
+    "cd", "pushd", "popd", "export", "unset", "umask", "ulimit", "shopt",
+    "set", "local", "declare", "typeset", "read", "wait", ":",
+    "man", "whatis", "apropos", "hostname", "arch", "nproc", "getconf",
+    "locale", "groups", "tty", "clear",
 }
 GIT_READONLY = {
     "status", "log", "diff", "show", "rev-parse", "describe", "blame",
@@ -107,12 +114,15 @@ ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # and printing stay read-only; anything that touches the filesystem, spawns
 # processes, or issues writing HTTP verbs counts as mutating.
 PY_RISKY = re.compile(
-    r"subprocess|shutil\.|socket"
+    r"subprocess|shutil\.|socket|http\.client|HTTPConnection"
+    r"|\bexec\s*\(|\beval\s*\(|__import__"
     r"|os\.(system|popen|remove|unlink|rename|replace|rmdir|mkdir|makedirs"
     r"|chmod|chown|symlink|link|truncate|environ\[)"
     r"|\.write\w*\(|\.unlink\(|\.touch\(|\.mkdir\(|\.rename\(|\.rmdir\("
-    r"|open\([^()]*,\s*[\"']?[wax]"
-    r"|urlopen\([^()]*data|requests\.(post|put|patch|delete)"
+    r"|\.save\(|\.to_csv\(|\.to_excel\(|\.commit\("
+    r"|open\([^()]*,\s*[\"']?[wax]|open\([^()]*mode\s*=\s*[\"'][wax]"
+    r"|urlopen\([^()]*data|Request\([^()]*data|requests\.(post|put|patch|delete)"
+    r"|INSERT INTO|DELETE FROM|DROP TABLE|CREATE TABLE|ALTER TABLE"
 )
 # awk writing through its own redirection or shelling out: `print > "file"`,
 # `system("…")`. Checked on the raw segment because the awk program is quoted.
@@ -221,8 +231,17 @@ def segment_readonly(seg, unquoted, expandable):
     if cmd in READONLY_CMDS:
         return True
     if cmd == "sed":
-        return not any(t.startswith("-i") or t == "--in-place" for t in args)
+        if any(t.startswith("-i") or t == "--in-place" for t in args):
+            return False
+        # The sed `w` script command writes a file without any -i flag:
+        # `sed -n 'w out.txt'`, `s/a/b/w out.txt`.
+        return not any(
+            re.search(r"(^|;)\s*w\s|/w\b", t) for t in args if not t.startswith("-")
+        )
     if cmd == "git":
+        # `git diff/log --output=file` writes without a shell redirect.
+        if any(t.startswith("--output") for t in args):
+            return False
         sub = next((t for t in args if not t.startswith("-")), "")
         return sub in GIT_READONLY
     if cmd == "gh":
@@ -233,15 +252,26 @@ def segment_readonly(seg, unquoted, expandable):
             return True
         return "-c" in args and not PY_RISKY.search(seg)
     if cmd == "curl":
-        writes = {"-o", "-O", "--output", "-T", "--upload-file", "-F", "--form", "--form-string", "--json"}
+        long_writes = {
+            "--output", "--output-dir", "--remote-name", "--upload-file",
+            "--form", "--form-string", "--json",
+        }
         for idx, t in enumerate(args):
-            if t in writes or t.startswith("-d") or t.startswith("--data"):
+            if t in long_writes or t.startswith("--data"):
                 return False
-            if t == "-X" or t == "--request":
+            if t == "--request":
                 method = args[idx + 1] if idx + 1 < len(args) else ""
                 if method.upper() not in ("GET", "HEAD"):
                     return False
-            elif t.startswith("-X") and t[2:].upper() not in ("GET", "HEAD"):
+            elif t.startswith("--"):
+                continue
+            elif t.startswith("-X"):
+                method = t[2:] or (args[idx + 1] if idx + 1 < len(args) else "")
+                if method.upper() not in ("GET", "HEAD"):
+                    return False
+            elif re.match(r"^-[A-Za-z]*[dDoOTFX]", t):
+                # Short flags cluster (-sd, -sLo, -sT): d/D/o/O/T/F/X all send
+                # data or write files, wherever they sit in the cluster.
                 return False
         return True
     return False
