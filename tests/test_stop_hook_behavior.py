@@ -293,6 +293,50 @@ class StopHookBehaviorTest(unittest.TestCase):
         entries = [_bash_entry("tree -o listing.txt src/")] * 4
         self.assertEqual(self._run(entries).returncode, 2)
 
+    def test_single_quote_always_closes(self):
+        # In shell, backslash does not escape inside '…': the quote after
+        # the backslash CLOSES the string and the rm runs unquoted.
+        entries = [_bash_entry("echo 'a\\' ; rm -rf /tmp/probe'")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_git_reflog_expire_counts_as_mutating(self):
+        entries = [
+            _bash_entry("git reflog expire --expire=now --all"),
+            _bash_entry("git reflog delete HEAD@{2}"),
+            _bash_entry("git reflog expire --expire=now --all"),
+            _bash_entry("git reflog delete HEAD@{1}"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_git_reflog_show_stays_readonly(self):
+        entries = [_bash_entry("git reflog"), _bash_entry("git reflog show HEAD")] * 2
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_curl_cookie_jar_counts_as_mutating(self):
+        entries = [
+            _bash_entry("curl -sc cookies.txt https://example.com/login"),
+            _bash_entry("curl --cookie-jar cj.txt https://example.com"),
+            _bash_entry("curl --dump-header h.txt https://example.com"),
+            _bash_entry("curl --trace-ascii t.log https://example.com"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_awk_pipe_to_command_counts_as_mutating(self):
+        entries = [_bash_entry("awk '{print | \"sh\"}' cmds.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_sed_glued_write_script_counts_as_mutating(self):
+        entries = [_bash_entry("sed -e's/a/b/w out.txt' input.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_history_clear_counts_as_mutating(self):
+        entries = [_bash_entry("history -c")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_smtplib_counts_as_mutating(self):
+        entries = [_bash_entry("python3 -c \"import smtplib; ...\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

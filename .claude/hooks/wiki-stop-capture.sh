@@ -88,7 +88,7 @@ READONLY_CMDS = {
     "readlink", "realpath", "cut", "tr", "column", "jq",
     "md5", "md5sum", "shasum", "sha256sum", "hexdump", "xxd", "strings",
     "less", "more", "nl", "od", "seq", "sleep", "uptime", "dig", "host",
-    "nslookup", "sw_vers", "history",
+    "nslookup", "sw_vers",
     # Shell-session state only — nothing durable outside the (already
     # finished) shell process, so treating these as read-only keeps common
     # research chains like `cd repo && git log` in the exemption.
@@ -156,10 +156,12 @@ PY_RISKY = re.compile(
     r"|open\([^()]*,\s*[\"']?[wax]|open\([^()]*mode\s*=\s*[\"'][wax]"
     r"|urlopen\([^()]*data|Request\([^()]*data|requests\.(post|put|patch|delete)"
     r"|INSERT INTO|DELETE FROM|DROP TABLE|CREATE TABLE|ALTER TABLE"
+    r"|smtplib|ftplib|paramiko|os\.kill"
 )
 # awk writing through its own redirection or shelling out: `print > "file"`,
-# `system("…")`. Checked on the raw segment because the awk program is quoted.
-AWK_RISKY = re.compile(r">>?\s*[\"']|system\s*\(")
+# `system("…")`, `print | "cmd"`, `"cmd" | getline`. Checked on the raw
+# segment because the awk program is quoted.
+AWK_RISKY = re.compile(r">>?\s*[\"']|system\s*\(|\|\s*[\"']|[\"']\s*\|")
 
 
 def split_segments(cmd):
@@ -186,7 +188,9 @@ def split_segments(cmd):
             buf.append(c)
             if quote == '"':
                 ebuf.append(c)
-            if c == quote and cmd[i - 1] != "\\":
+            # A single quote always closes — the shell does not allow
+            # escaping inside '…'; only double quotes honor a backslash.
+            if c == quote and (quote == "'" or cmd[i - 1] != "\\"):
                 quote = None
             i += 1
             continue
@@ -279,15 +283,21 @@ def segment_readonly(seg, unquoted, expandable):
         if any(t.startswith("-i") or t == "--in-place" for t in args):
             return False
         # The sed `w` script command writes a file without any -i flag:
-        # `sed -n 'w out.txt'`, `s/a/b/w out.txt`.
-        return not any(
-            re.search(r"(^|;)\s*w\s|/w\b", t) for t in args if not t.startswith("-")
-        )
+        # `sed -n 'w out.txt'`, `s/a/b/w out.txt` — scanned on every token
+        # so a glued `-e's/a/b/w out'` script is caught too.
+        return not any(re.search(r"(^|;)\s*w\s|/w\b", t) for t in args)
+    if cmd == "history":
+        # history -c/-d clear entries, -w/-a/-r touch the history file.
+        return not any(t.startswith("-") and t != "--" for t in args)
     if cmd == "git":
         # `git diff/log --output=file` writes without a shell redirect.
         if any(t.startswith("--output") for t in args):
             return False
-        sub = next((t for t in args if not t.startswith("-")), "")
+        positional = [t for t in args if not t.startswith("-")]
+        sub = positional[0] if positional else ""
+        if sub == "reflog":
+            # `git reflog expire/delete` mutates; bare reflog / reflog show reads.
+            return len(positional) < 2 or positional[1] == "show"
         return sub in GIT_READONLY
     if cmd == "gh":
         rest = [t for t in args if not t.startswith("-")]
@@ -299,10 +309,11 @@ def segment_readonly(seg, unquoted, expandable):
     if cmd == "curl":
         long_writes = {
             "--output", "--output-dir", "--remote-name", "--upload-file",
-            "--form", "--form-string", "--json",
+            "--form", "--form-string", "--json", "--cookie-jar",
+            "--dump-header", "--etag-save",
         }
         for idx, t in enumerate(args):
-            if t in long_writes or t.startswith("--data"):
+            if t in long_writes or t.startswith("--data") or t.startswith("--trace"):
                 return False
             if t == "--request":
                 method = args[idx + 1] if idx + 1 < len(args) else ""
@@ -314,9 +325,10 @@ def segment_readonly(seg, unquoted, expandable):
                 method = t[2:] or (args[idx + 1] if idx + 1 < len(args) else "")
                 if method.upper() not in ("GET", "HEAD"):
                     return False
-            elif re.match(r"^-[A-Za-z]*[dDoOTFX]", t):
-                # Short flags cluster (-sd, -sLo, -sT): d/D/o/O/T/F/X all send
-                # data or write files, wherever they sit in the cluster.
+            elif re.match(r"^-[A-Za-z]*[dDoOTFXc]", t):
+                # Short flags cluster (-sd, -sLo, -sT, -sc): d/D/o/O/T/F/X/c
+                # all send data or write files (c = cookie jar), wherever
+                # they sit in the cluster.
                 return False
         return True
     return False
