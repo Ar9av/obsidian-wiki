@@ -10,9 +10,11 @@ classifier can't prove read-only — keeps the pre-exemption behavior.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -62,7 +64,14 @@ class StopHookBehaviorTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self._session_seq = 0
 
-    def _run(self, entries, session_id=None, stop_hook_active=False):
+    def _sentinel(self, session_id):
+        return self.tmp / f"wiki-stop-capture-{session_id}.done"
+
+    def _age_sentinel(self, session_id, seconds):
+        old = time.time() - seconds
+        os.utime(self._sentinel(session_id), (old, old))
+
+    def _run(self, entries, session_id=None, stop_hook_active=False, extra_env=None):
         transcript = self.tmp / "transcript.jsonl"
         transcript.write_text("".join(json.dumps(e) + "\n" for e in entries))
         if session_id is None:
@@ -79,7 +88,7 @@ class StopHookBehaviorTest(unittest.TestCase):
             input=json.dumps(payload),
             capture_output=True,
             text=True,
-            env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp)},
+            env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp), **(extra_env or {})},
         )
 
     def test_file_edit_triggers_nudge(self):
@@ -463,6 +472,61 @@ class StopHookBehaviorTest(unittest.TestCase):
     def test_less_log_file_counts_as_mutating(self):
         entries = [_bash_entry("printf x | less -F -o /tmp/log")] * 4
         self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_rearm_after_age_and_new_edits(self):
+        first = self._run([_edit_entry()] * 5, session_id="long")
+        self.assertEqual(first.returncode, 2)
+        self._age_sentinel("long", 7 * 3600)
+        second = self._run([_edit_entry()] * 20, session_id="long")
+        self.assertEqual(second.returncode, 2)
+        self.assertIn("20 file edit(s)", second.stderr)
+
+    def test_no_rearm_while_sentinel_is_young(self):
+        first = self._run([_edit_entry()] * 5, session_id="young")
+        self.assertEqual(first.returncode, 2)
+        # Plenty of new edits, but the nudge was moments ago.
+        second = self._run([_edit_entry()] * 40, session_id="young")
+        self.assertEqual(second.returncode, 0)
+
+    def test_no_rearm_without_enough_new_edits(self):
+        first = self._run([_edit_entry()] * 5, session_id="idle")
+        self.assertEqual(first.returncode, 2)
+        self._age_sentinel("idle", 7 * 3600)
+        # Only 3 edits since the nudge that recorded 5.
+        second = self._run([_edit_entry()] * 8, session_id="idle")
+        self.assertEqual(second.returncode, 0)
+        # The sentinel must survive, still holding the original count.
+        self.assertEqual((self._sentinel("idle") / "edits").read_text(), "5")
+
+    def test_rearm_updates_stored_count_and_rests_again(self):
+        first = self._run([_edit_entry()] * 5, session_id="cycle")
+        self.assertEqual(first.returncode, 2)
+        self._age_sentinel("cycle", 7 * 3600)
+        second = self._run([_edit_entry()] * 20, session_id="cycle")
+        self.assertEqual(second.returncode, 2)
+        self.assertEqual((self._sentinel("cycle") / "edits").read_text(), "20")
+        # Fresh sentinel again: more edits right away stay silent.
+        third = self._run([_edit_entry()] * 40, session_id="cycle")
+        self.assertEqual(third.returncode, 0)
+
+    def test_pre_feature_sentinel_rearms_from_zero(self):
+        # A sentinel claimed before the re-arm feature has no edits file:
+        # the whole current count is the delta.
+        self._sentinel("legacy").mkdir()
+        self._age_sentinel("legacy", 7 * 3600)
+        result = self._run([_edit_entry()] * 12, session_id="legacy")
+        self.assertEqual(result.returncode, 2)
+
+    def test_rearm_env_knobs_override_defaults(self):
+        first = self._run([_edit_entry()] * 5, session_id="knobs")
+        self.assertEqual(first.returncode, 2)
+        # Zero cool-down and a 1-edit delta: the very next stop re-fires.
+        second = self._run(
+            [_edit_entry()] * 6,
+            session_id="knobs",
+            extra_env={"WIKI_STOP_REARM_SECONDS": "0", "WIKI_STOP_REARM_EDITS": "1"},
+        )
+        self.assertEqual(second.returncode, 2)
 
 
 if __name__ == "__main__":

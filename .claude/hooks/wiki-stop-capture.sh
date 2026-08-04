@@ -42,12 +42,33 @@ print('1' if d.get('stop_hook_active') else '0')
 # silently. The check here is only a cheap short-circuit to skip transcript
 # parsing; it is NOT the correctness guarantee, since concurrent invocations
 # can all pass it before any of them claims.
+#
+# RE-ARM: "once per session" starves long-running sessions — a multi-day
+# session gets its one nudge early and everything after is never captured.
+# The sentinel therefore expires when BOTH are true: it is older than
+# REARM_SECONDS (so one nudge per work stretch), AND at least REARM_EDITS new
+# file edits happened since the last nudge (so an idle session that just sits
+# open stays silent). The edit count at nudge time is stored inside the
+# sentinel; sentinels predating this feature have no count and behave as 0.
+REARM_SECONDS="${WIKI_STOP_REARM_SECONDS:-21600}"   # 6h between nudges
+REARM_EDITS="${WIKI_STOP_REARM_EDITS:-10}"          # new edits required
 SESSION_ID=$(printf '%s' "$INPUT" | python3 -c "
 import json, sys; print(json.load(sys.stdin).get('session_id', ''))" 2>/dev/null || echo "")
 SENTINEL=""
+REARM_CANDIDATE=0
 if [[ -n "$SESSION_ID" ]]; then
   SENTINEL="${TMPDIR:-/tmp}/wiki-stop-capture-${SESSION_ID}.done"
-  [[ -e "$SENTINEL" ]] && exit 0
+  if [[ -e "$SENTINEL" ]]; then
+    NOW=$(date +%s)
+    CLAIMED_AT=$(stat -f %m "$SENTINEL" 2>/dev/null || stat -c %Y "$SENTINEL" 2>/dev/null || echo "$NOW")
+    [[ "$CLAIMED_AT" =~ ^[0-9]+$ ]] || CLAIMED_AT="$NOW"
+    if [[ $((NOW - CLAIMED_AT)) -lt "$REARM_SECONDS" ]]; then
+      exit 0
+    fi
+    # Old enough — the edit-delta half of the re-arm test needs the
+    # transcript counts, so fall through to parsing.
+    REARM_CANDIDATE=1
+  fi
 fi
 
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | python3 -c "
@@ -462,11 +483,26 @@ SUSPICIOUS_TOOLS=$(echo "$COUNTS" | awk '{print $4}')
 # trigger on their own — they only disable the exemption, so this hook never
 # nudges where the pre-exemption threshold (edits >= 1 or bash >= 4) wouldn't.
 if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && { [[ "${MUTATING_BASH:-0}" -ge 1 ]] || [[ "${SUSPICIOUS_TOOLS:-0}" -ge 1 ]]; }; }; then
+  # Re-arm gate: an expired sentinel only re-fires when enough NEW edits
+  # happened since the nudge that claimed it. The count file may be missing
+  # (pre-feature sentinel) — treat as 0 so the full current count is the delta.
+  if [[ "$REARM_CANDIDATE" == "1" ]]; then
+    PREV_EDITS=$(cat "$SENTINEL/edits" 2>/dev/null || echo 0)
+    [[ "$PREV_EDITS" =~ ^[0-9]+$ ]] || PREV_EDITS=0
+    if [[ $((WRITE_EDIT - PREV_EDITS)) -lt "$REARM_EDITS" ]]; then
+      exit 0
+    fi
+    # Atomically retire the expired sentinel: mv succeeds for exactly one of
+    # any concurrent invocations, so only that one may proceed to re-claim.
+    mv "$SENTINEL" "${SENTINEL}.retired.$$" 2>/dev/null || exit 0
+    rm -rf "${SENTINEL}.retired.$$"
+  fi
   # Atomically claim the right to nudge. Losers of the race exit silently so a
   # duplicate registration produces one nudge, not two. Claimed here rather than
   # earlier so that a below-threshold turn doesn't burn the session's one nudge.
   if [[ -n "$SENTINEL" ]]; then
     mkdir "$SENTINEL" 2>/dev/null || exit 0
+    printf '%s' "$WRITE_EDIT" > "$SENTINEL/edits" 2>/dev/null || true
   fi
   echo "Session ended with ${WRITE_EDIT} file edit(s) and ${BASH_COUNT} shell call(s). Please run /wiki-capture --quick now to preserve any reusable findings before this context closes." >&2
   exit 2
