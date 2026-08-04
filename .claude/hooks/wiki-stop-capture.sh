@@ -108,32 +108,48 @@ GH_READONLY = {"view", "list", "status", "diff", "checks"}
 # notably MCP tools without a clear read verb — makes the session
 # ineligible for the read-only exemption, because a real system mutation
 # (a CRM update, an SQL INSERT) may hide behind it.
+# Task/Agent are NOT here: a spawned subagent can edit files or call write
+# APIs, so they get argument-aware handling in the counting loop (only the
+# read-only agent types Explore/Plan stay neutral). EnterWorktree/ExitWorktree
+# are not here either — they create/remove git branches and worktrees.
 CORE_READONLY_TOOLS = {
     "Read", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "TodoWrite",
-    "TodoRead", "NotebookRead", "Task", "Agent", "AskUserQuestion",
+    "TodoRead", "NotebookRead", "AskUserQuestion",
     "ToolSearch", "Skill", "SkillSearch", "SlashCommand", "EnterPlanMode",
-    "ExitPlanMode", "EnterWorktree", "ExitWorktree", "Explore", "Plan",
+    "ExitPlanMode", "Explore", "Plan",
     "TaskCreate", "TaskUpdate", "TaskGet", "TaskList", "TaskOutput",
     "TaskStop", "BashOutput", "KillShell", "SendUserFile", "Monitor",
     "ScheduleWakeup", "ListMcpResourcesTool", "ReadMcpResourceTool",
     "ReadMcpResourceDirTool",
 }
+READONLY_AGENT_TYPES = {"Explore", "Plan"}
+# "resolve" is deliberately absent from the read verbs: resolving a review
+# thread mutates it, so resolve-named tools stay suspicious.
 MCP_READ_VERBS = {
     "get", "list", "search", "read", "query", "fetch", "find", "describe",
     "inspect", "explain", "compare", "view", "check", "status", "whoami",
-    "resolve", "analyze", "show", "health", "info", "download", "lookup",
+    "analyze", "show", "health", "info", "download", "lookup",
     "browse", "watch", "screenshot",
 }
 # Write verbs take priority over read verbs for names carrying both
-# ("get-or-create-session" creates).
+# ("get-or-create-session" creates; "prepare_query_tuning" provisions).
 MCP_WRITE_VERBS = {
     "create", "update", "delete", "remove", "write", "insert", "upsert",
     "execute", "run", "send", "post", "put", "patch", "move", "add", "set",
     "complete", "archive", "clone", "push", "upload", "provision", "reset",
     "apply", "schedule", "cancel", "start", "stop", "restart", "deploy",
     "publish", "merge", "commit", "approve", "assign", "register", "enable",
-    "disable", "duplicate",
+    "disable", "duplicate", "prepare",
 }
+# A read-verb-named SQL tool can still execute DML (EXPLAIN ANALYZE runs the
+# statement; run_sql-style payloads carry writes) — when the tool name hints
+# at SQL, its serialized input is scanned for write statements too.
+SQL_TOOL_HINT = {"sql", "statement", "query", "database", "db"}
+SQL_WRITE_RX = re.compile(
+    r"\b(insert|update|delete|drop|alter|truncate|grant|revoke|vacuum)\b"
+    r"|\"analyze\"\s*:\s*true",
+    re.IGNORECASE,
+)
 # Wrappers whose real command comes later in the token list. env belongs here,
 # not in READONLY_CMDS: `env FOO=1 cmd` runs cmd, so it must be unwrapped
 # (a bare `env` unwraps to nothing and stays read-only).
@@ -149,19 +165,28 @@ ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 PY_RISKY = re.compile(
     r"subprocess|shutil\.|socket|http\.client|HTTPConnection"
     r"|\bexec\s*\(|\beval\s*\(|__import__"
+    r"|import\s+os\s+as|from\s+os\s+import"
     r"|os\.(system|popen|remove|unlink|rename|replace|rmdir|mkdir|makedirs"
     r"|chmod|chown|symlink|link|truncate|environ\[)"
     r"|\.write\w*\(|\.unlink\(|\.touch\(|\.mkdir\(|\.rename\(|\.rmdir\("
     r"|\.save\(|\.to_csv\(|\.to_excel\(|\.commit\("
+    r"|\.execute(many|script)?\s*\("
+    r"|\.open\(\s*[\"'][wax]"
     r"|open\([^()]*,\s*[\"']?[wax]|open\([^()]*mode\s*=\s*[\"'][wax]"
     r"|urlopen\([^()]*data|Request\([^()]*data|requests\.(post|put|patch|delete)"
     r"|INSERT INTO|DELETE FROM|DROP TABLE|CREATE TABLE|ALTER TABLE"
-    r"|smtplib|ftplib|paramiko|os\.kill"
+    r"|smtplib|ftplib|paramiko|os\.kill",
+    re.IGNORECASE,
 )
-# awk writing through its own redirection or shelling out: `print > "file"`,
-# `system("…")`, `print | "cmd"`, `"cmd" | getline`. Checked on the raw
-# segment because the awk program is quoted.
-AWK_RISKY = re.compile(r">>?\s*[\"']|system\s*\(|\|\s*[\"']|[\"']\s*\|")
+# awk writing or shelling out through its own syntax: redirection or pipe to
+# a quoted string OR a variable (`print > f`, `print | c`), system(),
+# close() (only used with files/pipes), getline. `>` followed by a digit
+# stays clean so numeric comparisons ($3 > 100) don't trip it. Checked on
+# the raw segment because the awk program is quoted.
+AWK_RISKY = re.compile(
+    r">>?\s*[\"'A-Za-z_]|\|\s*[\"'A-Za-z_]|[\"']\s*\|"
+    r"|system\s*\(|close\s*\(|getline"
+)
 
 
 def split_segments(cmd):
@@ -189,9 +214,17 @@ def split_segments(cmd):
             if quote == '"':
                 ebuf.append(c)
             # A single quote always closes — the shell does not allow
-            # escaping inside '…'; only double quotes honor a backslash.
-            if c == quote and (quote == "'" or cmd[i - 1] != "\\"):
-                quote = None
+            # escaping inside '…'. A double quote is escaped only by an ODD
+            # run of preceding backslashes ("a\\" closes: the backslashes
+            # escape each other, not the quote).
+            if c == quote:
+                bs = 0
+                j = i - 1
+                while j >= 0 and cmd[j] == "\\":
+                    bs += 1
+                    j -= 1
+                if quote == "'" or bs % 2 == 0:
+                    quote = None
             i += 1
             continue
         if c in ("'", '"'):
@@ -264,13 +297,27 @@ def segment_readonly(seg, unquoted, expandable):
         return not [t for t in args if not t.startswith("-")]
     if cmd == "xxd":
         # A second positional argument is an output file (xxd -r patch.hex bin).
-        return len([t for t in args if not t.startswith("-")]) < 2
+        # A bare "-" is the stdin positional, not a flag.
+        return len([t for t in args if t == "-" or not t.startswith("-")]) < 2
+    if cmd in ("less", "more"):
+        # less -o/-O/--log-file copies its input into a file.
+        return not any(
+            t in ("-o", "-O") or t.startswith("--log-file") or t.startswith("--LOG-FILE")
+            for t in args
+        )
     if cmd == "sort":
         return not any(t == "-o" or t.startswith("--output") or (t.startswith("-o") and len(t) > 2) for t in args)
     if cmd == "uniq":
-        return len([t for t in args if not t.startswith("-")]) < 2
+        return len([t for t in args if t == "-" or not t.startswith("-")]) < 2
     if cmd == "date":
-        return not any(t == "-s" or t.startswith("--set") for t in args)
+        # -s/--set explicitly set the clock; BSD/macOS date also sets it from
+        # a positional operand (date 010100002025). Only +format positionals
+        # are output formatting.
+        if any(t == "-s" or t.startswith("--set") for t in args):
+            return False
+        if "-j" in args:  # macOS: -j explicitly forbids setting the clock
+            return True
+        return not [t for t in args if not t.startswith("-") and not t.startswith("+")]
     if cmd == "sysctl":
         return not any(t == "-w" or "=" in t for t in args)
     if cmd == "awk":
@@ -283,15 +330,25 @@ def segment_readonly(seg, unquoted, expandable):
         if any(t.startswith("-i") or t == "--in-place" for t in args):
             return False
         # The sed `w` script command writes a file without any -i flag:
-        # `sed -n 'w out.txt'`, `s/a/b/w out.txt` — scanned on every token
-        # so a glued `-e's/a/b/w out'` script is caught too.
-        return not any(re.search(r"(^|;)\s*w\s|/w\b", t) for t in args)
+        # `sed -n 'w out.txt'`, `s/a/b/w out.txt`, and with ANY substitution
+        # delimiter (`s#a#b#w out`). Scanned on every token so a glued
+        # `-e's/a/b/w out'` script is caught too.
+        return not any(
+            re.search(r"(^|;)\s*w\s|[^\w\s]w(\s|$)", t) for t in args
+        )
     if cmd == "history":
         # history -c/-d clear entries, -w/-a/-r touch the history file.
         return not any(t.startswith("-") and t != "--" for t in args)
     if cmd == "git":
-        # `git diff/log --output=file` writes without a shell redirect.
-        if any(t.startswith("--output") for t in args):
+        # `git diff/log --output=file` writes without a shell redirect;
+        # --upload-pack/--receive-pack inject a command executed remotely.
+        if any(
+            t.startswith("--output")
+            or t.startswith("--upload-pack")
+            or t.startswith("--receive-pack")
+            or t.startswith("--exec")
+            for t in args
+        ):
             return False
         positional = [t for t in args if not t.startswith("-")]
         sub = positional[0] if positional else ""
@@ -310,7 +367,7 @@ def segment_readonly(seg, unquoted, expandable):
         long_writes = {
             "--output", "--output-dir", "--remote-name", "--upload-file",
             "--form", "--form-string", "--json", "--cookie-jar",
-            "--dump-header", "--etag-save",
+            "--dump-header", "--etag-save", "--quote", "--config",
         }
         for idx, t in enumerate(args):
             if t in long_writes or t.startswith("--data") or t.startswith("--trace"):
@@ -325,10 +382,11 @@ def segment_readonly(seg, unquoted, expandable):
                 method = t[2:] or (args[idx + 1] if idx + 1 < len(args) else "")
                 if method.upper() not in ("GET", "HEAD"):
                     return False
-            elif re.match(r"^-[A-Za-z]*[dDoOTFXc]", t):
-                # Short flags cluster (-sd, -sLo, -sT, -sc): d/D/o/O/T/F/X/c
-                # all send data or write files (c = cookie jar), wherever
-                # they sit in the cluster.
+            elif re.match(r"^-[A-Za-z]*[dDoOTFXcQK]", t):
+                # Short flags cluster (-sd, -sLo, -sT, -sc, -sQ):
+                # d/D/o/O/T/F/X/c/Q/K all send data, write files, run
+                # protocol commands (Q) or load a config (K), wherever they
+                # sit in the cluster.
                 return False
         return True
     return False
@@ -363,11 +421,23 @@ with open(path) as f:
                     mutating_bash += 1
             elif name in CORE_READONLY_TOOLS:
                 continue
+            elif name in ("Task", "Agent"):
+                # Subagents can edit files and call write APIs; only the
+                # read-only agent types stay neutral.
+                agent_type = (block.get("input") or {}).get("subagent_type", "")
+                if agent_type not in READONLY_AGENT_TYPES:
+                    suspicious_tools += 1
             elif name.startswith("mcp__"):
                 words = re.split(r"[-_]", name.rsplit("__", 1)[-1].lower())
                 if any(w in MCP_WRITE_VERBS for w in words) or not any(
                     w in MCP_READ_VERBS for w in words
                 ):
+                    suspicious_tools += 1
+                elif set(words) & SQL_TOOL_HINT and SQL_WRITE_RX.search(
+                    json.dumps(block.get("input") or {})
+                ):
+                    # Read-verb SQL tool carrying a write statement
+                    # (EXPLAIN ANALYZE executes it).
                     suspicious_tools += 1
             else:
                 # Unknown harness tool — assume it mutated something.

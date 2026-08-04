@@ -38,11 +38,11 @@ def _edit_entry(tool="Edit"):
     }
 
 
-def _tool_entry(name):
+def _tool_entry(name, tool_input=None):
     return {
         "message": {
             "role": "assistant",
-            "content": [{"type": "tool_use", "name": name, "input": {}}],
+            "content": [{"type": "tool_use", "name": name, "input": tool_input or {}}],
         }
     }
 
@@ -335,6 +335,133 @@ class StopHookBehaviorTest(unittest.TestCase):
 
     def test_python_smtplib_counts_as_mutating(self):
         entries = [_bash_entry("python3 -c \"import smtplib; ...\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_task_subagent_disables_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry("Task", {"subagent_type": "general-purpose", "prompt": "fix the bug"})
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_readonly_agent_types_keep_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry("Task", {"subagent_type": "Explore", "prompt": "find the config"}),
+            _tool_entry("Task", {"subagent_type": "Plan", "prompt": "plan the change"}),
+        ]
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_enter_worktree_disables_exemption(self):
+        entries = _READONLY_BASH + [_tool_entry("EnterWorktree")]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_explain_analyze_dml_disables_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry(
+                "mcp__neon__explain_sql_statement",
+                {"analyze": True, "sql": "DELETE FROM users"},
+            )
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_explain_plain_select_keeps_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry("mcp__neon__explain_sql_statement", {"sql": "SELECT count(*) FROM users"})
+        ]
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_prepare_named_tool_disables_exemption(self):
+        entries = _READONLY_BASH + [_tool_entry("mcp__neon__prepare_query_tuning")]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_resolve_named_tool_disables_exemption(self):
+        entries = _READONLY_BASH + [
+            _tool_entry("mcp__codex_apps__github_resolve_review_thread")
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_double_quote_backslash_parity(self):
+        # "a\\" — the two backslashes escape each other, the quote CLOSES,
+        # and the rm after the semicolon runs unquoted.
+        entries = [_bash_entry('echo "a\\\\" ; rm -rf ./victim')] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_curl_config_and_quote_count_as_mutating(self):
+        entries = [
+            _bash_entry("printf 'request = \"DELETE\"\\n' | curl --config - http://h/items/42"),
+            _bash_entry("curl -Q 'DELE important.txt' ftp://server/"),
+            _bash_entry("curl -sK curlrc http://h/"),
+            _bash_entry("curl --quote 'DELE x' ftp://server/"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_sqlite_execute_counts_as_mutating(self):
+        entries = [
+            _bash_entry(
+                "python3 -c \"import sqlite3; sqlite3.connect('app.db', isolation_level=None)"
+                ".execute('delete from users')\""
+            )
+        ] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_os_alias_counts_as_mutating(self):
+        entries = [_bash_entry("python3 -c \"import os as x; x.remove('/tmp/victim')\"")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_python_path_open_write_counts_as_mutating(self):
+        entries = [
+            _bash_entry(
+                "python3 -c \"from pathlib import Path; Path('/tmp/out').open('w').close()\""
+            )
+        ] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_sudo_date_positional_counts_as_mutating(self):
+        entries = [_bash_entry("sudo date 010100002025")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_date_readonly_forms_stay_readonly(self):
+        entries = [
+            _bash_entry("date +%Y-%m-%d"),
+            _bash_entry("date -u"),
+            _bash_entry("date -j -f '%Y' '2026' +%s"),
+            _bash_entry("date"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_git_upload_pack_counts_as_mutating(self):
+        entries = [
+            _bash_entry("git ls-remote --upload-pack='touch /tmp/pwn' ssh://host/repo")
+        ] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_awk_variable_targets_count_as_mutating(self):
+        entries = [
+            _bash_entry("awk 'BEGIN { c=\"rm -rf /tmp/victim\"; print | c; close(c) }'"),
+            _bash_entry("awk 'BEGIN { f=\"/tmp/out\"; print \"x\" > f; close(f) }'"),
+            _bash_entry("awk 'BEGIN { c=\"rm x\"; print | c }'"),
+            _bash_entry("awk '{ print > outfile }' outfile=/tmp/o data.txt"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_awk_numeric_comparison_stays_readonly(self):
+        entries = [_bash_entry("awk '$3 > 100 { print $1 }' data.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 0)
+
+    def test_sed_alternate_delimiter_write_counts_as_mutating(self):
+        entries = [_bash_entry("sed 's#a#b#w /tmp/out' input.txt")] * 4
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_xxd_uniq_stdin_output_counts_as_mutating(self):
+        entries = [
+            _bash_entry("printf 41 | xxd -r -p - /tmp/out.bin"),
+            _bash_entry("printf 'x\\nx\\n' | uniq - /tmp/out.txt"),
+            _bash_entry("printf 42 | xxd -r -p - /tmp/out2.bin"),
+            _bash_entry("printf 'y\\ny\\n' | uniq - /tmp/out2.txt"),
+        ]
+        self.assertEqual(self._run(entries).returncode, 2)
+
+    def test_less_log_file_counts_as_mutating(self):
+        entries = [_bash_entry("printf x | less -F -o /tmp/log")] * 4
         self.assertEqual(self._run(entries).returncode, 2)
 
 
