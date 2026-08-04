@@ -10,6 +10,7 @@ Everything beyond the [README](../README.md) landing page.
 | [CLI Reference](cli.md) | Every `obsidian-wiki` subcommand ([繁體中文: context packs](cli.zh-TW.md)) |
 | [Configuration](configuration.md) | Every config variable, QMD semantic search, `_raw/` staging, GitHub sync |
 | [Architecture](architecture.md) | The four ingest stages, vault structure, what we added to Karpathy's pattern |
+| [Knowledge Compilation Handbook](knowledge-compilation.md) | End-to-end model, page contract, operating workflow, measurement, and privacy-safe publication |
 | [Session Brain](session-brain.md) | Topic graph over your agent session history |
 | [Contributing](contributing.md) | Adding skills, keeping the two READMEs in sync |
 

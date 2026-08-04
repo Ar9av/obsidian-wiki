@@ -4,6 +4,8 @@ The wiki is the artifact. The agent is the maintainer. Obsidian is the viewer.
 
 No scripts run your knowledge pipeline — the skills are markdown files that tell an AI agent *how* to operate on your vault. The agent uses the same read/write/search tools it already has.
 
+For the complete operating model — including knowledge forms, page contracts, rollout, measurement, and publication safety — see the [Knowledge Compilation Handbook](knowledge-compilation.md).
+
 ## The four stages
 
 Every time you feed the brain, it runs through these:
@@ -15,6 +17,8 @@ The agent reads your source material directly — markdown, PDFs (with page rang
 ### 2. Pull information
 
 From the raw source, the agent pulls out concepts, entities, claims, relationships, and open questions. A conversation about debugging a React hook yields a "stale closure" pattern. A research paper yields the key idea and its caveats. A work log yields decisions and their rationale. Noise gets dropped, signal gets kept.
+
+The semantic form comes before the directory: concepts explain how something works, entities identify what it is, and synthesis pages explain why a choice was made. Operational categories such as skills, references, journals, and projects refine that model without replacing it.
 
 Each page also gets a 1–2 sentence `summary:` in its frontmatter at write time — later queries use this to preview pages without opening them.
 
