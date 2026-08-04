@@ -556,6 +556,16 @@ class StopHookBehaviorTest(unittest.TestCase):
                 sorted(codes), [0, 2], f"round {round_no}: exactly one nudge, got {codes}"
             )
             self.assertTrue(sentinel.exists(), f"round {round_no}: sentinel must survive")
+            # State invariant: whichever invocation ends up owning the
+            # sentinel, the edit count must be present — the winner writes
+            # it, and a restorer repairs it if it grabbed the sentinel in
+            # the winner's mkdir-to-write gap. Without it, the next re-arm
+            # would compute its delta from zero and fire early.
+            self.assertEqual(
+                (sentinel / "edits").read_text(),
+                "20",
+                f"round {round_no}: sentinel lost its edit-count state",
+            )
 
     def test_rearm_env_knobs_override_defaults(self):
         first = self._run([_edit_entry()] * 5, session_id="knobs")

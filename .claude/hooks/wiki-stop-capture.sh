@@ -505,7 +505,17 @@ if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && { [[ "$
     RET_AT=$(stat -f %m "$RETIRED" 2>/dev/null || stat -c %Y "$RETIRED" 2>/dev/null || echo 0)
     [[ "$RET_AT" =~ ^[0-9]+$ ]] || RET_AT=0
     if [[ $(( $(date +%s) - RET_AT )) -lt "$REARM_SECONDS" ]]; then
-      mv "$RETIRED" "$SENTINEL" 2>/dev/null || rm -rf "$RETIRED"
+      if mv "$RETIRED" "$SENTINEL" 2>/dev/null; then
+        # We may have grabbed the winner's sentinel in the gap between its
+        # mkdir and its count write — then the restored sentinel is missing
+        # its edit-count state. Both invocations counted the same stop's
+        # transcript, so our own count stands in for the winner's.
+        if [[ ! -e "$SENTINEL/edits" ]]; then
+          printf '%s' "$WRITE_EDIT" > "$SENTINEL/edits" 2>/dev/null || true
+        fi
+      else
+        rm -rf "$RETIRED"
+      fi
       exit 0
     fi
     rm -rf "$RETIRED"
