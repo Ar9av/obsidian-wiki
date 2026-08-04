@@ -523,9 +523,18 @@ class StopHookBehaviorTest(unittest.TestCase):
         # young-retire guard must let exactly one of them re-nudge — the
         # loser either loses the mv or grabs the winner's FRESH sentinel,
         # sees it is young, restores it, and stands down.
+        #
+        # TRUE concurrency matters: the hook's first statement is
+        # INPUT=$(cat), so feeding stdin through sequential communicate()
+        # calls would hold the second process at that read until the first
+        # had fully exited — serializing the bodies and never exercising
+        # the race. Both processes therefore get stdin from a pre-written
+        # file and run the whole body simultaneously; the transcript is
+        # large so the parse phase gives a wide overlap window between the
+        # age check and the claim.
         transcript = self.tmp / "transcript.jsonl"
         transcript.write_text(
-            "".join(json.dumps(_edit_entry()) + "\n" for _ in range(20))
+            "".join(json.dumps(_edit_entry()) + "\n" for _ in range(200))
         )
         for round_no in range(10):
             sid = f"race{round_no}"
@@ -533,24 +542,27 @@ class StopHookBehaviorTest(unittest.TestCase):
             sentinel.mkdir()
             (sentinel / "edits").write_text("0")
             self._age_sentinel(sid, 7 * 3600)
-            payload = json.dumps(
-                {"session_id": sid, "transcript_path": str(transcript)}
+            payload_file = self.tmp / f"payload{round_no}.json"
+            payload_file.write_text(
+                json.dumps({"session_id": sid, "transcript_path": str(transcript)})
             )
             env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp)}
-            procs = [
-                subprocess.Popen(
-                    ["bash", str(HOOK)],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    env=env,
-                )
-                for _ in range(2)
-            ]
+            procs = []
+            for _ in range(2):
+                with payload_file.open() as stdin_file:
+                    procs.append(
+                        subprocess.Popen(
+                            ["bash", str(HOOK)],
+                            stdin=stdin_file,
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            text=True,
+                            env=env,
+                        )
+                    )
             codes = []
             for p in procs:
-                p.communicate(payload)
+                p.communicate()
                 codes.append(p.returncode)
             self.assertEqual(
                 sorted(codes), [0, 2], f"round {round_no}: exactly one nudge, got {codes}"
@@ -563,7 +575,7 @@ class StopHookBehaviorTest(unittest.TestCase):
             # would compute its delta from zero and fire early.
             self.assertEqual(
                 (sentinel / "edits").read_text(),
-                "20",
+                "200",
                 f"round {round_no}: sentinel lost its edit-count state",
             )
 
