@@ -60,7 +60,17 @@ if [[ -n "$SESSION_ID" ]]; then
   SENTINEL="${TMPDIR:-/tmp}/wiki-stop-capture-${SESSION_ID}.done"
   if [[ -e "$SENTINEL" ]]; then
     NOW=$(date +%s)
-    CLAIMED_AT=$(stat -f %m "$SENTINEL" 2>/dev/null || stat -c %Y "$SENTINEL" 2>/dev/null || echo "$NOW")
+    # GNU stat's -f flag doesn't take a format argument (it means "show
+    # filesystem status"), so on Linux `stat -f %m FILE` treats %m as a
+    # second FILE operand: it errors on that bogus arg but still prints
+    # real filesystem info for the sentinel to stdout, and exits nonzero
+    # overall — so `||` ALSO runs `stat -c %Y`, and $(...) concatenates
+    # both outputs into one non-numeric string that silently falls back to
+    # $NOW below, permanently defeating the age check. Try the GNU form
+    # first: `stat -c` is an invalid option on BSD/macOS stat and fails
+    # clean (nonzero exit, no stdout), so the fallback to -f still works
+    # there.
+    CLAIMED_AT=$(stat -c %Y "$SENTINEL" 2>/dev/null || stat -f %m "$SENTINEL" 2>/dev/null || echo "$NOW")
     [[ "$CLAIMED_AT" =~ ^[0-9]+$ ]] || CLAIMED_AT="$NOW"
     if [[ $((NOW - CLAIMED_AT)) -lt "$REARM_SECONDS" ]]; then
       exit 0
@@ -502,7 +512,10 @@ if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && { [[ "$
     # happened — put it back and stand down. (If the restore fails, yet
     # another invocation claimed meanwhile; its sentinel wins, ours is
     # discarded.)
-    RET_AT=$(stat -f %m "$RETIRED" 2>/dev/null || stat -c %Y "$RETIRED" 2>/dev/null || echo 0)
+    # Same GNU-first ordering as the CLAIMED_AT lookup above, and for the
+    # same reason: a BSD-first fallback returns a non-numeric value on
+    # Linux instead of failing clean.
+    RET_AT=$(stat -c %Y "$RETIRED" 2>/dev/null || stat -f %m "$RETIRED" 2>/dev/null || echo 0)
     [[ "$RET_AT" =~ ^[0-9]+$ ]] || RET_AT=0
     if [[ $(( $(date +%s) - RET_AT )) -lt "$REARM_SECONDS" ]]; then
       if mv "$RETIRED" "$SENTINEL" 2>/dev/null; then
