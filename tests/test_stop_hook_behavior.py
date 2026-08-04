@@ -517,6 +517,46 @@ class StopHookBehaviorTest(unittest.TestCase):
         result = self._run([_edit_entry()] * 12, session_id="legacy")
         self.assertEqual(result.returncode, 2)
 
+    def test_concurrent_rearm_produces_exactly_one_nudge(self):
+        # Duplicate hook registration fires two invocations per stop. With an
+        # expired sentinel both pass the age check; the mv claim plus the
+        # young-retire guard must let exactly one of them re-nudge — the
+        # loser either loses the mv or grabs the winner's FRESH sentinel,
+        # sees it is young, restores it, and stands down.
+        transcript = self.tmp / "transcript.jsonl"
+        transcript.write_text(
+            "".join(json.dumps(_edit_entry()) + "\n" for _ in range(20))
+        )
+        for round_no in range(10):
+            sid = f"race{round_no}"
+            sentinel = self._sentinel(sid)
+            sentinel.mkdir()
+            (sentinel / "edits").write_text("0")
+            self._age_sentinel(sid, 7 * 3600)
+            payload = json.dumps(
+                {"session_id": sid, "transcript_path": str(transcript)}
+            )
+            env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp)}
+            procs = [
+                subprocess.Popen(
+                    ["bash", str(HOOK)],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    env=env,
+                )
+                for _ in range(2)
+            ]
+            codes = []
+            for p in procs:
+                p.communicate(payload)
+                codes.append(p.returncode)
+            self.assertEqual(
+                sorted(codes), [0, 2], f"round {round_no}: exactly one nudge, got {codes}"
+            )
+            self.assertTrue(sentinel.exists(), f"round {round_no}: sentinel must survive")
+
     def test_rearm_env_knobs_override_defaults(self):
         first = self._run([_edit_entry()] * 5, session_id="knobs")
         self.assertEqual(first.returncode, 2)

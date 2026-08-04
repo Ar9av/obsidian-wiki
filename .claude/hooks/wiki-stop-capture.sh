@@ -494,8 +494,21 @@ if [[ "${WRITE_EDIT:-0}" -ge 1 ]] || { [[ "${BASH_COUNT:-0}" -ge 4 ]] && { [[ "$
     fi
     # Atomically retire the expired sentinel: mv succeeds for exactly one of
     # any concurrent invocations, so only that one may proceed to re-claim.
-    mv "$SENTINEL" "${SENTINEL}.retired.$$" 2>/dev/null || exit 0
-    rm -rf "${SENTINEL}.retired.$$"
+    RETIRED="${SENTINEL}.retired.$$"
+    mv "$SENTINEL" "$RETIRED" 2>/dev/null || exit 0
+    # Guard against retiring the WRONG sentinel: a concurrent invocation may
+    # have re-armed, nudged, and claimed a FRESH sentinel between our age
+    # check and our mv. If what we grabbed is young, that nudge already
+    # happened — put it back and stand down. (If the restore fails, yet
+    # another invocation claimed meanwhile; its sentinel wins, ours is
+    # discarded.)
+    RET_AT=$(stat -f %m "$RETIRED" 2>/dev/null || stat -c %Y "$RETIRED" 2>/dev/null || echo 0)
+    [[ "$RET_AT" =~ ^[0-9]+$ ]] || RET_AT=0
+    if [[ $(( $(date +%s) - RET_AT )) -lt "$REARM_SECONDS" ]]; then
+      mv "$RETIRED" "$SENTINEL" 2>/dev/null || rm -rf "$RETIRED"
+      exit 0
+    fi
+    rm -rf "$RETIRED"
   fi
   # Atomically claim the right to nudge. Losers of the race exit silently so a
   # duplicate registration produces one nudge, not two. Claimed here rather than
