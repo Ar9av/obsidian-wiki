@@ -536,6 +536,7 @@ class StopHookBehaviorTest(unittest.TestCase):
         transcript.write_text(
             "".join(json.dumps(_edit_entry()) + "\n" for _ in range(200))
         )
+        raced_rounds = 0
         for round_no in range(10):
             sid = f"race{round_no}"
             sentinel = self._sentinel(sid)
@@ -547,12 +548,15 @@ class StopHookBehaviorTest(unittest.TestCase):
                 json.dumps({"session_id": sid, "transcript_path": str(transcript)})
             )
             env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp)}
+            # bash -x: the xtrace on stderr is evidence of WHICH path each
+            # process took, asserted on below — outcome checks alone cannot
+            # distinguish a genuine race from accidental serialization.
             procs = []
             for _ in range(2):
                 with payload_file.open() as stdin_file:
                     procs.append(
                         subprocess.Popen(
-                            ["bash", str(HOOK)],
+                            ["bash", "-x", str(HOOK)],
                             stdin=stdin_file,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,
@@ -561,9 +565,11 @@ class StopHookBehaviorTest(unittest.TestCase):
                         )
                     )
             codes = []
+            traces = []
             for p in procs:
-                p.communicate()
+                _, stderr = p.communicate()
                 codes.append(p.returncode)
+                traces.append(stderr)
             self.assertEqual(
                 sorted(codes), [0, 2], f"round {round_no}: exactly one nudge, got {codes}"
             )
@@ -578,6 +584,29 @@ class StopHookBehaviorTest(unittest.TestCase):
                 "200",
                 f"round {round_no}: sentinel lost its edit-count state",
             )
+            # A process that reached the claim phase shows an mv or mkdir on
+            # the sentinel path in its xtrace; a serialized loser instead
+            # exits at the top age check and never touches the sentinel.
+            marker = f"wiki-stop-capture-{sid}.done"
+            if all(
+                any(
+                    marker in line and ("+ mv " in line or "+ mkdir " in line)
+                    for line in trace.splitlines()
+                )
+                for trace in traces
+            ):
+                raced_rounds += 1
+        # The race path must demonstrably execute: in a genuinely concurrent
+        # round BOTH processes pass the age check and reach the claim.
+        # Requiring 3 of 10 rounds tolerates a loaded machine occasionally
+        # serializing a round (unloaded runs hit 10/10) while still failing
+        # loudly if the harness ever degrades back to sequential execution.
+        self.assertGreaterEqual(
+            raced_rounds,
+            3,
+            f"only {raced_rounds}/10 rounds raced — the test is not exercising "
+            "the concurrent claim path",
+        )
 
     def test_rearm_env_knobs_override_defaults(self):
         first = self._run([_edit_entry()] * 5, session_id="knobs")
