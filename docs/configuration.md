@@ -13,6 +13,8 @@ After resolving, skills also read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists.
 
 Both `~/.obsidian-wiki/config` and `.env` use the same `KEY=value` format. Start from [`.env.example`](../.env.example).
 
+The deterministic `lint`, `trust-record`, and `trust-check` commands use the same vault-scoped resolution: an explicit path uses no unrelated config, `@name` reads only `~/.obsidian-wiki/config.<name>`, otherwise the nearest CWD `.env` wins before global config. Schema settings are read from that same resolved config only, so one vault's lifecycle extensions cannot leak into another vault.
+
 ## Core
 
 | Variable | What it does | Default |
@@ -47,6 +49,14 @@ Local git repo clones work in `OBSIDIAN_SOURCES_DIR` (public or private, any hos
 |---|---|---|
 | `WIKI_STAGED_WRITES` | When `true`, LLM-written pages land in `_staging/` for human review instead of the live vault. Promote them with `/wiki-stage-commit` | *(unset — direct writes)* |
 | `OBSIDIAN_TRUST_STRICT` | When `1`, `obsidian-wiki lint` treats missing trust fields, ledger errors, stale reviews, and score mismatches as failures rather than warnings. Same as `lint --strict-trust` | *(unset)* |
+| `OBSIDIAN_ALLOWED_LIFECYCLES` | Comma-separated lifecycle extensions for this resolved vault | *(framework defaults only)* |
+| `OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES` | Comma-separated relationship-type extensions for this resolved vault | *(framework defaults only)* |
+| `OBSIDIAN_REQUIRED_TRUST_FIELDS` | Comma-separated effective required trust fields. Allowed values: `base_confidence`, `lifecycle`, `lifecycle_changed`, `updated`; unknown values fail closed | `base_confidence,lifecycle` for lint; also `updated` for standalone trust commands |
+| `OBSIDIAN_SCHEMA_SOURCE` | Owner authority locator emitted in machine reports | `config:<resolved-config-path>` when overrides exist |
+
+Schema resolution precedence is CLI flags > resolved environment/config values > framework defaults. Lifecycle and relationship-type extension lists are additive to framework defaults; CLI required-field values replace environment requiredness. CLI-only schema overrides use a `cli:<context>` source label rather than claiming a config-file provenance. If CLI and resolved config both contribute overrides, reports use `cli+config:<resolved-config-path>` unless `--schema-source` or `OBSIDIAN_SCHEMA_SOURCE` supplies the owner authority explicitly.
+
+The four schema variables are `OBSIDIAN_ALLOWED_LIFECYCLES`, `OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES`, `OBSIDIAN_REQUIRED_TRUST_FIELDS`, and `OBSIDIAN_SCHEMA_SOURCE`. When any is present, its value and every comma-separated entry must be non-empty after trimming whitespace. Empty values, repeated commas, and trailing commas fail closed with exit 1; remove the variable entirely to use framework defaults. The distributable `.env.example` documents safe commented examples for all four.
 
 Staged pages aren't visible in Obsidian's graph until promoted. `wiki-status` lists pending staged writes first when this mode is on — the work is done, it just needs your eyes. The `_staging/` directory is created at setup even when the mode is off.
 

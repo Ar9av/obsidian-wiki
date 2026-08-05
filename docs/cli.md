@@ -46,10 +46,13 @@ obsidian-wiki query "rate limiting" --top 12 --max-read 5 --json
 
 obsidian-wiki lint                     # uses the configured vault
 obsidian-wiki lint /path/to/vault --strict
+obsidian-wiki lint @research --json    # uses ~/.obsidian-wiki/config.research only
 obsidian-wiki lint --strict-trust      # fail on trust-ledger problems, not just warn
+obsidian-wiki lint --allow-lifecycle active --allow-relationship-type synthesizes \
+  --required-trust-field updated --schema-source /path/to/vault/AGENTS.md
 ```
 
-Both default to the configured `OBSIDIAN_VAULT_PATH`; pass a path or `--vault` to override. Use these when you want a fast local answer without going through an agent prompt.
+Lint resolves its vault and schema together: explicit path (no config inheritance), positional `@name`, nearest CWD `.env`, then global config. CLI schema flags extend/replace that resolved vault's settings and are recorded in the JSON `schema` block.
 
 ## Context packs
 
@@ -137,9 +140,11 @@ Records and validates human-approved confidence reviews, so you can gate on "a p
 obsidian-wiki trust-record --all --reviewed-at 2026-07-30T10:00:00+00:00 --approved
 obsidian-wiki trust-record --page concepts/rate-limiting.md --reviewed-at <ISO> --approved
 obsidian-wiki trust-check --strict
+obsidian-wiki trust-record @research --all --reviewed-at <ISO> --approved --allow-lifecycle active
+obsidian-wiki trust-check @research --allow-lifecycle active --schema-source /vault/AGENTS.md
 ```
 
-`--reviewed-at` needs a timezone. `--approved` is required and mandatory — it's your assertion that a human approved every confidence value being recorded. `trust-check --strict` is the CI/scheduled gate.
+`--reviewed-at` needs a timezone. `--approved` is required and mandatory — it's your assertion that a human approved every confidence value being recorded. `trust-check --strict` is the CI/scheduled gate. `trust-record` and `trust-check` resolve the same vault-scoped schema as lint; pass the same lifecycle and required-field overrides to record and check. If the owner schema does not require `base_confidence`, pages without it are reported as `not_applicable`, excluded by `trust-record --all`, and any obsolete ledger entry is warned by `trust-check` then removed by `trust-record --page` or a rebuild. Both JSON and human-readable record output list excluded pages and removed obsolete entries; human output also emits a stderr warning when removal occurs. Required-field config accepts only `base_confidence`, `lifecycle`, `lifecycle_changed`, and `updated`; typos fail closed. Lifecycle, relationship-type, and required-field override values are stripped and empty or whitespace-only entries are rejected rather than added to an allowlist. Without an explicit `--schema-source`, CLI overrides on an explicit vault are labeled `cli:explicit-vault`; combined CLI and config overrides use `cli+config:<resolved-config-path>`.
 
 ## Lower-level commands
 

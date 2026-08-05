@@ -272,6 +272,8 @@ A Mermaid diagram reconstructed from the paper's prose is a synthesis, not a tra
 
 Every claim on a wiki page has one of three provenance states. Mark them inline so the reader (and future ingest passes) can tell signal from synthesis.
 
+These are framework defaults. A vault's `AGENTS.md` may add markers or workflow flags. Preserve owner extensions and treat orthogonal workflow flags separately from the extracted/inferred/ambiguous truth-state axis.
+
 | State | Marker | Meaning |
 |---|---|---|
 | **Extracted** | *(no marker — default)* | A paraphrase of something a source actually says. |
@@ -324,6 +326,8 @@ Each entry has two required fields:
 
 ### Allowed relationship types
 
+The table below is the framework default allowlist. A vault's `AGENTS.md` may extend it; consumers must use the effective allowlist and preserve owner semantics without coercion.
+
 | Type | Meaning | Example |
 |---|---|---|
 | `extends` | This page builds on or generalises the target | GPT extends Transformer Architecture |
@@ -346,6 +350,10 @@ Skills that read `relationships:`: `wiki-export` (emits typed edges), `cross-lin
 ## Confidence and Lifecycle
 
 Every page carries two orthogonal trust signals plus an optional supersession link.
+
+The requiredness and lifecycle values below are framework defaults. A vault's `AGENTS.md` may extend lifecycle values or make trust fields optional. Validators must apply that effective owner schema while still validating any trust value that is present.
+
+The deterministic lint/trust consumer accepts owner schema through `OBSIDIAN_ALLOWED_LIFECYCLES`, `OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES`, `OBSIDIAN_REQUIRED_TRUST_FIELDS`, and `OBSIDIAN_SCHEMA_SOURCE`. Resolution precedence is CLI > environment/config > these framework defaults (with lifecycle and relationship extensions additive). Explicit blank or whitespace-only values fail closed; omit the variable to select defaults. `wiki-lint/SKILL.md` owns the operational invocation contract.
 
 ### Required fields
 

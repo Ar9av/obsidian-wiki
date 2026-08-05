@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
-from obsidian_wiki.trust import TRUST_LEDGER_RELATIVE_PATH, check_trust_ledger
+from obsidian_wiki.trust import (
+    ALLOWED_LIFECYCLES,
+    TRUST_LEDGER_RELATIVE_PATH,
+    check_trust_ledger,
+    validate_trust_metadata,
+)
 
 SKIP_DIRS = frozenset("_raw _archived _staging _archives _bootstrap .obsidian .git".split())
 REQUIRED_FRONTMATTER = (
@@ -180,7 +186,24 @@ def lint_vault(
     *,
     require_trust_ledger: bool = True,
     strict_trust: bool = False,
+    allowed_relationship_types: Collection[str] | None = None,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_fields: Collection[str] | None = None,
+    schema_source: str = "framework-defaults",
 ) -> dict[str, Any]:
+    relationship_types = frozenset(
+        ALLOWED_RELATIONSHIP_TYPES
+        if allowed_relationship_types is None
+        else allowed_relationship_types
+    )
+    lifecycles = frozenset(
+        ALLOWED_LIFECYCLES if allowed_lifecycles is None else allowed_lifecycles
+    )
+    trust_fields = (
+        tuple(required_trust_fields)
+        if required_trust_fields is not None
+        else TRUST_REQUIRED_FRONTMATTER
+    )
     pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
     slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -202,15 +225,24 @@ def lint_vault(
 
     missing_frontmatter = []
     confidence_missing_fields = []
+    trust_metadata_errors = []
     for page in pages:
         if page["slug"] in RESERVED_PAGE_STEMS:
             continue
         missing = [field for field in REQUIRED_FRONTMATTER if field not in page["fields"]]
         if missing:
             missing_frontmatter.append({"page": page["path"], "missing": missing})
-        missing_trust = [field for field in TRUST_REQUIRED_FRONTMATTER if field not in page["fields"]]
+        missing_trust = [field for field in trust_fields if field not in page["fields"]]
         if missing_trust:
             confidence_missing_fields.append({"page": page["path"], "missing": missing_trust})
+        try:
+            validate_trust_metadata(
+                vault / page["path"],
+                allowed_lifecycles=lifecycles,
+                required_trust_keys=(),
+            )
+        except ValueError as exc:
+            trust_metadata_errors.append({"page": page["path"], "issue": str(exc)})
 
     title_index: dict[str, list[str]] = defaultdict(list)
     for page in pages:
@@ -251,7 +283,7 @@ def lint_vault(
                 continue
             relation_type = relationship.get("type", "")
             target_raw = relationship.get("target", "")
-            if relation_type not in ALLOWED_RELATIONSHIP_TYPES:
+            if relation_type not in relationship_types:
                 typed_relationship_issues.append(
                     {
                         "page": page["path"],
@@ -295,7 +327,13 @@ def lint_vault(
 
     ledger_path = vault / TRUST_LEDGER_RELATIVE_PATH
     trust_report = (
-        check_trust_ledger(vault, ledger_path)
+        check_trust_ledger(
+            vault,
+            ledger_path,
+            allowed_lifecycles=lifecycles,
+            required_trust_keys=trust_fields,
+            schema_source=schema_source,
+        )
         if ledger_path.is_file() or require_trust_ledger
         else None
     )
@@ -308,6 +346,7 @@ def lint_vault(
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
         "confidence_missing_fields": confidence_missing_fields,
+        "trust_metadata_errors": trust_metadata_errors,
         "confidence_review_stale": trust_report["stale"] if trust_report else [],
         "confidence_unreviewed": trust_report["unreviewed"] if trust_report else [],
         "confidence_mismatches": trust_report["score_mismatches"] if trust_report else [],
@@ -338,7 +377,12 @@ def lint_vault(
         )
     )
 
-    if counts["broken_links"] or counts["missing_frontmatter"] or trust_fails:
+    if (
+        counts["broken_links"]
+        or counts["missing_frontmatter"]
+        or counts["trust_metadata_errors"]
+        or trust_fails
+    ):
         status = "fail"
     elif (
         any(
@@ -353,6 +397,12 @@ def lint_vault(
 
     return {
         "status": status,
+        "schema": {
+            "source": schema_source,
+            "allowed_lifecycles": sorted(lifecycles),
+            "allowed_relationship_types": sorted(relationship_types),
+            "required_trust_fields": list(trust_fields),
+        },
         "stats": {
             "pages": len(pages),
             "link_count": sum(len(page["links"]) for page in pages),

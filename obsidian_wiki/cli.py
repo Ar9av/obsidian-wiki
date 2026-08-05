@@ -12,10 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
 
 from obsidian_wiki import __version__
 
@@ -27,6 +29,13 @@ GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
 # config). These are also installed globally for agents that only scope skills
 # per-project, so cross-project sync/query/context work everywhere.
 PORTABLE_SKILLS = ("wiki-update", "wiki-query", "wiki-context-pack")
+
+
+class SchemaOptions(TypedDict):
+    allowed_lifecycles: frozenset[str]
+    allowed_relationship_types: frozenset[str]
+    required_trust_fields: tuple[str, ...]
+    schema_source: str
 
 
 # ── Data resolution ──────────────────────────────────────────────────────────
@@ -1067,25 +1076,200 @@ def _print_lint(report: dict[str, object]) -> None:
         print(f"{name}: {count}")
 
 
+def _schema_csv(config: dict[str, str], key: str) -> list[str]:
+    if key not in config:
+        return []
+    values = [item.strip() for item in config[key].split(",")]
+    if any(not item for item in values):
+        raise ValueError(f"invalid {key} value: entries must not be empty")
+    return values
+
+
+def _schema_cli_values(values: list[str] | None, flag: str) -> list[str]:
+    normalised = [item.strip() for item in values or []]
+    if any(not item for item in normalised):
+        raise ValueError(f"invalid {flag} value: must not be empty")
+    return normalised
+
+
+def _schema_source_value(
+    args: argparse.Namespace,
+    config: dict[str, str],
+) -> str | None:
+    configured_value: str | None = None
+    if "OBSIDIAN_SCHEMA_SOURCE" in config:
+        configured_value = config["OBSIDIAN_SCHEMA_SOURCE"].strip()
+        if not configured_value:
+            raise ValueError("invalid OBSIDIAN_SCHEMA_SOURCE value: must not be empty")
+
+    cli_value = getattr(args, "schema_source", None)
+    if cli_value is not None:
+        value = cli_value.strip()
+        if not value:
+            raise ValueError("invalid --schema-source value: must not be empty")
+        return value
+    return configured_value
+
+
+def _read_config_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+def _resolve_schema_command_context(
+    vault_arg: str | None,
+) -> tuple[Path, dict[str, str], str] | None:
+    config: dict[str, str]
+    config_source: str
+    if vault_arg and vault_arg.startswith("@"):
+        name = vault_arg[1:]
+        if not name or re.fullmatch(r"[A-Za-z0-9_-]+", name) is None:
+            print("error: named vault must use @ followed by letters, digits, _ or -", file=sys.stderr)
+            return None
+        path = GLOBAL_CONFIG_DIR / f"config.{name}"
+        config = _read_config_file(path)
+        config_source = str(path)
+        resolved = config.get("OBSIDIAN_VAULT_PATH", "")
+    elif vault_arg is not None:
+        config = {}
+        config_source = "explicit-vault"
+        resolved = vault_arg
+    else:
+        current = Path.cwd().resolve()
+        config = {}
+        config_source = str(GLOBAL_CONFIG)
+        while True:
+            candidate = current / ".env"
+            local = _read_config_file(candidate)
+            if "OBSIDIAN_VAULT_PATH" in local:
+                config = local
+                config_source = str(candidate)
+                break
+            if current == HOME or current.parent == current:
+                break
+            current = current.parent
+        if not config:
+            config = _read_config_file(GLOBAL_CONFIG)
+        resolved = config.get("OBSIDIAN_VAULT_PATH", "")
+    if not resolved:
+        print("error: vault not configured; pass a path, @name, or run obsidian-wiki setup", file=sys.stderr)
+        return None
+    vault = Path(resolved).expanduser().resolve()
+    if not vault.is_dir():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return None
+    return vault, config, config_source
+
+
+def _schema_options(
+    args: argparse.Namespace,
+    config: dict[str, str],
+    config_source: str,
+    *,
+    default_required_trust_fields: tuple[str, ...] | None = None,
+) -> SchemaOptions:
+    from obsidian_wiki.lint import (
+        ALLOWED_RELATIONSHIP_TYPES,
+        TRUST_REQUIRED_FRONTMATTER,
+    )
+    from obsidian_wiki.trust import (
+        ALLOWED_LIFECYCLES,
+        TRUST_REQUIRED_FIELD_ALLOWLIST,
+    )
+
+    cli_lifecycles = _schema_cli_values(
+        getattr(args, "allow_lifecycle", None), "--allow-lifecycle"
+    )
+    cli_relationships = _schema_cli_values(
+        getattr(args, "allow_relationship_type", None), "--allow-relationship-type"
+    )
+    raw_cli_required = getattr(args, "required_trust_field", None)
+    cli_required = (
+        _schema_cli_values(raw_cli_required, "--required-trust-field")
+        if raw_cli_required is not None
+        else None
+    )
+    configured_lifecycles = _schema_csv(config, "OBSIDIAN_ALLOWED_LIFECYCLES")
+    configured_relationships = _schema_csv(config, "OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES")
+    configured_required = _schema_csv(config, "OBSIDIAN_REQUIRED_TRUST_FIELDS")
+    unknown_required = sorted(
+        set(configured_required).union(cli_required or ()) - TRUST_REQUIRED_FIELD_ALLOWLIST
+    )
+    if unknown_required:
+        allowed = ", ".join(sorted(TRUST_REQUIRED_FIELD_ALLOWLIST))
+        unknown = ", ".join(unknown_required)
+        raise ValueError(
+            "invalid OBSIDIAN_REQUIRED_TRUST_FIELDS value(s): "
+            f"{unknown}; allowed values: {allowed}"
+        )
+    required = tuple(
+        cli_required
+        if cli_required is not None
+        else configured_required
+        or list(default_required_trust_fields or TRUST_REQUIRED_FRONTMATTER)
+    )
+    cli_overrides = bool(
+        cli_lifecycles
+        or cli_relationships
+        or cli_required is not None
+    )
+    configured_overrides = bool(
+        configured_lifecycles
+        or configured_relationships
+        or configured_required
+    )
+    source = _schema_source_value(args, config)
+    if not source:
+        if cli_overrides and configured_overrides:
+            source = f"cli+config:{config_source}"
+        elif cli_overrides:
+            source = f"cli:{config_source}"
+        elif configured_overrides:
+            source = f"config:{config_source}"
+        else:
+            source = "framework-defaults"
+    return {
+        "allowed_lifecycles": ALLOWED_LIFECYCLES.union(configured_lifecycles, cli_lifecycles),
+        "allowed_relationship_types": ALLOWED_RELATIONSHIP_TYPES.union(
+            configured_relationships, cli_relationships
+        ),
+        "required_trust_fields": required,
+        "schema_source": source,
+    }
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from obsidian_wiki.lint import lint_vault
 
-    vault_arg = args.vault or _read_config_value("OBSIDIAN_VAULT_PATH")
-    if not vault_arg:
-        print("error: vault not configured; pass a path or run obsidian-wiki setup", file=sys.stderr)
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
         return 1
+    vault, config, config_source = context
 
-    vault = Path(vault_arg).expanduser().resolve()
-    if not vault.is_dir():
-        print(f"error: vault not found: {vault}", file=sys.stderr)
-        return 1
-
-    strict_trust = args.strict_trust or _read_config_value("OBSIDIAN_TRUST_STRICT").strip().lower() in (
+    strict_trust = args.strict_trust or config.get("OBSIDIAN_TRUST_STRICT", "").strip().lower() in (
         "1",
         "true",
         "yes",
     )
-    report = lint_vault(vault, require_trust_ledger=True, strict_trust=strict_trust)
+    try:
+        schema = _schema_options(args, config, config_source)
+        report = lint_vault(
+            vault,
+            require_trust_ledger=True,
+            strict_trust=strict_trust,
+            **schema,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         if args.pretty:
             print(json.dumps(report, indent=2))
@@ -1153,17 +1337,50 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
     from obsidian_wiki.trust import (
         TRUST_LEDGER_RELATIVE_PATH,
         build_trust_ledger,
+        check_trust_ledger,
         update_trust_ledger,
         write_trust_ledger,
     )
 
-    vault = _resolve_command_vault(args.vault)
-    if vault is None:
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault, config, config_source = context
+    try:
+        schema = _schema_options(
+            args,
+            config,
+            config_source,
+            default_required_trust_fields=("base_confidence", "lifecycle", "updated"),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
     path = vault / TRUST_LEDGER_RELATIVE_PATH
     try:
         if args.all:
-            ledger = build_trust_ledger(vault, reviewed_at=args.reviewed_at)
+            removed_not_applicable: list[str] = []
+            if path.is_file():
+                previous = check_trust_ledger(
+                    vault,
+                    path,
+                    allowed_lifecycles=schema["allowed_lifecycles"],
+                    required_trust_keys=schema["required_trust_fields"],
+                    schema_source=schema["schema_source"],
+                )
+                removed_not_applicable = sorted(
+                    item["page"]
+                    for item in previous["stale"]
+                    if item.get("reason")
+                    == "confidence_not_applicable_but_ledger_entry_exists"
+                )
+            ledger = build_trust_ledger(
+                vault,
+                reviewed_at=args.reviewed_at,
+                allowed_lifecycles=schema["allowed_lifecycles"],
+                required_trust_keys=schema["required_trust_fields"],
+            )
+            ledger["removed_not_applicable"] = removed_not_applicable
             recorded_pages = len(ledger["pages"])
         else:
             ledger = update_trust_ledger(
@@ -1171,33 +1388,80 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
                 path,
                 reviewed_at=args.reviewed_at,
                 page_paths=args.page,
+                allowed_lifecycles=schema["allowed_lifecycles"],
+                required_trust_keys=schema["required_trust_fields"],
             )
-            recorded_pages = len(set(args.page))
+            requested = {
+                Path(raw).as_posix().removeprefix("./") for raw in args.page
+            }
+            recorded_pages = len(requested.intersection(ledger["pages"]))
         write_trust_ledger(path, ledger, vault=vault)
-    except ValueError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     result = {
         "status": "recorded",
         "ledger_path": str(path),
         "recorded_pages": recorded_pages,
+        "not_applicable_pages": list(ledger.get("not_applicable", [])),
+        "removed_not_applicable": list(ledger.get("removed_not_applicable", [])),
         "reviewed_at": args.reviewed_at,
         "method": ledger["method"],
+        "schema": {
+            "source": schema["schema_source"],
+            "allowed_lifecycles": sorted(schema["allowed_lifecycles"]),
+            "required_trust_fields": list(schema["required_trust_fields"]),
+        },
     }
     if args.json:
         print(json.dumps(result, indent=2 if args.pretty else None))
     else:
         print(f"recorded {result['recorded_pages']} reviewed page(s) in {path}")
+        print(
+            "not applicable (excluded from trust review): "
+            f"{len(result['not_applicable_pages'])} page(s)"
+        )
+        for page in result["not_applicable_pages"]:
+            print(f"  - {page}")
+        print(
+            "obsolete ledger entries removed: "
+            f"{len(result['removed_not_applicable'])} page(s)"
+        )
+        for page in result["removed_not_applicable"]:
+            print(f"  - {page}")
+        if result["removed_not_applicable"]:
+            removed = ", ".join(result["removed_not_applicable"])
+            print(
+                "warning: removed obsolete trust ledger entries because "
+                f"base_confidence is not applicable: {removed}",
+                file=sys.stderr,
+            )
     return 0
 
 
 def cmd_trust_check(args: argparse.Namespace) -> int:
     from obsidian_wiki.trust import check_trust_ledger
 
-    vault = _resolve_command_vault(args.vault)
-    if vault is None:
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
         return 1
-    report = check_trust_ledger(vault)
+    vault, config, config_source = context
+    try:
+        schema = _schema_options(
+            args,
+            config,
+            config_source,
+            default_required_trust_fields=("base_confidence", "lifecycle", "updated"),
+        )
+        report = check_trust_ledger(
+            vault,
+            allowed_lifecycles=schema["allowed_lifecycles"],
+            required_trust_keys=schema["required_trust_fields"],
+            schema_source=schema["schema_source"],
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         print(json.dumps(report, indent=2 if args.pretty else None))
     else:
@@ -1502,7 +1766,7 @@ def build_parser() -> argparse.ArgumentParser:
         "lint",
         help="lint a vault for missing frontmatter, broken links, duplicates, and orphans",
     )
-    lt.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    lt.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     lt.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     lt.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     lt.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
@@ -1515,13 +1779,35 @@ def build_parser() -> argparse.ArgumentParser:
             "Also settable per-vault via OBSIDIAN_TRUST_STRICT=1 in the config."
         ),
     )
+    lt.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework lifecycle allowlist (repeatable)",
+    )
+    lt.add_argument(
+        "--allow-relationship-type",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework relationship-type allowlist (repeatable)",
+    )
+    lt.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace default trust-field requiredness (repeatable)",
+    )
+    lt.add_argument(
+        "--schema-source",
+        help="authority locator recorded in the lint report (for example, vault/AGENTS.md)",
+    )
     lt.set_defaults(func=cmd_lint)
 
     tr = sub.add_parser(
         "trust-record",
         help="record explicitly approved manual confidence reviews in the vault trust ledger",
     )
-    tr.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    tr.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     selection = tr.add_mutually_exclusive_group(required=True)
     selection.add_argument("--all", action="store_true", help="record every current trust-schema page")
     selection.add_argument(
@@ -1539,16 +1825,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tr.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     tr.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    tr.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the resolved vault lifecycle allowlist (repeatable)",
+    )
+    tr.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace resolved vault trust-field requiredness (repeatable)",
+    )
+    tr.add_argument("--schema-source", help="authority locator recorded in the result")
     tr.set_defaults(func=cmd_trust_record)
 
     tc = sub.add_parser(
         "trust-check",
         help="validate confidence values and material fingerprints against the manual trust ledger",
     )
-    tc.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    tc.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     tc.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     tc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     tc.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    tc.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework lifecycle allowlist (repeatable)",
+    )
+    tc.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace default trust-field requiredness (repeatable)",
+    )
+    tc.add_argument(
+        "--schema-source",
+        help="authority locator recorded in the trust report",
+    )
     tc.set_defaults(func=cmd_trust_check)
 
     qq = sub.add_parser(

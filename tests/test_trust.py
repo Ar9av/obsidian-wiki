@@ -9,7 +9,13 @@ import sys
 from pathlib import Path
 
 from obsidian_wiki.lint import lint_vault
-from obsidian_wiki.trust import build_trust_ledger, check_trust_ledger, write_trust_ledger
+from obsidian_wiki.trust import (
+    build_trust_ledger,
+    check_trust_ledger,
+    page_fingerprint,
+    update_trust_ledger,
+    write_trust_ledger,
+)
 
 
 def _page(
@@ -73,6 +79,7 @@ def test_reviewed_ledger_is_authoritative_instead_of_reclassifying_sources(tmp_p
     assert report["status"] == "pass"
     assert report["counts"] == {
         "reviewed": 2,
+        "not_applicable": 0,
         "stale": 0,
         "unreviewed": 0,
         "score_mismatches": 0,
@@ -169,6 +176,179 @@ def test_invalid_lifecycle_fails_closed(tmp_path: Path) -> None:
     assert report["errors"] == [
         {"page": "concepts/alpha.md", "issue": "invalid lifecycle: totally-invalid"}
     ]
+
+
+def test_owner_trust_schema_accepts_lifecycle_and_optional_fields(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    ledger_path = _write_ledger(vault)
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", "").replace("lifecycle: reviewed", "lifecycle: active"))
+
+    report = check_trust_ledger(
+        vault,
+        ledger_path,
+        allowed_lifecycles={"active", "confirmed", "stub"},
+        required_trust_keys=("updated",),
+        schema_source="wiki/AGENTS.md",
+    )
+
+    assert report["status"] == "warn"
+    assert report["errors"] == []
+    assert report["not_applicable"] == [
+        {
+            "page": "concepts/alpha.md",
+            "reason": "base_confidence_absent_by_owner_schema",
+        }
+    ]
+    assert report["stale"] == [
+        {
+            "page": "concepts/alpha.md",
+            "reason": "confidence_not_applicable_but_ledger_entry_exists",
+        }
+    ]
+    assert report["schema"] == {
+        "source": "wiki/AGENTS.md",
+        "allowed_lifecycles": ["active", "confirmed", "stub"],
+        "required_trust_fields": ["updated"],
+    }
+
+
+def test_owner_schema_build_excludes_no_confidence_page_as_not_applicable(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    ledger = build_trust_ledger(
+        vault,
+        reviewed_at="2026-08-05T12:00:00+09:00",
+        required_trust_keys=("updated",),
+    )
+
+    assert ledger["pages"] == {}
+    assert ledger["not_applicable"] == ["concepts/alpha.md"]
+    assert page_fingerprint(page, required_trust_keys=("updated",)).startswith("sha256:")
+
+
+def test_owner_schema_update_removes_stale_no_confidence_entry(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    ledger_path = _write_ledger(vault)
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    before = check_trust_ledger(
+        vault,
+        ledger_path,
+        required_trust_keys=("updated",),
+    )
+    assert before["status"] == "warn"
+    assert before["stale"] == [
+        {
+            "page": "concepts/alpha.md",
+            "reason": "confidence_not_applicable_but_ledger_entry_exists",
+        }
+    ]
+
+    ledger = update_trust_ledger(
+        vault,
+        ledger_path,
+        reviewed_at="2026-08-05T13:00:00+09:00",
+        page_paths=["concepts/alpha.md"],
+        required_trust_keys=("updated",),
+    )
+    assert ledger["pages"] == {}
+    assert ledger["not_applicable"] == ["concepts/alpha.md"]
+    assert ledger["removed_not_applicable"] == ["concepts/alpha.md"]
+    write_trust_ledger(ledger_path, ledger, vault=vault)
+
+    after = check_trust_ledger(
+        vault,
+        ledger_path,
+        required_trust_keys=("updated",),
+    )
+    assert after["status"] == "pass"
+    assert after["counts"]["not_applicable"] == 1
+    assert after["stale"] == []
+
+
+def test_owner_trust_schema_rejects_unknown_lifecycle_typo(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    ledger_path = _write_ledger(vault)
+    page.write_text(page.read_text().replace("lifecycle: reviewed", "lifecycle: activ"))
+
+    report = check_trust_ledger(
+        vault,
+        ledger_path,
+        allowed_lifecycles={"active", "confirmed", "stub"},
+        required_trust_keys=("updated",),
+        schema_source="wiki/AGENTS.md",
+    )
+
+    assert report["status"] == "fail"
+    assert report["errors"] == [
+        {"page": "concepts/alpha.md", "issue": "invalid lifecycle: activ"}
+    ]
+
+
+def test_owner_lifecycle_propagates_through_record_update_and_check(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("lifecycle: reviewed", "lifecycle: active"))
+    schema = {
+        "allowed_lifecycles": {"active", "confirmed", "stub"},
+        "required_trust_keys": ("base_confidence", "lifecycle", "updated"),
+    }
+
+    ledger = build_trust_ledger(
+        vault,
+        reviewed_at="2026-08-05T12:00:00+09:00",
+        **schema,
+    )
+    ledger_path = vault / "_meta" / "trust-ledger.json"
+    write_trust_ledger(ledger_path, ledger, vault=vault)
+    assert check_trust_ledger(vault, ledger_path, schema_source="wiki/AGENTS.md", **schema)["status"] == "pass"
+
+    page.write_text(page.read_text().replace("Reviewed material claim.", "Reviewed updated claim."))
+    updated = update_trust_ledger(
+        vault,
+        ledger_path,
+        reviewed_at="2026-08-05T13:00:00+09:00",
+        page_paths=["concepts/alpha.md"],
+        **schema,
+    )
+    write_trust_ledger(ledger_path, updated, vault=vault)
+    assert check_trust_ledger(vault, ledger_path, schema_source="wiki/AGENTS.md", **schema)["status"] == "pass"
+
+
+def test_owner_lifecycle_cli_record_then_check(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("lifecycle: reviewed", "lifecycle: active"))
+    schema_args = (
+        "--allow-lifecycle",
+        "active",
+        "--schema-source",
+        "wiki/AGENTS.md",
+    )
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T12:00:00+09:00",
+        "--approved",
+        "--json",
+        *schema_args,
+    )
+    assert record.returncode == 0, record.stderr
+    assert json.loads(record.stdout)["schema"]["source"] == "wiki/AGENTS.md"
+
+    check = _run_cli(home, "trust-check", str(vault), "--json", *schema_args)
+    assert check.returncode == 0, check.stderr
+    assert json.loads(check.stdout)["status"] == "pass"
 
 
 def test_mismatched_scalar_quotes_fail_closed(tmp_path: Path) -> None:
@@ -757,6 +937,207 @@ def test_trust_record_and_check_cli_round_trip(tmp_path: Path) -> None:
     payload = json.loads(check.stdout)
     assert payload["status"] == "pass"
     assert payload["counts"]["reviewed"] == 1
+
+
+def test_owner_schema_cli_excludes_then_removes_no_confidence_ledger_entry(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    _write_ledger(vault)
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+    schema_args = ("--required-trust-field", "updated")
+
+    stale = _run_cli(home, "trust-check", str(vault), "--json", *schema_args)
+    assert stale.returncode == 0, stale.stderr
+    stale_payload = json.loads(stale.stdout)
+    assert stale_payload["status"] == "warn"
+    assert stale_payload["stale"] == [
+        {
+            "page": "concepts/alpha.md",
+            "reason": "confidence_not_applicable_but_ledger_entry_exists",
+        }
+    ]
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--page",
+        "concepts/alpha.md",
+        "--reviewed-at",
+        "2026-08-05T13:00:00+09:00",
+        "--approved",
+        "--json",
+        *schema_args,
+    )
+    assert record.returncode == 0, record.stderr
+    record_payload = json.loads(record.stdout)
+    assert record_payload["recorded_pages"] == 0
+    assert record_payload["not_applicable_pages"] == ["concepts/alpha.md"]
+    assert record_payload["removed_not_applicable"] == ["concepts/alpha.md"]
+
+    clean = _run_cli(home, "trust-check", str(vault), "--json", *schema_args)
+    assert clean.returncode == 0, clean.stderr
+    clean_payload = json.loads(clean.stdout)
+    assert clean_payload["status"] == "pass"
+    assert clean_payload["counts"]["not_applicable"] == 1
+    assert clean_payload["stale"] == []
+
+    rebuilt = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--json",
+        *schema_args,
+    )
+    assert rebuilt.returncode == 0, rebuilt.stderr
+    rebuilt_payload = json.loads(rebuilt.stdout)
+    assert rebuilt_payload["recorded_pages"] == 0
+    assert rebuilt_payload["not_applicable_pages"] == ["concepts/alpha.md"]
+
+
+def test_trust_record_all_human_output_lists_no_confidence_without_removal(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--required-trust-field",
+        "updated",
+    )
+
+    assert record.returncode == 0
+    assert "removed obsolete trust ledger entries" not in record.stderr
+    assert record.stdout == (
+        f"recorded 0 reviewed page(s) in {vault.resolve() / '_meta' / 'trust-ledger.json'}\n"
+        "not applicable (excluded from trust review): 1 page(s)\n"
+        "  - concepts/alpha.md\n"
+        "obsolete ledger entries removed: 0 page(s)\n"
+    )
+
+
+def test_trust_record_all_human_output_warns_when_rebuild_removes_stale_entry(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    _write_ledger(vault)
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--required-trust-field",
+        "updated",
+    )
+
+    assert record.returncode == 0
+    assert "not applicable (excluded from trust review): 1 page(s)" in record.stdout
+    assert "obsolete ledger entries removed: 1 page(s)\n  - concepts/alpha.md" in record.stdout
+    assert record.stderr.endswith(
+        "warning: removed obsolete trust ledger entries because base_confidence is not "
+        "applicable: concepts/alpha.md\n"
+    )
+    assert record.stderr.count("warning: removed obsolete trust ledger entries") == 1
+    ledger = json.loads((vault / "_meta" / "trust-ledger.json").read_text())
+    assert ledger["pages"] == {}
+    assert ledger["removed_not_applicable"] == ["concepts/alpha.md"]
+
+
+def test_trust_record_page_human_output_warns_when_stale_entry_is_removed(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    _write_ledger(vault)
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--page",
+        "concepts/alpha.md",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--required-trust-field",
+        "updated",
+    )
+
+    assert record.returncode == 0
+    assert "not applicable (excluded from trust review): 1 page(s)\n  - concepts/alpha.md" in record.stdout
+    assert "obsolete ledger entries removed: 1 page(s)\n  - concepts/alpha.md" in record.stdout
+    assert "warning: removed obsolete trust ledger entries" in record.stderr
+    assert "concepts/alpha.md" in record.stderr
+
+
+def test_trust_record_page_human_output_reports_zero_removals_without_warning(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--page",
+        "concepts/alpha.md",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--required-trust-field",
+        "updated",
+    )
+
+    assert record.returncode == 0
+    assert "not applicable (excluded from trust review): 1 page(s)\n  - concepts/alpha.md" in record.stdout
+    assert "obsolete ledger entries removed: 0 page(s)" in record.stdout
+    assert "removed obsolete trust ledger entries" not in record.stderr
+
+
+def test_explicit_vault_cli_override_reports_cli_schema_source(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "explicit-vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("base_confidence: 0.80\n", ""))
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T14:00:00+09:00",
+        "--approved",
+        "--required-trust-field",
+        "updated",
+        "--json",
+    )
+
+    assert record.returncode == 0, record.stderr
+    assert "removed obsolete trust ledger entries" not in record.stderr
+    assert json.loads(record.stdout)["schema"]["source"] == "cli:explicit-vault"
 
 
 def test_partial_trust_record_does_not_approve_other_stale_pages(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -59,8 +60,23 @@ def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,
+        check=False,
         text=True,
         env=env,
+    )
+
+
+def _run_at(home: Path, cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env["PYTHONPATH"] = str(Path(__file__).parents[1])
+    return subprocess.run(
+        [sys.executable, "-m", "obsidian_wiki.cli", *args],
+        capture_output=True,
+        check=False,
+        text=True,
+        env=env,
+        cwd=cwd,
     )
 
 
@@ -188,3 +204,417 @@ def test_lint_cli_strict_trust_flag_fails_legacy_vault(tmp_path: Path) -> None:
     strict_proc = _run(home, "lint", "--json", "--strict-trust")
     assert strict_proc.returncode == 1
     assert json.loads(strict_proc.stdout)["status"] == "fail"
+
+
+def test_owner_schema_accepts_extensions_optional_trust_and_reports_source(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    extensions = [
+        ("active", "synthesizes"),
+        ("confirmed", "builds_on"),
+        ("stub", "complements"),
+        ("active", "refines"),
+        ("confirmed", "contrasts_with"),
+    ]
+    names = [f"page-{index}" for index in range(len(extensions))]
+    for index, ((lifecycle, relationship), name) in enumerate(zip(extensions, names)):
+        target = names[(index + 1) % len(names)]
+        page = _page(vault, f"concepts/{name}.md", links=[target])
+        text = page.read_text()
+        text = text.replace("base_confidence: 0.80\n", "")
+        text = text.replace(
+            "lifecycle: reviewed",
+            f'lifecycle: {lifecycle}\nrelationships:\n  - type: {relationship}\n    target: "[[concepts/{target}]]"',
+        )
+        page.write_text(text)
+
+    report = lint_vault(
+        vault,
+        require_trust_ledger=False,
+        allowed_lifecycles={"active", "confirmed", "stub"},
+        allowed_relationship_types={item[1] for item in extensions},
+        required_trust_fields=("updated",),
+        schema_source="wiki/AGENTS.md",
+    )
+
+    assert report["findings"]["confidence_missing_fields"] == []
+    assert report["findings"]["typed_relationship_issues"] == []
+    assert report["schema"] == {
+        "source": "wiki/AGENTS.md",
+        "allowed_lifecycles": ["active", "confirmed", "stub"],
+        "allowed_relationship_types": sorted(item[1] for item in extensions),
+        "required_trust_fields": ["updated"],
+    }
+
+
+def test_invalid_configured_required_trust_field_fails_closed_for_all_cli_paths(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    vault = tmp_path / "vault"
+    project.mkdir()
+    _page(vault, "concepts/alpha.md")
+    (project / ".env").write_text(
+        f'OBSIDIAN_VAULT_PATH="{vault}"\n'
+        "OBSIDIAN_REQUIRED_TRUST_FIELDS=updated,base_confidnce\n",
+        encoding="utf-8",
+    )
+    expected = (
+        "error: invalid OBSIDIAN_REQUIRED_TRUST_FIELDS value(s): base_confidnce; "
+        "allowed values: base_confidence, lifecycle, lifecycle_changed, updated"
+    )
+    commands = (
+        ("lint", "--json"),
+        (
+            "trust-record",
+            "--all",
+            "--reviewed-at",
+            "2026-08-05T12:00:00+09:00",
+            "--approved",
+            "--json",
+        ),
+        ("trust-check", "--json"),
+    )
+
+    for command in commands:
+        proc = _run_at(home, project, *command)
+        assert proc.returncode == 1, (command, proc.stdout, proc.stderr)
+        assert proc.stdout == ""
+        assert expected in proc.stderr
+        assert "Traceback" not in proc.stderr
+
+    assert not (vault / "_meta" / "trust-ledger.json").exists()
+
+
+def test_empty_relationship_cli_extension_cannot_hide_missing_relation_type(
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    alpha = _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    alpha.write_text(
+        alpha.read_text().replace(
+            "summary: Short summary.",
+            'summary: Short summary.\nrelationships:\n  - type:\n    target: "[[concepts/beta]]"',
+        )
+    )
+
+    baseline = _run(home, "lint", str(vault), "--json")
+    assert baseline.returncode == 0
+    assert json.loads(baseline.stdout)["findings"]["typed_relationship_issues"] == [
+        {"page": "concepts/alpha.md", "index": 0, "issue": "invalid_type", "type": ""}
+    ]
+
+    for value in ("", "   "):
+        invalid = _run(
+            home,
+            "lint",
+            str(vault),
+            "--json",
+            "--allow-relationship-type",
+            value,
+        )
+        assert invalid.returncode == 1
+        assert invalid.stdout == ""
+        assert "error: invalid --allow-relationship-type value: must not be empty" in invalid.stderr
+        assert "Traceback" not in invalid.stderr
+
+
+def test_empty_cli_lifecycle_and_required_field_overrides_fail_closed(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+
+    for value in ("", "   "):
+        lifecycle = _run(
+            home,
+            "lint",
+            str(vault),
+            "--json",
+            "--allow-lifecycle",
+            value,
+        )
+        assert lifecycle.returncode == 1
+        assert lifecycle.stdout == ""
+        assert "error: invalid --allow-lifecycle value: must not be empty" in lifecycle.stderr
+        assert "Traceback" not in lifecycle.stderr
+
+    required = _run(
+        home,
+        "lint",
+        str(vault),
+        "--json",
+        "--required-trust-field",
+        "",
+    )
+    assert required.returncode == 2
+    assert required.stdout == ""
+    assert "invalid choice" in required.stderr
+    assert "Traceback" not in required.stderr
+
+    for value in ("", "   "):
+        source = _run(
+            home,
+            "lint",
+            str(vault),
+            "--json",
+            "--schema-source",
+            value,
+        )
+        assert source.returncode == 1
+        assert source.stdout == ""
+        assert "error: invalid --schema-source value: must not be empty" in source.stderr
+        assert "Traceback" not in source.stderr
+
+
+def test_empty_configured_schema_values_fail_closed_for_all_cli_paths(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    commands = (
+        ("lint", "--json"),
+        (
+            "trust-record",
+            "--all",
+            "--reviewed-at",
+            "2026-08-05T12:00:00+09:00",
+            "--approved",
+            "--json",
+        ),
+        ("trust-check", "--json"),
+    )
+
+    for key in (
+        "OBSIDIAN_ALLOWED_LIFECYCLES",
+        "OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES",
+        "OBSIDIAN_REQUIRED_TRUST_FIELDS",
+        "OBSIDIAN_SCHEMA_SOURCE",
+    ):
+        project = tmp_path / key.lower()
+        project.mkdir()
+        (project / ".env").write_text(
+            f'OBSIDIAN_VAULT_PATH="{vault}"\n{key}=   \n',
+            encoding="utf-8",
+        )
+        for command in commands:
+            invalid = _run_at(home, project, *command)
+            assert invalid.returncode == 1, (key, command, invalid.stdout, invalid.stderr)
+            assert invalid.stdout == ""
+            detail = (
+                "must not be empty"
+                if key == "OBSIDIAN_SCHEMA_SOURCE"
+                else "entries must not be empty"
+            )
+            assert f"error: invalid {key} value: {detail}" in invalid.stderr
+            assert "Traceback" not in invalid.stderr
+
+    assert not (vault / "_meta" / "trust-ledger.json").exists()
+
+
+def test_blank_config_schema_source_cannot_be_masked_by_valid_cli_source(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".env").write_text(
+        f'OBSIDIAN_VAULT_PATH="{vault}"\nOBSIDIAN_SCHEMA_SOURCE=   \n',
+        encoding="utf-8",
+    )
+    ledger = vault / "_meta" / "trust-ledger.json"
+    before = {
+        path.relative_to(vault): path.read_bytes()
+        for path in vault.rglob("*")
+        if path.is_file()
+    }
+    commands = (
+        ("lint", "--json", "--schema-source", "owner/AGENTS.md"),
+        (
+            "trust-record",
+            "--all",
+            "--reviewed-at",
+            "2026-08-05T12:00:00+09:00",
+            "--approved",
+            "--json",
+            "--schema-source",
+            "owner/AGENTS.md",
+        ),
+        ("trust-check", "--json", "--schema-source", "owner/AGENTS.md"),
+    )
+
+    for command in commands:
+        invalid = _run_at(home, project, *command)
+        assert invalid.returncode == 1, (command, invalid.stdout, invalid.stderr)
+        assert invalid.stdout == ""
+        assert "error: invalid OBSIDIAN_SCHEMA_SOURCE value: must not be empty" in invalid.stderr
+        assert "Traceback" not in invalid.stderr
+        after = {
+            path.relative_to(vault): path.read_bytes()
+            for path in vault.rglob("*")
+            if path.is_file()
+        }
+        assert after == before
+        assert not ledger.exists()
+
+
+def test_distributed_schema_config_contract_names_all_four_variables(tmp_path: Path) -> None:
+    assert tmp_path.is_dir()
+    root = Path(__file__).parents[1]
+    variables = (
+        "OBSIDIAN_ALLOWED_LIFECYCLES",
+        "OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES",
+        "OBSIDIAN_REQUIRED_TRUST_FIELDS",
+        "OBSIDIAN_SCHEMA_SOURCE",
+    )
+    env_example = (root / ".env.example").read_text(encoding="utf-8")
+    configuration = (root / "docs" / "configuration.md").read_text(encoding="utf-8")
+    lint_skill = (root / ".skills" / "wiki-lint" / "SKILL.md").read_text(encoding="utf-8")
+    llm_skill = (root / ".skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
+    capture_skill = (root / ".skills" / "wiki-capture" / "SKILL.md").read_text(encoding="utf-8")
+
+    for variable in variables:
+        assert variable in env_example
+        assert variable in configuration
+        assert variable in lint_skill
+        assert variable in llm_skill
+        assert variable in capture_skill
+    assert "CLI flags > these environment/config values >" in env_example
+    assert "CLI flags > resolved environment/config values > framework defaults" in lint_skill
+    assert "Empty or whitespace-only values fail closed" in env_example
+    assert "fails closed" in lint_skill
+
+
+def test_owner_schema_still_rejects_unknown_typos(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    page.write_text(
+        page.read_text()
+        .replace("lifecycle: reviewed", "lifecycle: activ")
+        .replace(
+            "---\n# alpha",
+            'relationships:\n  - type: synthesizez\n    target: "[[concepts/beta]]"\n---\n# alpha',
+        )
+    )
+
+    report = lint_vault(
+        vault,
+        require_trust_ledger=False,
+        allowed_lifecycles={"active", "confirmed", "stub"},
+        allowed_relationship_types={"synthesizes"},
+        required_trust_fields=("updated",),
+        schema_source="wiki/AGENTS.md",
+    )
+
+    assert report["findings"]["typed_relationship_issues"][0]["issue"] == "invalid_type"
+
+
+def test_default_schema_remains_framework_compatible(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["schema"]["source"] == "framework-defaults"
+    assert report["schema"]["required_trust_fields"] == ["base_confidence", "lifecycle"]
+    assert "related_to" in report["schema"]["allowed_relationship_types"]
+
+
+def test_lifecycle_typo_fails_without_ledger_when_ledger_is_not_required(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("lifecycle: reviewed", "lifecycle: reveiwed"))
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "fail"
+    assert report["findings"]["trust_metadata_errors"] == [
+        {"page": "concepts/alpha.md", "issue": "invalid lifecycle: reveiwed"}
+    ]
+
+
+def test_present_invalid_confidence_fails_without_ledger_when_not_required(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    page = _page(vault, "concepts/alpha.md")
+    page.write_text(page.read_text().replace("base_confidence: 0.80", "base_confidence: 1.4"))
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "fail"
+    assert report["findings"]["trust_metadata_errors"] == [
+        {"page": "concepts/alpha.md", "issue": "base_confidence is outside [0.0, 1.0]"}
+    ]
+
+
+def test_schema_config_is_scoped_to_explicit_cwd_and_named_vaults(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    global_vault = tmp_path / "global-vault"
+    local_vault = tmp_path / "local-vault"
+    explicit_vault = tmp_path / "explicit-vault"
+    for vault in (global_vault, local_vault, explicit_vault):
+        page = _page(vault, "concepts/alpha.md")
+        page.write_text(page.read_text().replace("lifecycle: reviewed", "lifecycle: active"))
+
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(
+        f'OBSIDIAN_VAULT_PATH="{global_vault}"\nOBSIDIAN_ALLOWED_LIFECYCLES=active\n',
+        encoding="utf-8",
+    )
+    (config_dir / "config.owner").write_text(
+        f'OBSIDIAN_VAULT_PATH="{local_vault}"\nOBSIDIAN_ALLOWED_LIFECYCLES=active\n',
+        encoding="utf-8",
+    )
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".env").write_text(
+        f'OBSIDIAN_VAULT_PATH="{local_vault}"\nOBSIDIAN_ALLOWED_LIFECYCLES=active\n',
+        encoding="utf-8",
+    )
+
+    explicit = _run_at(home, project, "lint", str(explicit_vault), "--json")
+    assert explicit.returncode == 1
+    assert json.loads(explicit.stdout)["findings"]["trust_metadata_errors"][0]["issue"] == "invalid lifecycle: active"
+
+    local = _run_at(home, project, "lint", "--json")
+    assert local.returncode == 0, local.stderr
+    local_source = json.loads(local.stdout)["schema"]["source"]
+    assert Path(local_source.removeprefix("config:")).resolve() == (project / ".env").resolve()
+
+    named = _run_at(home, tmp_path, "lint", "@owner", "--json")
+    assert named.returncode == 0, named.stderr
+    named_source = json.loads(named.stdout)["schema"]["source"]
+    assert Path(named_source.removeprefix("config:")).resolve() == (config_dir / "config.owner").resolve()
+
+
+def test_correction_contract_requires_temporal_authority_and_immutable_hash_check(tmp_path: Path) -> None:
+    skill = (Path(__file__).parents[1] / ".skills" / "wiki-capture" / "SKILL.md").read_text()
+    for field in (
+        "authority_class:",
+        "verification_state:",
+        "asserted_at:",
+        "effective_at:",
+        "as_of:",
+        "consumer_propagation:",
+        "source_pre_sha256",
+        "source_post_sha256",
+    ):
+        assert field in skill
+
+    source = tmp_path / "immutable.jsonl"
+    source.write_text('{"role":"user","content":"tool result"}\n', encoding="utf-8")
+    before = hashlib.sha256(source.read_bytes()).hexdigest()
+    correction = {
+        "source_text_sha256": before,
+        "speaker_type": "tool_result",
+        "authority_class": "runtime",
+        "verification_state": "verified",
+        "asserted_at": "2026-08-05T10:00:00+09:00",
+        "effective_at": "2026-08-05T10:00:00+09:00",
+        "as_of": "2026-08-05T11:00:00+09:00",
+        "consumer_propagation": {"ob": "complete", "kw": "open"},
+    }
+    assert correction["speaker_type"] != "user"
+    after = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert before == after == correction["source_text_sha256"]

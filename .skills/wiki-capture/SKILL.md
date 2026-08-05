@@ -16,10 +16,11 @@ description: >
 
 You are preserving knowledge from the current conversation as a permanent wiki note. The goal is to extract the *substance* — the knowledge itself — not a summary of what was said.
 
-This skill has two modes:
+This skill has three modes:
 
 - **Full mode (default)** — classify the content and write a finished, cross-linked wiki page directly into the right category. This is the rest of this document (Steps 1–7).
 - **Quick mode (`--quick`)** — zero-friction staging: drop findings to `_raw/` in under 60 seconds with no manifest/index/log/QMD writes. Used for mid-session capture and by the session-end Stop hook. See below, then stop — do **not** run the full-mode steps.
+- **Correction mode (`--correction`)** — capture one atomic correction as derived knowledge while leaving the immutable conversation/source untouched. Use the template below, then update only the derived consumers and tracking links.
 
 ## Quick Mode (`--quick`)
 
@@ -28,6 +29,8 @@ Trigger when invoked as `/wiki-capture --quick`, by "quick capture" / "capture t
 **Speed contract:** Inline only. No subagents. No QMD. No manifest/`index.md`/`log.md`/`hot.md` writes. Target: <60 seconds. Promotion to full wiki pages happens later via `/wiki-ingest`.
 
 1. **Resolve config** (Config Resolution Protocol in `llm-wiki/SKILL.md`): get `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_RAW_DIR` (default: `$OBSIDIAN_VAULT_PATH/_raw`). Ensure `$OBSIDIAN_RAW_DIR` exists; create it if not.
+
+   Capture does not independently reinterpret validator schema inputs. When `OBSIDIAN_ALLOWED_LIFECYCLES`, `OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES`, `OBSIDIAN_REQUIRED_TRUST_FIELDS`, or `OBSIDIAN_SCHEMA_SOURCE` is present, preserve it for the downstream lint/trust consumer: CLI values take precedence over environment/config values, which take precedence over framework defaults, and explicit blank or whitespace-only values fail closed. Omit a variable to use defaults.
 
 2. **Gate — KEEP or SKIP?** Before extracting, judge whether this session has capture value. This keeps the skill safe to call automatically without spamming `_raw/`.
    - **SKIP** (exit with "Nothing worth capturing in this session.") if ALL are true: the conversation is purely conversational (planning/Q&A/explanation) with no implementation; no errors, debugging, or problem-solving visible; nothing surprising or undocumented; every finding is already obvious from the docs.
@@ -49,6 +52,46 @@ Trigger when invoked as `/wiki-capture --quick`, by "quick capture" / "capture t
    Run /wiki-ingest to promote these to full wiki pages.
    ```
    Quick mode deliberately does **not** write the manifest, `index.md`, `log.md`, `hot.md`, or refresh QMD — promotion via `/wiki-ingest` handles all of that. **Stop here; do not run the full-mode steps below.**
+
+---
+
+## Correction Mode (`--correction`)
+
+Use this mode when a user or stronger authority corrects a claim derived from an immutable conversation, tool result, or other raw source. Never edit or copy the raw source. Resolve config, read the vault `AGENTS.md`, and update an existing derived page when one owns the claim; otherwise create the smallest owner-compliant derived correction page.
+
+Record exactly one atomic claim pair. `speaker_type` is semantic and must be assessed independently of a serialized message `role` (a tool result may be serialized as `role=user`). Do not include raw transcript excerpts.
+
+```yaml
+correction_id: <stable-id>
+source_locator: <immutable file:line or channel/thread/timestamp>
+source_text_sha256: <64 lowercase hex chars>
+serialized_role: <source role, if present>
+speaker_type: user | assistant | teammate | tool_result | slack_member
+original_claim:
+  subject: <exact entity or capability>
+  assertion: <single atomic value>
+corrected_claim:
+  subject: <same exact entity or capability>
+  assertion: <single atomic value or null>
+authority_class: contract | decision | code | test | deploy | runtime | db | narrative
+verification_state: verified | inferred | unverified | contradicted
+asserted_at: <ISO-8601 timestamp>
+effective_at: <ISO-8601 timestamp or null>
+as_of: <ISO-8601 timestamp>
+supersedes: [<original-claim-id>]
+consumer_propagation:
+  kw: open | not_applicable | complete
+  ob: open | not_applicable | complete
+  requirements: open | not_applicable | complete
+  code: open | not_applicable | complete
+  tests: open | not_applicable | complete
+  ai_memory: open | not_applicable | complete
+corrected_at: <ISO-8601 timestamp>
+```
+
+Before any derived write, compute `source_pre_sha256` directly from the immutable source and require it to equal `source_text_sha256`. After writing the correction and updating derived consumers, recompute `source_post_sha256` from the same locator. Abort and report an immutability violation unless `source_pre_sha256 == source_post_sha256 == source_text_sha256`. This verification is mandatory even when the correction write succeeds.
+
+After writing the derived correction, link the immutable source to the created/updated page through `.manifest.json`, append only the correction ID and affected-page counts to `log.md`, and propagate the atomic correction to every consumer independently. Mark a consumer `complete` only after verifying that consumer; do not collapse mixed results into a single aggregate status. Keep secrets, raw excerpts, and source copies out of the correction record.
 
 ---
 
