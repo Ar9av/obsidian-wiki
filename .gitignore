@@ -12,6 +12,9 @@ __pycache__/
 /build/
 *.egg-info/
 
+# Local ad-hoc archive generated from this checkout
+/obsidian-wiki.zip
+
 # Local vault — personal knowledge, never published with the framework
 /vault/
 
