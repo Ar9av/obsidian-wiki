@@ -26,9 +26,12 @@ The deterministic `lint`, `trust-record`, and `trust-check` commands use the sam
 | `OBSIDIAN_MAX_PAGES_PER_INGEST` | Max pages created or updated per ingest | `15` |
 | `OBSIDIAN_LINK_FORMAT` | `wikilink` → `[[concepts/foo]]`, or `markdown` → `` [text](path.md) ``. Affects future writes only — existing content is never migrated | `wikilink` |
 | `OBSIDIAN_RAW_DIR` | Staging directory inside the vault for unprocessed drafts | `_raw` |
+| `OBSIDIAN_EXTERNAL_FILE_MODE` | How non-markdown source files outside the vault are handled: `link` keeps originals in place and records links/hashes; `stage-copy` copies into `_raw/` for review; `move` is intentionally unsupported by default | `link` |
 | `LINT_SCHEDULE` | Health-check frequency: `daily` \| `weekly` \| `manual` | `weekly` |
 
 Local git repo clones work in `OBSIDIAN_SOURCES_DIR` (public or private, any host). Clone locally, then add the path. Repo directories are auto-detected via a `.git` folder and enumerated with `git ls-files`, so whatever the repo's own `.gitignore` excludes — `node_modules`, build output, venvs, secrets — is skipped automatically rather than relying on a hardcoded skip-list.
+
+For existing SSD, Google Drive, OneDrive, or NAS document libraries, prefer `OBSIDIAN_EXTERNAL_FILE_MODE=link`. The wiki should index, cite, and connect files by path and content hash without rearranging the user's original folders. Use `stage-copy` only when the user explicitly wants a review copy inside the vault. Do not move originals as part of ingest.
 
 ## History ingest
 

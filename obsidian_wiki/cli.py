@@ -21,7 +21,13 @@ from typing import TypedDict
 
 from obsidian_wiki import __version__
 
-HOME = Path.home()
+
+def _home_dir() -> Path:
+    """Return the configured home directory, honoring test/portable HOME."""
+    return Path(os.environ.get("HOME") or os.environ.get("USERPROFILE") or Path.home())
+
+
+HOME = _home_dir()
 GLOBAL_CONFIG_DIR = HOME / ".obsidian-wiki"
 GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
 
@@ -293,10 +299,14 @@ def write_config(vault_path: str) -> None:
     # OBSIDIAN_WIKI_REPO points at the bundled data root so skills that reference
     # framework assets (templates, references) can find them post-install.
     repo_root = skills_dir().parent
+    values = _read_config()
+    values.update({
+        "OBSIDIAN_VAULT_PATH": vault_path,
+        "OBSIDIAN_WIKI_REPO": str(repo_root),
+        "OBSIDIAN_WIKI_VERSION": __version__,
+    })
     GLOBAL_CONFIG.write_text(
-        f'OBSIDIAN_VAULT_PATH="{vault_path}"\n'
-        f'OBSIDIAN_WIKI_REPO="{repo_root}"\n'
-        f'OBSIDIAN_WIKI_VERSION="{__version__}"\n'
+        "".join(f'{key}="{value}"\n' for key, value in values.items())
     )
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 

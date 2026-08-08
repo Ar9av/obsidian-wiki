@@ -22,10 +22,18 @@
 
 set -euo pipefail
 
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+else
+  exit 0
+fi
+
 INPUT=$(cat)
 
 # Suppress if already in a stop-hook-triggered turn (prevents infinite loops)
-IS_HOOK_TURN=$(printf '%s' "$INPUT" | python3 -c "
+IS_HOOK_TURN=$(printf '%s' "$INPUT" | "$PYTHON_BIN" -c "
 import json, sys
 d = json.load(sys.stdin)
 print('1' if d.get('stop_hook_active') else '0')
@@ -52,7 +60,7 @@ print('1' if d.get('stop_hook_active') else '0')
 # sentinel; sentinels predating this feature have no count and behave as 0.
 REARM_SECONDS="${WIKI_STOP_REARM_SECONDS:-21600}"   # 6h between nudges
 REARM_EDITS="${WIKI_STOP_REARM_EDITS:-10}"          # new edits required
-SESSION_ID=$(printf '%s' "$INPUT" | python3 -c "
+SESSION_ID=$(printf '%s' "$INPUT" | "$PYTHON_BIN" -c "
 import json, sys; print(json.load(sys.stdin).get('session_id', ''))" 2>/dev/null || echo "")
 SENTINEL=""
 REARM_CANDIDATE=0
@@ -81,7 +89,7 @@ if [[ -n "$SESSION_ID" ]]; then
   fi
 fi
 
-TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | python3 -c "
+TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | "$PYTHON_BIN" -c "
 import json, sys
 d = json.load(sys.stdin)
 print(d.get('transcript_path', ''))
@@ -477,7 +485,7 @@ with open(path) as f:
 print(write_edit, bash_count, mutating_bash, suspicious_tools)
 PYEOF
 
-COUNTS=$(python3 "$CLASSIFIER" "$TRANSCRIPT_PATH" 2>/dev/null) || COUNTS="0 0 0"
+COUNTS=$("$PYTHON_BIN" "$CLASSIFIER" "$TRANSCRIPT_PATH" 2>/dev/null) || COUNTS="0 0 0"
 rm -f "$CLASSIFIER"
 
 WRITE_EDIT=$(echo "$COUNTS" | awk '{print $1}')
