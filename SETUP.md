@@ -47,7 +47,7 @@ Open this project in your coding agent and tell it what you want:
 |---|---|
 | "Set up my wiki" | `wiki-setup` |
 | "Ingest my documents from ~/research" | `wiki-ingest` |
-| "/wiki-history-ingest claude" or "/wiki-history-ingest codex" | `wiki-history-ingest` |
+| "/wiki-history-ingest claude" / "/wiki-history-ingest copilot" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" / "/wiki-history-ingest openclaw" / "/wiki-history-ingest pi" | `wiki-history-ingest` |
 | "Import my Claude history" | `claude-history-ingest` |
 | "Import my Codex history" | `codex-history-ingest` |
 | "Import my Pi history" | `pi-history-ingest` |
@@ -148,7 +148,7 @@ Knowledge that's project-specific goes under `projects/<name>/`. Knowledge that'
 | `llm-wiki` | Core pattern — 3-layer architecture, page templates, project org |
 | `wiki-setup` | Initialize vault structure, create index/log, configure Obsidian |
 | `wiki-ingest` | Distill source documents into wiki pages (append or full mode), plus any raw text — chat exports, logs, transcripts, anything |
-| `wiki-history-ingest` | Unified history ingest router (`claude`, `codex`, `pi`) |
+| `wiki-history-ingest` | Unified history ingest router (`claude`, `copilot`, `codex`, `hermes`, `openclaw`, `pi`) |
 | `claude-history-ingest` | Mine `~/.claude` conversations and memories into wiki pages |
 | `codex-history-ingest` | Mine `~/.codex` sessions and rollout logs into wiki pages |
 | `pi-history-ingest` | Mine `~/.pi/agent/sessions` JSONL history into wiki pages |

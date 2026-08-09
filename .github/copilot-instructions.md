@@ -23,7 +23,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 |---|---|---|
 | Setup | `.skills/wiki-setup/` | Initialize vault structure |
 | Ingest | `.skills/wiki-ingest/` | Distill documents into wiki pages, plus any text data — chat exports, logs, transcripts |
-| History Router | `.skills/wiki-history-ingest/` | Route `/wiki-history-ingest <claude|codex>` to the right history skill |
+| History Router | `.skills/wiki-history-ingest/` | Route `/wiki-history-ingest <claude|copilot|codex|hermes|openclaw|pi>` to the right history skill |
 | Claude History | `.skills/claude-history-ingest/` | Mine `~/.claude` conversations |
 | Codex History | `.skills/codex-history-ingest/` | Mine `~/.codex` sessions and rollout logs |
 | Status | `.skills/wiki-status/` | Audit ingestion state and delta |

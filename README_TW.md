@@ -47,6 +47,8 @@ obsidian-wiki info              # 顯示安裝路徑、版本與設定
 obsidian-wiki doctor            # 檢查 config、vault 結構與已安裝 skills
 obsidian-wiki query "rate limiting"  # 從終端查詢已設定的 vault
 obsidian-wiki lint              # 檢查已設定 vault 的 broken links / metadata gaps
+obsidian-wiki trust-check --strict  # CI/排程 gate，驗證已核准的人工 review fingerprints
+obsidian-wiki trust-record --all --reviewed-at <ISO-with-timezone> --approved  # 記錄一次人工核准的完整 review
 obsidian-wiki setup --project . # 也把 project-local skills + AGENTS.md 放到目前 repo
 obsidian-wiki setup --copy      # 複製 skill 檔案，而不是 symlink
 ```
@@ -409,7 +411,7 @@ git remote add origin https://github.com/you/my-wiki.git
 |---|---|---|
 | `wiki-setup` | 初始化 vault structure | `/wiki-setup` |
 | `wiki-ingest` | 將 documents 蒸餾成 wiki pages，也支援 chat exports、logs、transcripts、URLs | `/wiki-ingest` |
-| `wiki-history-ingest` | Unified history router（`claude`、`codex`、`hermes`、`pi`） | `/wiki-history-ingest <claude|codex|hermes|pi>` |
+| `wiki-history-ingest` | Unified history router（`claude`、`codex`、`copilot`、`hermes`、`openclaw`、`pi`） | `/wiki-history-ingest <claude|copilot|codex|hermes|openclaw|pi>` |
 | `claude-history-ingest` | 挖掘你的 `~/.claude` Claude code 與 desktop conversations/memories | `/claude-history-ingest` |
 | `codex-history-ingest` | 挖掘你的 `~/.codex` sessions 與 rollout logs | `/codex-history-ingest` |
 | `hermes-history-ingest` | 挖掘你的 `~/.hermes` memories 與 sessions | `/hermes-history-ingest` |
@@ -418,23 +420,32 @@ git remote add origin https://github.com/you/my-wiki.git
 | `pi-history-ingest` | 挖掘你的 `~/.pi/agent/sessions` JSONL history | `/pi-history-ingest` |
 | `wiki-status` | 顯示已 ingest、pending 與 delta | `/wiki-status` |
 | `wiki-rebuild` | Archive、從頭 rebuild 或 restore | `/wiki-rebuild` |
+| `wiki-switch` | 管理命名 vault profiles 並切換作用中 vault | `/wiki-switch NAME` |
 | `wiki-query` | 從 wiki 回答問題 | `/wiki-query` |
+| `wiki-narrate` | 從 wiki topic 產出帶引用的敘事 | `/wiki-narrate <topic>` |
 | `wiki-lint` | 找 broken links、orphans、contradictions | `/wiki-lint` |
+| `wiki-dedup` | 找出重複 pages 並合併 | `/wiki-dedup` |
 | `cross-linker` | 自動發現並插入 missing wikilinks | `/cross-linker` |
 | `tag-taxonomy` | 在 pages 間強制一致的 tag vocabulary | `/tag-taxonomy` |
 | `llm-wiki` | 核心 pattern 與 architecture reference | `/llm-wiki` |
 | `wiki-update` | 將目前 project 的知識同步進 vault | `/wiki-update` |
 | `wiki-export` | 將 vault graph 匯出為 JSON、GraphML、Neo4j、HTML | `/wiki-export` |
+| `wiki-import` | 從 graph.json 或 OKF bundle 匯入 vault graph | `/wiki-import` |
+| `wiki-context-pack` | 產生 token 有界、可引用的 context slice | `/wiki-context-pack` |
 | `wiki-capture` | 將目前 conversation 儲存為 wiki note；`--quick` 會把 findings staged 到 `_raw/` | `/wiki-capture` |
+| `wiki-stage-commit` | 檢視並 promote staged wiki pages | `/wiki-stage-commit` |
 | `wiki-research` | Autonomous multi-round web research，並自動歸檔 | `/wiki-research [topic]` |
 | `wiki-dashboard` | 建立 dynamic Obsidian Bases dashboard views | `/wiki-dashboard` |
+| `wiki-digest` | 定期知識摘要（日/週/月） | `/wiki-digest [period]` |
 | `wiki-synthesize` | 發現並補齊 concepts 間的 synthesis gaps | `/wiki-synthesize` |
 | `wiki-agent` | 從特定 agent history 做 query-driven ingest | `/wiki-claude [topic]`, `/wiki-codex [topic]`, etc. |
 | `memory-bridge` | 依 AI tool 瀏覽與比較 knowledge | `/memory-bridge` |
 | `daily-update` | Daily maintenance cycle：freshness、index、hot cache | `/daily-update` |
 | `impl-validator` | 根據 stated goal 驗證 implementation | `/impl-validator` |
 | `graph-colorize` | 依 tag/category/visibility 為 Obsidian graph 上色 | `/graph-colorize` |
+| `obsidian-layout-adjustment` | 用 CSS snippets 調整 Obsidian vault 版面 | `/obsidian-layout-adjustment` |
 | `skill-creator` | 建立新的 skills | `/skill-creator` |
+| `vault-skill-factory` | 把成熟的 vault pages 打包成可攜帶的 agent skill | `/vault-skill-factory` |
 
 > **Note:** Slash commands（`/skill-name`）可在 Claude Code、Cursor 與 Windsurf 使用。在其他 agents 中，只要描述你想做什麼，agent 會找到正確的 skill。
 
@@ -470,19 +481,38 @@ obsidian-wiki/
 │   ├── wiki-history-ingest/SKILL.md
 │   ├── claude-history-ingest/SKILL.md
 │   ├── codex-history-ingest/SKILL.md
+│   ├── copilot-history-ingest/SKILL.md
 │   ├── hermes-history-ingest/SKILL.md
 │   ├── openclaw-history-ingest/SKILL.md
 │   ├── pi-history-ingest/SKILL.md
 │   ├── wiki-status/SKILL.md
 │   ├── wiki-rebuild/SKILL.md
+│   ├── wiki-switch/SKILL.md
 │   ├── wiki-query/SKILL.md
+│   ├── wiki-narrate/SKILL.md
 │   ├── wiki-lint/SKILL.md
+│   ├── wiki-dedup/SKILL.md
 │   ├── cross-linker/SKILL.md
 │   ├── tag-taxonomy/SKILL.md
-│   ├── wiki-update/SKILL.md
 │   ├── llm-wiki/SKILL.md
+│   ├── wiki-update/SKILL.md
 │   ├── wiki-export/SKILL.md
-│   └── skill-creator/SKILL.md
+│   ├── wiki-import/SKILL.md
+│   ├── wiki-context-pack/SKILL.md
+│   ├── wiki-capture/SKILL.md
+│   ├── wiki-stage-commit/SKILL.md
+│   ├── wiki-research/SKILL.md
+│   ├── wiki-dashboard/SKILL.md
+│   ├── wiki-digest/SKILL.md
+│   ├── wiki-synthesize/SKILL.md
+│   ├── wiki-agent/SKILL.md
+│   ├── memory-bridge/SKILL.md
+│   ├── daily-update/SKILL.md
+│   ├── impl-validator/SKILL.md
+│   ├── graph-colorize/SKILL.md
+│   ├── obsidian-layout-adjustment/SKILL.md
+│   ├── skill-creator/SKILL.md
+│   └── vault-skill-factory/SKILL.md
 │
 ├── CLAUDE.md                            # Bootstrap → Claude Code / Kilocode (→ AGENTS.md)
 ├── GEMINI.md                            # Bootstrap → Gemini CLI (→ AGENTS.md)
@@ -516,6 +546,11 @@ obsidian-wiki/
 ├── ~/.agents/skills/              → global symlinks — OpenCode, Aider, Droid, generic
 │
 ├── setup.sh                          # One-command agent setup
+├── pyproject.toml                    # Python package metadata (pip install obsidian-wiki)
+├── obsidian_wiki/                    # CLI package source (list, doctor, query, lint, …)
+├── extensions/brain-capture/         # Zero-build Chrome extension → vault `_raw/`
+├── tools/                            # check_readme_sync.py 等維護 scripts
+├── tests/                            # pytest suite
 ├── .env.example                      # Configuration template
 ├── README.md                         # English README
 ├── README_TW.md                      # Traditional Chinese README

@@ -412,7 +412,7 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | ----------------------- | ------------------------------------------------- | ------------------------ |
 | `wiki-setup`            | Initialize vault structure                        | `/wiki-setup`            |
 | `wiki-ingest`           | Distill documents into wiki pages, plus chat exports, logs, transcripts, URLs | `/wiki-ingest`           |
-| `wiki-history-ingest`   | Unified history router (`claude`, `codex`, `hermes`, `pi`) | `/wiki-history-ingest <claude|codex|hermes|pi>` |
+| `wiki-history-ingest`   | Unified history router (`claude`, `codex`, `copilot`, `hermes`, `openclaw`, `pi`) | `/wiki-history-ingest <claude|copilot|codex|hermes|openclaw|pi>` |
 | `claude-history-ingest` | Mine your `~/.claude` conversations and memories from Claude code and desktop  | `/claude-history-ingest` |
 | `codex-history-ingest`  | Mine your `~/.codex` sessions and rollout logs    | `/codex-history-ingest`  |
 | `hermes-history-ingest` | Mine your `~/.hermes` memories and sessions       | `/hermes-history-ingest` |
@@ -421,24 +421,32 @@ Everything lives in `.skills/`. Each skill is a markdown file the agent reads wh
 | `pi-history-ingest`     | Mine your `~/.pi/agent/sessions` JSONL history    | `/pi-history-ingest` |
 | `wiki-status`           | Show what's ingested, what's pending, the delta   | `/wiki-status`           |
 | `wiki-rebuild`          | Archive, rebuild from scratch, or restore         | `/wiki-rebuild`          |
+| `wiki-switch`           | Manage named vault profiles and switch the active vault | `/wiki-switch NAME`    |
 | `wiki-query`            | Answer questions from the wiki                    | `/wiki-query`            |
 | `wiki-narrate`          | Render a cited narrative from a wiki topic        | `/wiki-narrate <topic>`  |
 | `wiki-lint`             | Find broken links, orphans, contradictions        | `/wiki-lint`             |
+| `wiki-dedup`            | Find duplicate pages and merge them               | `/wiki-dedup`            |
 | `cross-linker`          | Auto-discover and insert missing wikilinks        | `/cross-linker`          |
 | `tag-taxonomy`          | Enforce consistent tag vocabulary across pages    | `/tag-taxonomy`          |
 | `llm-wiki`              | The core pattern and architecture reference       | `/llm-wiki`              |
 | `wiki-update`           | Sync current project's knowledge into the vault   | `/wiki-update`           |
 | `wiki-export`           | Export vault graph to JSON, GraphML, Neo4j, HTML  | `/wiki-export`           |
+| `wiki-import`           | Import a vault graph from graph.json or an OKF bundle | `/wiki-import`        |
+| `wiki-context-pack`     | Produce a token-bounded, citation-ready context slice | `/wiki-context-pack`   |
 | `wiki-capture`          | Save the current conversation as a wiki note; `--quick` stages findings to `_raw/` | `/wiki-capture`          |
+| `wiki-stage-commit`     | Review and promote staged wiki pages              | `/wiki-stage-commit`     |
 | `wiki-research`         | Autonomous multi-round web research, self-filed   | `/wiki-research [topic]` |
 | `wiki-dashboard`        | Create dynamic Obsidian Bases dashboard views     | `/wiki-dashboard`        |
+| `wiki-digest`           | Periodic digest of what you learned (day/week/month) | `/wiki-digest [period]` |
 | `wiki-synthesize`       | Discover and fill synthesis gaps across concepts  | `/wiki-synthesize`       |
 | `wiki-agent`            | Query-driven ingest from a specific agent's history | `/wiki-claude [topic]`, `/wiki-codex [topic]`, etc. |
 | `memory-bridge`         | Browse and diff knowledge by which AI tool wrote it | `/memory-bridge`         |
 | `daily-update`          | Daily maintenance cycle — freshness, index, hot cache | `/daily-update`        |
 | `impl-validator`        | Validate an implementation against its stated goal | `/impl-validator`       |
 | `graph-colorize`        | Color-code the Obsidian graph by tag/category/visibility | `/graph-colorize`   |
+| `obsidian-layout-adjustment` | Restyle the Obsidian vault layout with CSS snippets | `/obsidian-layout-adjustment` |
 | `skill-creator`         | Create new skills                                 | `/skill-creator`         |
+| `vault-skill-factory`   | Package curated vault pages as a portable agent skill | `/vault-skill-factory` |
 
 > **Note:** Slash commands (`/skill-name`) work in Claude Code, Cursor, and Windsurf. In other agents, just describe what you want and the agent will find the right skill.
 
@@ -474,19 +482,38 @@ obsidian-wiki/
 │   ├── wiki-history-ingest/SKILL.md
 │   ├── claude-history-ingest/SKILL.md
 │   ├── codex-history-ingest/SKILL.md
+│   ├── copilot-history-ingest/SKILL.md
 │   ├── hermes-history-ingest/SKILL.md
 │   ├── openclaw-history-ingest/SKILL.md
 │   ├── pi-history-ingest/SKILL.md
 │   ├── wiki-status/SKILL.md
 │   ├── wiki-rebuild/SKILL.md
+│   ├── wiki-switch/SKILL.md
 │   ├── wiki-query/SKILL.md
+│   ├── wiki-narrate/SKILL.md
 │   ├── wiki-lint/SKILL.md
+│   ├── wiki-dedup/SKILL.md
 │   ├── cross-linker/SKILL.md
 │   ├── tag-taxonomy/SKILL.md
-│   ├── wiki-update/SKILL.md
 │   ├── llm-wiki/SKILL.md
+│   ├── wiki-update/SKILL.md
 │   ├── wiki-export/SKILL.md
-│   └── skill-creator/SKILL.md
+│   ├── wiki-import/SKILL.md
+│   ├── wiki-context-pack/SKILL.md
+│   ├── wiki-capture/SKILL.md
+│   ├── wiki-stage-commit/SKILL.md
+│   ├── wiki-research/SKILL.md
+│   ├── wiki-dashboard/SKILL.md
+│   ├── wiki-digest/SKILL.md
+│   ├── wiki-synthesize/SKILL.md
+│   ├── wiki-agent/SKILL.md
+│   ├── memory-bridge/SKILL.md
+│   ├── daily-update/SKILL.md
+│   ├── impl-validator/SKILL.md
+│   ├── graph-colorize/SKILL.md
+│   ├── obsidian-layout-adjustment/SKILL.md
+│   ├── skill-creator/SKILL.md
+│   └── vault-skill-factory/SKILL.md
 │
 ├── CLAUDE.md                            # Bootstrap → Claude Code / Kilocode (→ AGENTS.md)
 ├── GEMINI.md                            # Bootstrap → Gemini CLI (→ AGENTS.md)
@@ -520,8 +547,14 @@ obsidian-wiki/
 ├── ~/.agents/skills/              → global symlinks — OpenCode, Aider, Droid, generic
 │
 ├── setup.sh                          # One-command agent setup
+├── pyproject.toml                    # Python package metadata (pip install obsidian-wiki)
+├── obsidian_wiki/                    # CLI package source (list, doctor, query, lint, …)
+├── extensions/brain-capture/         # Zero-build Chrome extension → vault `_raw/`
+├── tools/                            # check_readme_sync.py and other maintenance scripts
+├── tests/                            # pytest suite
 ├── .env.example                      # Configuration template
-├── README.md                         # You are here
+├── README.md                         # English README
+├── README_TW.md                      # Traditional Chinese README
 └── SETUP.md                          # Detailed setup guide
 ```
 
