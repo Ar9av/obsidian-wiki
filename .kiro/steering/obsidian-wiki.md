@@ -25,6 +25,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 | "import my Pi history" | `pi-history-ingest` |
 | "what's the status" / "show the delta" | `wiki-status` |
 | "what do I know about X" | `wiki-query` |
+| "use my vault as context" / "context pack for X" / "bounded context" | `wiki-context-pack` |
 | "audit" / "lint" / "find broken links" | `wiki-lint` |
 | "rebuild" / "archive" / "restore" | `wiki-rebuild` |
 | "link my pages" / "cross-reference" | `cross-linker` |

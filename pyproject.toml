@@ -61,9 +61,17 @@ source = "vcs"
 
 [tool.hatch.build.targets.wheel]
 packages = ["obsidian_wiki"]
+# force-include copies straight from the working tree, not a VCS-filtered
+# view — without this, a local `scripts/__pycache__` picked up stray .pyc
+# files into the published wheel.
+exclude = [
+  "**/__pycache__",
+  "**/*.py[co]",
+]
 
 [tool.hatch.build.targets.wheel.force-include]
 ".skills" = "obsidian_wiki/_data/skills"
+"scripts" = "obsidian_wiki/_data/scripts"
 ".claude/hooks/wiki-stop-capture.sh" = "obsidian_wiki/_data/hooks/wiki-stop-capture.sh"
 ".env.example" = "obsidian_wiki/_data/.env.example"
 "AGENTS.md" = "obsidian_wiki/_data/bootstrap/AGENTS.md"

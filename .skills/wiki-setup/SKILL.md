@@ -23,6 +23,9 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
 2. **Where are your source documents?** → `OBSIDIAN_SOURCES_DIR`
    - Can be multiple paths, comma-separated
    - Default: `~/Documents`
+   - Local git repo clones (public or private, any host) can be listed here too — clone
+     the repo locally first, then add its path. See "Ingesting Git Repositories" in
+     `wiki-ingest/SKILL.md` for how repo sources are handled.
 
 3. **Want to import Claude history?** → `CLAUDE_HISTORY_PATH`
    - Default: auto-discovers from `~/.claude`
@@ -34,6 +37,19 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - If using CLI mode, set `QMD_CLI_SEARCH_MODE=quality` by default; suggest `balanced` if reranking is too slow.
    - If unsure, skip for now — both skills fall back to `Grep` automatically.
    - Install instructions: see `.env.example` (QMD section).
+   - **If `QMD_WIKI_COLLECTION` is set, verify the collection excludes `_raw/`.** The wiki
+     collection and papers collection must stay disjoint — `wiki-query` cites them as
+     separate layers (compiled knowledge vs. raw staging), and `OBSIDIAN_VAULT_PATH` contains
+     `_raw/`, so a plain `qmd collection add <vault>` silently merges the two.
+     Read `~/.config/qmd/index.yml`, find the entry for `$QMD_WIKI_COLLECTION`, and check its
+     `ignore` list includes `_raw/**` (and ideally `log.md`, which has no semantic value). If
+     the collection doesn't exist yet, create it (`qmd collection add "$OBSIDIAN_VAULT_PATH"
+     --name <collection-name>`), then add the `ignore` block to `index.yml` by hand — `qmd`
+     has no `--ignore` flag and refuses a second `collection add` on a path that already has
+     one, so editing the YAML is the only way to scope it. Run `qmd update` after editing.
+     If the collection already exists without the `ignore` block, tell the user their
+     wiki collection is indexing `_raw/` (including `_raw/_archived/` drafts left behind by
+     `wiki-ingest`) and offer to add the `ignore` block and re-run `qmd update`.
 
 5. **Token budget warning threshold?** → `WIKI_TOKEN_WARN_THRESHOLD`
    - Default: `100000` (warn when full-wiki read would cost > 100K tokens)
@@ -248,12 +264,44 @@ inconclusive sessions are skipped automatically.
    If `~/.claude/settings.json` already exists and has a `hooks.Stop` array, **append** the new
    entry rather than replacing — don't clobber existing hooks.
 
+   > **Note — expect a duplicate nudge inside this repo.** The obsidian-wiki repo ships its own
+   > git-tracked `.claude/settings.json` registering the same Stop hook at a relative path. Claude
+   > Code *merges* project-level and user-level hook config rather than letting one override the
+   > other, so sessions ending inside the repo itself fire both registrations. This is expected and
+   > harmless — the hook claims an atomic per-session sentinel, so only one nudge is emitted. Leave
+   > both in place: removing the project entry dirties a tracked framework file and disables capture
+   > for anyone who clones the repo without doing the global install.
+
 4. Confirm: "Stop hook installed. Claude Code will prompt `/wiki-capture --quick` at the
    end of any session where you write files or run ≥ 4 shell commands."
 
 **To uninstall later:** remove the hook entry from `~/.claude/settings.json` or set
 `HIVEMIND_CAPTURE=false` in your shell to skip capture for a single session.
 
+## Optional: Configure GitHub Sync
+
+Ask the user: **"Want to sync your vault to a private GitHub repo?"**
+
+The vault is plain markdown, so pushing it to git gets you version history, backup, and
+cross-device sync for free. This is opt-in — skip it if the user declines or has no repo ready.
+
+If yes:
+
+1. Ask for the repo URL (e.g. `https://github.com/you/my-wiki.git`). Recommend it be **private**
+   if the vault holds personal notes.
+2. Run the CLI, which handles `git init`, a default `.gitignore`, and wiring the `origin` remote —
+   this is the same code path `obsidian-wiki setup`'s interactive prompt and `setup.sh` use, so
+   there's one implementation to keep correct (see issue #153 for why that matters):
+   ```bash
+   obsidian-wiki sync-setup "<repo-url>" --vault "$OBSIDIAN_VAULT_PATH"
+   ```
+   If the `obsidian-wiki` binary isn't on PATH (source checkout without an install), run it from
+   the repo instead: `PYTHONPATH="$OBSIDIAN_WIKI_REPO" python3 -m obsidian_wiki.cli sync-setup ...`
+   using whichever of `OBSIDIAN_WIKI_REPO` or a local checkout path is available.
+3. Tell the user they can run `obsidian-wiki sync` any time afterward to commit and push pending
+   vault changes (stages everything, commits with a timestamp, pushes). There's no config file to
+   check for sync status — the vault's own `git remote` is the source of truth.
+
 ## Optional: Refresh QMD After Setup
 
-If `QMD_WIKI_COLLECTION` is configured and the local QMD CLI is available, run `qmd update` after the initial vault files exist so the fresh vault is immediately queryable. No embedding pass is usually needed at setup time because the vault starts empty, so a plain update is enough unless you have already populated pages.
+If `QMD_WIKI_COLLECTION` is configured and the local QMD CLI is available, run `qmd update` after the initial vault files exist so the fresh vault is immediately queryable. No embedding pass is usually needed at setup time because the vault starts empty, so a plain update is enough unless you have already populated pages. Before running it, confirm the `_raw/` exclusion described in Step 1.4 is in place — otherwise this update indexes the (currently empty) staging directory into the wiki collection too, and every future draft dropped there joins it silently.

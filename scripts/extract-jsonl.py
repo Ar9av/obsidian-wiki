@@ -164,6 +164,8 @@ def extract_conversation(jsonl_path: str) -> dict | None:
     start_ts = ""
     end_ts = ""
     session_id = ""
+    ai_title = ""
+    git_branch = ""
 
     try:
         with open(jsonl_path, encoding="utf-8", errors="replace") as f:
@@ -181,6 +183,18 @@ def extract_conversation(jsonl_path: str) -> dict | None:
                 if entry_type in ("progress", "file-history-snapshot"):
                     continue
 
+                # The rolling auto-generated title is the best summary a session
+                # has; it repeats throughout the file, so the last one wins.
+                if entry_type == "ai-title":
+                    ai_title = entry.get("aiTitle", "") or ai_title
+                    continue
+
+                # Subagent traffic and injected context are not the user talking.
+                # Counting them as turns inflates n_user_words and pollutes any
+                # downstream summary with the agent's own scaffolding.
+                if entry.get("isSidechain") or entry.get("isMeta"):
+                    continue
+
                 ts = entry.get("timestamp", "")
                 if ts and not start_ts:
                     start_ts = ts
@@ -191,6 +205,8 @@ def extract_conversation(jsonl_path: str) -> dict | None:
                     cwd = entry.get("cwd", "")
                 if not session_id:
                     session_id = entry.get("sessionId", "")
+                if not git_branch:
+                    git_branch = entry.get("gitBranch", "") or ""
 
                 msg = entry.get("message", {})
                 if not isinstance(msg, dict):
@@ -201,6 +217,11 @@ def extract_conversation(jsonl_path: str) -> dict | None:
 
                 text = _text_from_content(msg.get("content", ""))
                 if not text:
+                    continue
+
+                # Slash commands, caveats, and hook output arrive as user-role
+                # strings wrapped in a tag. They are machine boilerplate.
+                if role == "user" and text.startswith("<"):
                     continue
 
                 turns.append({"role": role, "text": text})
@@ -225,6 +246,8 @@ def extract_conversation(jsonl_path: str) -> dict | None:
         "session_id": session_id,
         "project": project,
         "cwd": cwd,
+        "git_branch": git_branch,
+        "ai_title": ai_title,
         "start_ts": start_ts,
         "end_ts": end_ts,
         "n_turns": len(turns),

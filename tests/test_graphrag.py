@@ -106,6 +106,37 @@ class TestBuildIndex:
         idx = build_index(vault)
         assert "draft" not in idx
 
+    def test_reads_folded_block_scalar_summary(self, vault):
+        # Regression for #156: `summary: >-` puts the real text on the next
+        # indented line(s), not on the `summary:` line itself.
+        (vault / "folded.md").write_text(
+            "---\n"
+            "title: >-\n"
+            "  Folded Title\n"
+            "summary: >-\n"
+            "  Some text that wraps\n"
+            "  onto a second line.\n"
+            "category: concepts\n"
+            "---\n"
+            "# Folded\n"
+        )
+        idx = build_index(vault)
+        assert idx["folded"]["title"] == "Folded Title"
+        assert idx["folded"]["summary"] == "Some text that wraps onto a second line."
+
+    def test_reads_literal_block_scalar_summary(self, vault):
+        (vault / "literal.md").write_text(
+            "---\n"
+            "title: Literal\n"
+            "summary: |-\n"
+            "  Literal block text.\n"
+            "category: concepts\n"
+            "---\n"
+            "# Literal\n"
+        )
+        idx = build_index(vault)
+        assert idx["literal"]["summary"] == "Literal block text."
+
 
 # ---------------------------------------------------------------------------
 # rank_candidates

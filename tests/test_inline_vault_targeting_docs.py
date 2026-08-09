@@ -39,17 +39,17 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
             ".github/copilot-instructions.md",
             ".kiro/steering/obsidian-wiki.md",
             ".windsurf/rules/obsidian-wiki.md",
-            "README.md",
+            "docs/installation.md",
             "SETUP.md",
         ]:
             with self.subTest(relpath=relpath):
                 self.assertIn("@name", self.read(relpath))
 
-    def test_readme_says_all_supported_agents_inherit_named_vault_routing(self) -> None:
-        readme = self.read("README.md")
+    def test_install_docs_say_all_supported_agents_inherit_named_vault_routing(self) -> None:
+        install = self.read("docs/installation.md")
 
-        self.assertIn("All supported agents can use this syntax", readme)
-        self.assertIn("Claude Code, Cursor, Windsurf, Codex, Gemini", readme)
+        self.assertIn("All supported agents can use this syntax", install)
+        self.assertIn("Claude Code, Cursor, Windsurf, Codex, Gemini", install)
 
     def test_core_skill_descriptions_include_named_vault_examples(self) -> None:
         examples = {

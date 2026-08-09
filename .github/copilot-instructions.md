@@ -28,6 +28,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 | Codex History | `.skills/codex-history-ingest/` | Mine `~/.codex` sessions and rollout logs |
 | Status | `.skills/wiki-status/` | Audit ingestion state and delta |
 | Query | `.skills/wiki-query/` | Answer questions from wiki |
+| Context Pack | `.skills/wiki-context-pack/` | Compile bounded vault context for another agent |
 | Lint | `.skills/wiki-lint/` | Find broken links, orphans |
 | Rebuild | `.skills/wiki-rebuild/` | Archive and rebuild |
 | Cross-Linker | `.skills/cross-linker/` | Auto-discover and insert missing wikilinks |

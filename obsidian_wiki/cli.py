@@ -12,9 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
 
 from obsidian_wiki import __version__
 
@@ -24,8 +27,15 @@ GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
 
 # Skills usable from any project (no vault context needed beyond the global
 # config). These are also installed globally for agents that only scope skills
-# per-project, so cross-project sync/query work everywhere.
-PORTABLE_SKILLS = ("wiki-update", "wiki-query")
+# per-project, so cross-project sync/query/context work everywhere.
+PORTABLE_SKILLS = ("wiki-update", "wiki-query", "wiki-context-pack")
+
+
+class SchemaOptions(TypedDict):
+    allowed_lifecycles: frozenset[str]
+    allowed_relationship_types: frozenset[str]
+    required_trust_fields: tuple[str, ...]
+    schema_source: str
 
 
 # ── Data resolution ──────────────────────────────────────────────────────────
@@ -289,6 +299,106 @@ def write_config(vault_path: str) -> None:
         f'OBSIDIAN_WIKI_VERSION="{__version__}"\n'
     )
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
+
+
+VAULT_SUBDIRS = (
+    "concepts",
+    "entities",
+    "skills",
+    "references",
+    "synthesis",
+    "journal",
+    "projects",
+    "_archives",
+    "_raw",
+    "_staging",
+    ".obsidian",
+)
+
+
+def scaffold_vault(vault_path: Path) -> bool:
+    """Create the vault directory structure and special files if they don't exist yet.
+
+    Idempotent: existing files/dirs are left untouched. Returns True if the vault
+    directory itself had to be created (i.e. this is a brand new vault).
+    """
+    created = not vault_path.is_dir()
+    for name in VAULT_SUBDIRS:
+        (vault_path / name).mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    index_md = vault_path / "index.md"
+    if not index_md.exists():
+        index_md.write_text(
+            "---\n"
+            "title: Wiki Index\n"
+            "---\n\n"
+            "# Wiki Index\n\n"
+            f"*This index is automatically maintained. Last updated: {timestamp}*\n\n"
+            "## Concepts\n\n"
+            "*No pages yet. Use `wiki-ingest` to add your first source.*\n\n"
+            "## Entities\n\n"
+            "## Skills\n\n"
+            "## References\n\n"
+            "## Synthesis\n\n"
+            "## Journal\n"
+        )
+
+    log_md = vault_path / "log.md"
+    if not log_md.exists():
+        log_md.write_text(
+            "---\n"
+            "title: Wiki Log\n"
+            "---\n\n"
+            "# Wiki Log\n\n"
+            f'- [{timestamp}] INIT vault_path="{vault_path}" '
+            "categories=concepts,entities,skills,references,synthesis,journal\n"
+        )
+
+    hot_md = vault_path / "hot.md"
+    if not hot_md.exists():
+        hot_md.write_text(
+            "---\n"
+            "title: Hot Cache\n"
+            f"updated: {timestamp}\n"
+            "---\n\n"
+            "# Hot Cache\n\n"
+            "*A ~500-word semantic snapshot of recent activity. Updated after every major write operation.*\n\n"
+            "## Recent Activity\n\n"
+            f"- [{timestamp}] INIT — vault created at {vault_path}\n\n"
+            "## Active Threads\n\n"
+            "*None yet — start ingesting sources to populate.*\n\n"
+            "## Key Takeaways\n\n"
+            "*None yet.*\n\n"
+            "## Flagged Contradictions\n\n"
+            "*None yet.*\n"
+        )
+
+    manifest_json = vault_path / ".manifest.json"
+    if not manifest_json.exists():
+        manifest_json.write_text("{}\n")
+
+    app_json = vault_path / ".obsidian" / "app.json"
+    if not app_json.exists():
+        app_json.write_text(
+            json.dumps(
+                {
+                    "strictLineBreaks": False,
+                    "showFrontmatter": False,
+                    "defaultViewMode": "preview",
+                    "livePreview": True,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
+    appearance_json = vault_path / ".obsidian" / "appearance.json"
+    if not appearance_json.exists():
+        appearance_json.write_text(json.dumps({"baseFontSize": 16}, indent=2) + "\n")
+
+    return created
 
 
 def _check_stale() -> None:
@@ -582,6 +692,48 @@ def _print_doctor(report: dict[str, object]) -> None:
 
 
 # ── Commands ─────────────────────────────────────────────────────────────────
+def _maybe_configure_sync(vault_path: Path, remote_arg: str | None) -> bool:
+    """Offer (or apply) GitHub sync setup for the vault.
+
+    Non-interactive (`--remote` passed, or no TTY and no remote given): only
+    acts when a remote was explicitly supplied. Interactive: prompts, mirroring
+    setup.sh's flow, so pip/uv installs get the same offer shell/curl installs
+    always had (see #153).
+    """
+    from obsidian_wiki.sync import configure_sync, get_remote
+
+    if get_remote(vault_path):
+        return True  # already configured — nothing to do
+
+    remote = remote_arg
+    if not remote:
+        if not sys.stdin.isatty():
+            return False
+        print()
+        try:
+            answer = input("  Set up GitHub sync for your vault? [y/N]: ").strip()
+        except EOFError:
+            answer = ""
+        if answer.lower() != "y":
+            return False
+        try:
+            remote = input("  GitHub repo URL (e.g. https://github.com/you/my-wiki.git): ").strip()
+        except EOFError:
+            remote = ""
+        if not remote:
+            return False
+
+    try:
+        messages = configure_sync(vault_path, remote)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"⚠️  GitHub sync setup skipped: {exc}", file=sys.stderr)
+        return False
+    for m in messages:
+        print(f"✅  {m}")
+    print("✅  Run `obsidian-wiki sync` any time to commit and push vault changes.")
+    return True
+
+
 def cmd_setup(args: argparse.Namespace) -> int:
     mode = "copy" if args.copy else "symlink"
     print("\n╔══════════════════════════════════════════════════╗")
@@ -593,6 +745,13 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if not vault_path:
         print("    → Vault path not set yet. Re-run with `--vault /path/to/vault`")
         print("      or edit OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config.")
+    else:
+        vault_dir = Path(vault_path).expanduser()
+        vault_created = scaffold_vault(vault_dir)
+        if vault_created:
+            print(f"✅  Vault created at {vault_dir}")
+        else:
+            print(f"✅  Vault verified at {vault_dir}")
 
     if not args.project_only:
         print()
@@ -602,20 +761,58 @@ def cmd_setup(args: argparse.Namespace) -> int:
         project_dir = Path(args.project or os.getcwd()).expanduser().resolve()
         install_project(project_dir, mode)
 
+    sync_configured = False
+    if vault_path and Path(vault_path).expanduser().is_dir():
+        sync_configured = _maybe_configure_sync(Path(vault_path).expanduser(), args.remote)
+
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
     print(f" Skills installed: {n}  (mode: {mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
+    if sync_configured:
+        print(" GitHub sync:      obsidian-wiki sync")
     print("\n Next steps:")
     print("   1. Open a project in your agent")
     print('   2. Say: "set up my wiki"\n')
     print(" From any project:")
     print("   /wiki-update    → sync knowledge into your vault")
     print("   /wiki-query     → ask questions against your wiki")
+    print("   /wiki-context-pack → compile bounded context for another agent")
     print("───────────────────────────────────────────────────\n")
     return 0
+
+
+def cmd_sync_setup(args: argparse.Namespace) -> int:
+    from obsidian_wiki.sync import configure_sync
+
+    vault_str = resolve_vault_path(args.vault)
+    if not vault_str:
+        print("error: no vault configured — pass --vault or run `obsidian-wiki setup` first", file=sys.stderr)
+        return 1
+    vault_path = Path(vault_str).expanduser()
+    try:
+        messages = configure_sync(vault_path, args.remote)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for m in messages:
+        print(f"✅  {m}")
+    print("✅  Run `obsidian-wiki sync` any time to commit and push vault changes.")
+    return 0
+
+
+def cmd_sync(args: argparse.Namespace) -> int:
+    from obsidian_wiki.sync import run_sync
+
+    vault_str = resolve_vault_path(args.vault)
+    if not vault_str:
+        print("error: no vault configured — pass --vault or run `obsidian-wiki setup` first", file=sys.stderr)
+        return 1
+    code, message = run_sync(Path(vault_str).expanduser())
+    print(message)
+    return code
 
 
 def cmd_graph_query(args: argparse.Namespace) -> int:
@@ -665,6 +862,146 @@ def cmd_graph_analyse(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2))
     else:
         print(json.dumps(result))
+    return 0
+
+
+DEFAULT_CLAUDE_DIR = "~/.claude"
+DEFAULT_BRAIN_DIR = "~/.claude/session-brain"
+
+
+def _brain_dir(args: argparse.Namespace) -> Path:
+    return Path(
+        args.out or os.environ.get("WIKI_SESSION_BRAIN_DIR") or DEFAULT_BRAIN_DIR
+    ).expanduser()
+
+
+def _skip_list(args: argparse.Namespace) -> list[str]:
+    raw = args.skip or os.environ.get("WIKI_SKIP_PROJECTS", "")
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+def cmd_sessions_build(args: argparse.Namespace) -> int:
+    from obsidian_wiki.session_graph import build
+    claude_dir = Path(args.claude_dir).expanduser()
+    bookmarks = Path(args.bookmarks).expanduser() if args.bookmarks else \
+        Path("~/.bookmark-agent/bookmarks.json").expanduser()
+
+    def progress(message: str) -> None:
+        if args.verbose:
+            print(f"… {message}", file=sys.stderr)
+
+    result = build(
+        claude_dir,
+        _brain_dir(args),
+        k=args.k,
+        min_sim=args.min_sim,
+        mutual=args.mutual,
+        half_life_days=args.half_life,
+        full=args.full,
+        since=args.since,
+        skip=_skip_list(args),
+        bookmarks_path=bookmarks,
+        write_html=not args.no_html,
+        progress=progress,
+    )
+    if args.json:
+        print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+        return 0
+
+    stats = result["stats"]
+    print(f"{stats['sessions']} sessions ({stats['full']} with transcripts, "
+          f"{stats['thin']} history-only) · {stats['edges']} links · "
+          f"{stats['clusters']} topics · {stats['unclustered']} unclustered")
+    print(f"read {stats['read_this_run']} this run, reused {stats['reused']} cached")
+    for cluster in result["clusters"][:15]:
+        flag = " [dormant]" if cluster["dormant"] else (" [hot]" if cluster["momentum"] >= 2 else "")
+        print(f"  {cluster['size']:4}  {cluster['name'] or cluster['label']}{flag}")
+    if result["unnamed"]:
+        print(f"{result['unnamed']} unnamed topic(s) — run the session-brain skill to name them")
+    print(f"-> {result['out_dir']}")
+    return 0
+
+
+def cmd_sessions_query(args: argparse.Namespace) -> int:
+    from obsidian_wiki.session_query import query
+    try:
+        result = query(
+            _brain_dir(args), args.question,
+            top_n=args.top, max_load=args.max_load, half_life_days=args.half_life,
+            project=args.project, cluster=args.cluster, since=args.since,
+            min_score=args.min_score,
+        )
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+        return 0
+    if not result["candidates"]:
+        print("no matching sessions")
+        return 0
+    for c in result["candidates"]:
+        loadable = "" if c["loadable"] else "  (no transcript)"
+        print(f"{c['score']:.2f}  {c['end_ts'][:10]}  {c['project'][:18]:18}  "
+              f"{(c['title'] or '(untitled)')[:52]:52}{loadable}")
+        print(f"      {c['why']}")
+    if result["should_load"]:
+        print(f"\nload: {result['load_command']}")
+    return 0
+
+
+def cmd_sessions_show(args: argparse.Namespace) -> int:
+    from obsidian_wiki.session_query import show
+    try:
+        result = show(_brain_dir(args), args.session_id, neighbors=args.neighbors)
+    except (FileNotFoundError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    return 0
+
+
+def cmd_sessions_clusters(args: argparse.Namespace) -> int:
+    from obsidian_wiki.session_graph import load_graph
+    try:
+        _, clusters_doc = load_graph(_brain_dir(args))
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    clusters = clusters_doc.get("clusters", [])
+    if args.unnamed:
+        clusters = [c for c in clusters if not c.get("name")]
+    clusters = clusters[:args.top]
+    if args.json:
+        payload = {"clusters": clusters}
+        print(json.dumps(payload, indent=2) if args.pretty else json.dumps(payload))
+        return 0
+    for c in clusters:
+        flag = " [dormant]" if c.get("dormant") else (" [hot]" if c.get("momentum", 0) >= 2 else "")
+        print(f"{c['id']:3}  {c['size']:4}  {c.get('name') or c['label']}{flag}")
+        print(f"      terms: {', '.join(t for t, _ in c['top_terms'][:8])}")
+    return 0
+
+
+def cmd_sessions_name(args: argparse.Namespace) -> int:
+    from obsidian_wiki.session_graph import set_cluster_names
+    raw = sys.stdin.read() if args.from_file == "-" else \
+        Path(args.from_file).expanduser().read_text(encoding="utf-8")
+    try:
+        updates = json.loads(raw)
+    except ValueError as exc:
+        print(f"error: invalid JSON: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(updates, list):
+        print('error: expected a JSON array of {"id": N, "name": "...", "summary": "..."}',
+              file=sys.stderr)
+        return 1
+    try:
+        result = set_cluster_names(_brain_dir(args), updates)
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result))
     return 0
 
 
@@ -739,20 +1076,200 @@ def _print_lint(report: dict[str, object]) -> None:
         print(f"{name}: {count}")
 
 
+def _schema_csv(config: dict[str, str], key: str) -> list[str]:
+    if key not in config:
+        return []
+    values = [item.strip() for item in config[key].split(",")]
+    if any(not item for item in values):
+        raise ValueError(f"invalid {key} value: entries must not be empty")
+    return values
+
+
+def _schema_cli_values(values: list[str] | None, flag: str) -> list[str]:
+    normalised = [item.strip() for item in values or []]
+    if any(not item for item in normalised):
+        raise ValueError(f"invalid {flag} value: must not be empty")
+    return normalised
+
+
+def _schema_source_value(
+    args: argparse.Namespace,
+    config: dict[str, str],
+) -> str | None:
+    configured_value: str | None = None
+    if "OBSIDIAN_SCHEMA_SOURCE" in config:
+        configured_value = config["OBSIDIAN_SCHEMA_SOURCE"].strip()
+        if not configured_value:
+            raise ValueError("invalid OBSIDIAN_SCHEMA_SOURCE value: must not be empty")
+
+    cli_value = getattr(args, "schema_source", None)
+    if cli_value is not None:
+        value = cli_value.strip()
+        if not value:
+            raise ValueError("invalid --schema-source value: must not be empty")
+        return value
+    return configured_value
+
+
+def _read_config_file(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip("'\"")
+    return values
+
+
+def _resolve_schema_command_context(
+    vault_arg: str | None,
+) -> tuple[Path, dict[str, str], str] | None:
+    config: dict[str, str]
+    config_source: str
+    if vault_arg and vault_arg.startswith("@"):
+        name = vault_arg[1:]
+        if not name or re.fullmatch(r"[A-Za-z0-9_-]+", name) is None:
+            print("error: named vault must use @ followed by letters, digits, _ or -", file=sys.stderr)
+            return None
+        path = GLOBAL_CONFIG_DIR / f"config.{name}"
+        config = _read_config_file(path)
+        config_source = str(path)
+        resolved = config.get("OBSIDIAN_VAULT_PATH", "")
+    elif vault_arg is not None:
+        config = {}
+        config_source = "explicit-vault"
+        resolved = vault_arg
+    else:
+        current = Path.cwd().resolve()
+        config = {}
+        config_source = str(GLOBAL_CONFIG)
+        while True:
+            candidate = current / ".env"
+            local = _read_config_file(candidate)
+            if "OBSIDIAN_VAULT_PATH" in local:
+                config = local
+                config_source = str(candidate)
+                break
+            if current == HOME or current.parent == current:
+                break
+            current = current.parent
+        if not config:
+            config = _read_config_file(GLOBAL_CONFIG)
+        resolved = config.get("OBSIDIAN_VAULT_PATH", "")
+    if not resolved:
+        print("error: vault not configured; pass a path, @name, or run obsidian-wiki setup", file=sys.stderr)
+        return None
+    vault = Path(resolved).expanduser().resolve()
+    if not vault.is_dir():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return None
+    return vault, config, config_source
+
+
+def _schema_options(
+    args: argparse.Namespace,
+    config: dict[str, str],
+    config_source: str,
+    *,
+    default_required_trust_fields: tuple[str, ...] | None = None,
+) -> SchemaOptions:
+    from obsidian_wiki.lint import (
+        ALLOWED_RELATIONSHIP_TYPES,
+        TRUST_REQUIRED_FRONTMATTER,
+    )
+    from obsidian_wiki.trust import (
+        ALLOWED_LIFECYCLES,
+        TRUST_REQUIRED_FIELD_ALLOWLIST,
+    )
+
+    cli_lifecycles = _schema_cli_values(
+        getattr(args, "allow_lifecycle", None), "--allow-lifecycle"
+    )
+    cli_relationships = _schema_cli_values(
+        getattr(args, "allow_relationship_type", None), "--allow-relationship-type"
+    )
+    raw_cli_required = getattr(args, "required_trust_field", None)
+    cli_required = (
+        _schema_cli_values(raw_cli_required, "--required-trust-field")
+        if raw_cli_required is not None
+        else None
+    )
+    configured_lifecycles = _schema_csv(config, "OBSIDIAN_ALLOWED_LIFECYCLES")
+    configured_relationships = _schema_csv(config, "OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES")
+    configured_required = _schema_csv(config, "OBSIDIAN_REQUIRED_TRUST_FIELDS")
+    unknown_required = sorted(
+        set(configured_required).union(cli_required or ()) - TRUST_REQUIRED_FIELD_ALLOWLIST
+    )
+    if unknown_required:
+        allowed = ", ".join(sorted(TRUST_REQUIRED_FIELD_ALLOWLIST))
+        unknown = ", ".join(unknown_required)
+        raise ValueError(
+            "invalid OBSIDIAN_REQUIRED_TRUST_FIELDS value(s): "
+            f"{unknown}; allowed values: {allowed}"
+        )
+    required = tuple(
+        cli_required
+        if cli_required is not None
+        else configured_required
+        or list(default_required_trust_fields or TRUST_REQUIRED_FRONTMATTER)
+    )
+    cli_overrides = bool(
+        cli_lifecycles
+        or cli_relationships
+        or cli_required is not None
+    )
+    configured_overrides = bool(
+        configured_lifecycles
+        or configured_relationships
+        or configured_required
+    )
+    source = _schema_source_value(args, config)
+    if not source:
+        if cli_overrides and configured_overrides:
+            source = f"cli+config:{config_source}"
+        elif cli_overrides:
+            source = f"cli:{config_source}"
+        elif configured_overrides:
+            source = f"config:{config_source}"
+        else:
+            source = "framework-defaults"
+    return {
+        "allowed_lifecycles": ALLOWED_LIFECYCLES.union(configured_lifecycles, cli_lifecycles),
+        "allowed_relationship_types": ALLOWED_RELATIONSHIP_TYPES.union(
+            configured_relationships, cli_relationships
+        ),
+        "required_trust_fields": required,
+        "schema_source": source,
+    }
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from obsidian_wiki.lint import lint_vault
 
-    vault_arg = args.vault or _read_config_value("OBSIDIAN_VAULT_PATH")
-    if not vault_arg:
-        print("error: vault not configured; pass a path or run obsidian-wiki setup", file=sys.stderr)
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
         return 1
+    vault, config, config_source = context
 
-    vault = Path(vault_arg).expanduser().resolve()
-    if not vault.is_dir():
-        print(f"error: vault not found: {vault}", file=sys.stderr)
+    strict_trust = args.strict_trust or config.get("OBSIDIAN_TRUST_STRICT", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    try:
+        schema = _schema_options(args, config, config_source)
+        report = lint_vault(
+            vault,
+            require_trust_ledger=True,
+            strict_trust=strict_trust,
+            **schema,
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
-
-    report = lint_vault(vault, require_trust_ledger=True)
     if args.json:
         if args.pretty:
             print(json.dumps(report, indent=2))
@@ -766,7 +1283,11 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 
 def _resolve_command_vault(vault_arg: str | None) -> Path | None:
-    resolved = vault_arg or _read_config_value("OBSIDIAN_VAULT_PATH")
+    resolved = (
+        vault_arg
+        if vault_arg is not None
+        else _read_config_value("OBSIDIAN_VAULT_PATH")
+    )
     if not resolved:
         print("error: vault not configured; pass a path or run obsidian-wiki setup", file=sys.stderr)
         return None
@@ -777,21 +1298,89 @@ def _resolve_command_vault(vault_arg: str | None) -> Path | None:
     return vault
 
 
+def _read_env_value(path: Path, key: str) -> tuple[bool, str]:
+    if not path.is_file():
+        return False, ""
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if line.startswith(f"{key}="):
+            return True, line.split("=", 1)[1].strip().strip('"')
+    return False, ""
+
+
+def _resolve_context_pack_vault(vault_arg: str | None) -> Path | None:
+    if vault_arg is not None:
+        return _resolve_command_vault(vault_arg)
+
+    current = Path.cwd().resolve()
+    home = HOME.resolve()
+    while True:
+        found, local_vault = _read_env_value(
+            current / ".env",
+            "OBSIDIAN_VAULT_PATH",
+        )
+        if found:
+            if not local_vault:
+                print(
+                    "error: vault not configured; pass a path or run obsidian-wiki setup",
+                    file=sys.stderr,
+                )
+                return None
+            return _resolve_command_vault(local_vault)
+        if current == home or current.parent == current:
+            break
+        current = current.parent
+    return _resolve_command_vault(None)
+
+
 def cmd_trust_record(args: argparse.Namespace) -> int:
     from obsidian_wiki.trust import (
         TRUST_LEDGER_RELATIVE_PATH,
         build_trust_ledger,
+        check_trust_ledger,
         update_trust_ledger,
         write_trust_ledger,
     )
 
-    vault = _resolve_command_vault(args.vault)
-    if vault is None:
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault, config, config_source = context
+    try:
+        schema = _schema_options(
+            args,
+            config,
+            config_source,
+            default_required_trust_fields=("base_confidence", "lifecycle", "updated"),
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         return 1
     path = vault / TRUST_LEDGER_RELATIVE_PATH
     try:
         if args.all:
-            ledger = build_trust_ledger(vault, reviewed_at=args.reviewed_at)
+            removed_not_applicable: list[str] = []
+            if path.is_file():
+                previous = check_trust_ledger(
+                    vault,
+                    path,
+                    allowed_lifecycles=schema["allowed_lifecycles"],
+                    required_trust_keys=schema["required_trust_fields"],
+                    schema_source=schema["schema_source"],
+                )
+                removed_not_applicable = sorted(
+                    item["page"]
+                    for item in previous["stale"]
+                    if item.get("reason")
+                    == "confidence_not_applicable_but_ledger_entry_exists"
+                )
+            ledger = build_trust_ledger(
+                vault,
+                reviewed_at=args.reviewed_at,
+                allowed_lifecycles=schema["allowed_lifecycles"],
+                required_trust_keys=schema["required_trust_fields"],
+            )
+            ledger["removed_not_applicable"] = removed_not_applicable
             recorded_pages = len(ledger["pages"])
         else:
             ledger = update_trust_ledger(
@@ -799,33 +1388,80 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
                 path,
                 reviewed_at=args.reviewed_at,
                 page_paths=args.page,
+                allowed_lifecycles=schema["allowed_lifecycles"],
+                required_trust_keys=schema["required_trust_fields"],
             )
-            recorded_pages = len(set(args.page))
+            requested = {
+                Path(raw).as_posix().removeprefix("./") for raw in args.page
+            }
+            recorded_pages = len(requested.intersection(ledger["pages"]))
         write_trust_ledger(path, ledger, vault=vault)
-    except ValueError as exc:
+    except (RuntimeError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     result = {
         "status": "recorded",
         "ledger_path": str(path),
         "recorded_pages": recorded_pages,
+        "not_applicable_pages": list(ledger.get("not_applicable", [])),
+        "removed_not_applicable": list(ledger.get("removed_not_applicable", [])),
         "reviewed_at": args.reviewed_at,
         "method": ledger["method"],
+        "schema": {
+            "source": schema["schema_source"],
+            "allowed_lifecycles": sorted(schema["allowed_lifecycles"]),
+            "required_trust_fields": list(schema["required_trust_fields"]),
+        },
     }
     if args.json:
         print(json.dumps(result, indent=2 if args.pretty else None))
     else:
         print(f"recorded {result['recorded_pages']} reviewed page(s) in {path}")
+        print(
+            "not applicable (excluded from trust review): "
+            f"{len(result['not_applicable_pages'])} page(s)"
+        )
+        for page in result["not_applicable_pages"]:
+            print(f"  - {page}")
+        print(
+            "obsolete ledger entries removed: "
+            f"{len(result['removed_not_applicable'])} page(s)"
+        )
+        for page in result["removed_not_applicable"]:
+            print(f"  - {page}")
+        if result["removed_not_applicable"]:
+            removed = ", ".join(result["removed_not_applicable"])
+            print(
+                "warning: removed obsolete trust ledger entries because "
+                f"base_confidence is not applicable: {removed}",
+                file=sys.stderr,
+            )
     return 0
 
 
 def cmd_trust_check(args: argparse.Namespace) -> int:
     from obsidian_wiki.trust import check_trust_ledger
 
-    vault = _resolve_command_vault(args.vault)
-    if vault is None:
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
         return 1
-    report = check_trust_ledger(vault)
+    vault, config, config_source = context
+    try:
+        schema = _schema_options(
+            args,
+            config,
+            config_source,
+            default_required_trust_fields=("base_confidence", "lifecycle", "updated"),
+        )
+        report = check_trust_ledger(
+            vault,
+            allowed_lifecycles=schema["allowed_lifecycles"],
+            required_trust_keys=schema["required_trust_fields"],
+            schema_source=schema["schema_source"],
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         print(json.dumps(report, indent=2 if args.pretty else None))
     else:
@@ -879,6 +1515,31 @@ def cmd_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_context_pack(args: argparse.Namespace) -> int:
+    from obsidian_wiki.context_pack import ContextError, build_context_pack, render_markdown
+
+    vault = _resolve_context_pack_vault(args.vault)
+    if vault is None:
+        return 1
+    try:
+        pack = build_context_pack(
+            vault,
+            args.topic or "",
+            budget=args.budget,
+            recent=args.recent,
+            public_only=args.public_only,
+            metadata_only=args.metadata_only,
+        )
+    except ContextError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(pack, indent=2 if args.pretty else None))
+    else:
+        print(render_markdown(pack), end="")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     for name in list_skills():
         print(name)
@@ -897,6 +1558,10 @@ def cmd_info(args: argparse.Namespace) -> int:
         setup_ver = _read_config_value("OBSIDIAN_WIKI_VERSION")
         print(f"vault:     {vp or '(unset)'}")
         print(f"setup ran: {setup_ver or '(never)'}")
+        if vp:
+            from obsidian_wiki.sync import get_remote
+            remote = get_remote(Path(vp).expanduser())
+            print(f"sync:      {remote if remote else '(not configured — run: obsidian-wiki sync-setup <url>)'}")
     print(f"bundled skills: {len(bundled)}")
     print()
     print("Agent skill install status:")
@@ -930,6 +1595,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("setup", help="install skills into your agents and write config (default)")
     _add_setup_args(sp)
     sp.set_defaults(func=cmd_setup)
+
+    ssp = sub.add_parser(
+        "sync-setup",
+        help="configure GitHub sync for your vault (git init, .gitignore, remote)",
+    )
+    ssp.add_argument("remote", help="GitHub (or any git host) repo URL, e.g. https://github.com/you/my-wiki.git")
+    ssp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    ssp.set_defaults(func=cmd_sync_setup)
+
+    syp = sub.add_parser("sync", help="commit and push pending vault changes (git add -A, commit, push)")
+    syp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    syp.set_defaults(func=cmd_sync)
 
     lp = sub.add_parser("list", help="list bundled skills")
     lp.set_defaults(func=cmd_list)
@@ -969,6 +1646,77 @@ def build_parser() -> argparse.ArgumentParser:
     ga.add_argument("--top", type=int, default=20, help="number of top results to return (default: 20)")
     ga.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ga.set_defaults(func=cmd_graph_analyse)
+
+    sb = sub.add_parser(
+        "sessions-build",
+        help="build a topic graph over your agent session history (writes a sidecar, not the vault)",
+    )
+    sb.add_argument("--claude-dir", default=DEFAULT_CLAUDE_DIR,
+                    help=f"agent session cache to read (default: {DEFAULT_CLAUDE_DIR})")
+    sb.add_argument("--out", default=None,
+                    help=f"output directory (default: $WIKI_SESSION_BRAIN_DIR or {DEFAULT_BRAIN_DIR})")
+    sb.add_argument("--k", type=int, default=8, help="neighbours per session (default: 8)")
+    sb.add_argument("--min-sim", type=float, default=0.08,
+                    help="minimum cosine similarity for an edge (default: 0.08)")
+    sb.add_argument("--mutual", action="store_true",
+                    help="keep only mutual kNN edges — tighter, smaller clusters")
+    sb.add_argument("--half-life", type=float, default=90.0,
+                    help="recency half-life in days (default: 90)")
+    sb.add_argument("--since", help="only read sessions modified on or after this ISO date")
+    sb.add_argument("--skip",
+                    help="comma-separated substrings of project dirs to skip (or $WIKI_SKIP_PROJECTS). "
+                         "Cache dir names begin with '-', which argparse reads as a flag — pass the "
+                         "bare name ('game') or use --skip=-w-game")
+    sb.add_argument("--full", action="store_true", help="ignore caches and re-read every session")
+    sb.add_argument("--no-html", action="store_true", help="skip writing graph.html")
+    sb.add_argument("--bookmarks", help="path to bookmarks.json (default: ~/.bookmark-agent/bookmarks.json)")
+    sb.add_argument("--json", action="store_true", help="emit JSON instead of a human summary")
+    sb.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    sb.add_argument("-v", "--verbose", action="store_true", help="report progress to stderr")
+    sb.set_defaults(func=cmd_sessions_build)
+
+    sq = sub.add_parser(
+        "sessions-query",
+        help="find the sessions most relevant to a topic, ranked by similarity and recency",
+    )
+    sq.add_argument("question", help="topic or question to search for")
+    sq.add_argument("--out", default=None, help="session-brain directory")
+    sq.add_argument("--top", type=int, default=10, help="candidates to return (default: 10)")
+    sq.add_argument("--max-load", type=int, default=3,
+                    help="max sessions to recommend loading (default: 3)")
+    sq.add_argument("--half-life", type=float, default=None,
+                    help="override the recency half-life used at build time")
+    sq.add_argument("--project", help="restrict to one project")
+    sq.add_argument("--cluster", type=int, help="restrict to one topic cluster id")
+    sq.add_argument("--since", help="only consider sessions ending on or after this ISO date")
+    sq.add_argument("--min-score", type=float, default=0.05, help="drop candidates below this score")
+    sq.add_argument("--json", action="store_true", help="emit JSON instead of a human summary")
+    sq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    sq.set_defaults(func=cmd_sessions_query)
+
+    ssh = sub.add_parser(
+        "sessions-show",
+        help="show one session's graph node and its nearest neighbours",
+    )
+    ssh.add_argument("session_id", help="session id (full or unique prefix)")
+    ssh.add_argument("--out", default=None, help="session-brain directory")
+    ssh.add_argument("--neighbors", type=int, default=8, help="neighbours to include (default: 8)")
+    ssh.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ssh.set_defaults(func=cmd_sessions_show)
+
+    scl = sub.add_parser("sessions-clusters", help="list the discovered topic clusters")
+    scl.add_argument("--out", default=None, help="session-brain directory")
+    scl.add_argument("--unnamed", action="store_true", help="only clusters that still need a name")
+    scl.add_argument("--top", type=int, default=20, help="max clusters to list (default: 20)")
+    scl.add_argument("--json", action="store_true", help="emit JSON instead of a human summary")
+    scl.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    scl.set_defaults(func=cmd_sessions_clusters)
+
+    snm = sub.add_parser("sessions-name", help="assign names to topic clusters (durable across rebuilds)")
+    snm.add_argument("--out", default=None, help="session-brain directory")
+    snm.add_argument("--from", dest="from_file", required=True, metavar="FILE",
+                     help='JSON array of {"id": N, "name": "...", "summary": "..."}; use - for stdin')
+    snm.set_defaults(func=cmd_sessions_name)
 
     cc = sub.add_parser(
         "cache-check",
@@ -1018,17 +1766,48 @@ def build_parser() -> argparse.ArgumentParser:
         "lint",
         help="lint a vault for missing frontmatter, broken links, duplicates, and orphans",
     )
-    lt.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    lt.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     lt.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     lt.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     lt.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    lt.add_argument(
+        "--strict-trust",
+        action="store_true",
+        help=(
+            "fail lint on missing trust fields, ledger errors, stale reviews, and "
+            "score mismatches (default: legacy mode, these are warnings only). "
+            "Also settable per-vault via OBSIDIAN_TRUST_STRICT=1 in the config."
+        ),
+    )
+    lt.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework lifecycle allowlist (repeatable)",
+    )
+    lt.add_argument(
+        "--allow-relationship-type",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework relationship-type allowlist (repeatable)",
+    )
+    lt.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace default trust-field requiredness (repeatable)",
+    )
+    lt.add_argument(
+        "--schema-source",
+        help="authority locator recorded in the lint report (for example, vault/AGENTS.md)",
+    )
     lt.set_defaults(func=cmd_lint)
 
     tr = sub.add_parser(
         "trust-record",
         help="record explicitly approved manual confidence reviews in the vault trust ledger",
     )
-    tr.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    tr.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     selection = tr.add_mutually_exclusive_group(required=True)
     selection.add_argument("--all", action="store_true", help="record every current trust-schema page")
     selection.add_argument(
@@ -1046,16 +1825,45 @@ def build_parser() -> argparse.ArgumentParser:
     )
     tr.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     tr.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    tr.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the resolved vault lifecycle allowlist (repeatable)",
+    )
+    tr.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace resolved vault trust-field requiredness (repeatable)",
+    )
+    tr.add_argument("--schema-source", help="authority locator recorded in the result")
     tr.set_defaults(func=cmd_trust_record)
 
     tc = sub.add_parser(
         "trust-check",
         help="validate confidence values and material fingerprints against the manual trust ledger",
     )
-    tc.add_argument("vault", nargs="?", help="path to the Obsidian vault (defaults to configured OBSIDIAN_VAULT_PATH)")
+    tc.add_argument("vault", nargs="?", help="vault path or @name (defaults via CWD .env, then global config)")
     tc.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     tc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     tc.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    tc.add_argument(
+        "--allow-lifecycle",
+        action="append",
+        metavar="VALUE",
+        help="extend the framework lifecycle allowlist (repeatable)",
+    )
+    tc.add_argument(
+        "--required-trust-field",
+        action="append",
+        choices=("base_confidence", "lifecycle", "lifecycle_changed", "updated"),
+        help="replace default trust-field requiredness (repeatable)",
+    )
+    tc.add_argument(
+        "--schema-source",
+        help="authority locator recorded in the trust report",
+    )
     tc.set_defaults(func=cmd_trust_check)
 
     qq = sub.add_parser(
@@ -1069,6 +1877,34 @@ def build_parser() -> argparse.ArgumentParser:
     qq.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
+
+    cp = sub.add_parser(
+        "context-pack",
+        aliases=["context"],
+        help="compile a token-bounded vault slice for a downstream agent",
+    )
+    cp.add_argument("topic", nargs="?", help="topic to retrieve; omit only with --recent")
+    cp.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH")
+    cp.add_argument(
+        "--budget",
+        type=int,
+        default=8_000,
+        help="maximum estimated output tokens, 256..100000 (default: 8000)",
+    )
+    cp.add_argument("--recent", action="store_true", help="select recently updated notes")
+    cp.add_argument(
+        "--public-only",
+        action="store_true",
+        help="exclude visibility/internal and visibility/pii notes",
+    )
+    cp.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="emit titles, provenance, and summaries without body excerpts",
+    )
+    cp.add_argument("--json", action="store_true", help="emit structured JSON")
+    cp.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    cp.set_defaults(func=cmd_context_pack)
 
     return p
 
@@ -1093,6 +1929,12 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
         "--copy",
         action="store_true",
         help="copy skill files instead of symlinking to the installed package",
+    )
+    sp.add_argument(
+        "--remote",
+        metavar="URL",
+        help="GitHub (or any git host) repo URL for vault sync — skips the interactive "
+        "prompt and configures it non-interactively (see also: obsidian-wiki sync-setup)",
     )
 
 

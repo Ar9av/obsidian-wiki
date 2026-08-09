@@ -76,7 +76,7 @@ class ReadmeDriftTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
 
     def test_sync_workflow_is_documented(self) -> None:
-        for path in (ROOT / "AGENTS.md", ROOT / "README.md", ROOT / "README_TW.md"):
+        for path in (ROOT / "AGENTS.md", ROOT / "docs" / "contributing.md"):
             with self.subTest(path=path.name):
                 contents = path.read_text(encoding="utf-8")
                 self.assertIn("check_readme_sync.py", contents)

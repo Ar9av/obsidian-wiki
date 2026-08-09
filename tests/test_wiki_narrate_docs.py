@@ -42,13 +42,13 @@ class WikiNarrateDocsTest(unittest.TestCase):
         headings = set(re.findall(r"^## `([^`]+)`$", voices, flags=re.MULTILINE))
         self.assertEqual(headings, {"briefing", "plain-language", "lecturer"})
 
-    def test_routing_and_readme_expose_wiki_narrate(self) -> None:
+    def test_routing_and_skills_reference_expose_wiki_narrate(self) -> None:
         agents = self.read("AGENTS.md")
-        readme = self.read("README.md")
+        skills = self.read("docs/skills.md")
 
         self.assertIn("`wiki-narrate`", agents)
-        self.assertIn("`wiki-narrate`", readme)
-        self.assertIn("`/wiki-narrate <topic>`", readme)
+        self.assertIn("`wiki-narrate`", skills)
+        self.assertIn("`/wiki-narrate <topic>`", skills)
 
 
 if __name__ == "__main__":

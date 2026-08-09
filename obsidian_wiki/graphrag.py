@@ -36,14 +36,17 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _FRONT_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-_TITLE_RE = re.compile(r"^title:\s*(.+)$", re.MULTILINE)
 _TAGS_RE = re.compile(r"^tags:\s*\[([^\]]+)\]", re.MULTILINE)
 _TAGS_LIST_RE = re.compile(r"^tags:\s*\n((?:\s+-\s+\S+\n)+)", re.MULTILINE)
-_SUMMARY_RE = re.compile(r"^summary:\s*(.+?)$", re.MULTILINE)
 _CATEGORY_RE = re.compile(r"^category:\s*(\w+)", re.MULTILINE)
 _TIER_RE = re.compile(r"^tier:\s*(\w+)", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
 _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
+
+# A bare `>`, `>-`, `>+`, `|`, `|-`, `|+` (optionally followed by an indent
+# indicator digit) marks a YAML block scalar — the real value lives on the
+# following indented lines, not on this line.
+_BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 
 SKIP_DIRS = frozenset(
     "_raw _archived _staging _archives .obsidian".split()
@@ -52,6 +55,38 @@ SKIP_DIRS = frozenset(
 
 def _slug(s: str) -> str:
     return s.strip().lower().replace(" ", "-")
+
+
+def _extract_scalar(front: str, key: str) -> str:
+    """Extract a YAML scalar frontmatter value, folding block scalars (>, |).
+
+    Handles both `key: value` and the block-scalar form:
+        key: >-
+          wrapped
+          text
+    where the real value lives on subsequent indented lines, not on the
+    `key:` line itself (see issue #156 — a naive same-line regex captures
+    the `>-` indicator instead of the text).
+    """
+    lines = front.splitlines()
+    pattern = re.compile(rf"^{re.escape(key)}:\s*(.*)$")
+    for i, line in enumerate(lines):
+        m = pattern.match(line)
+        if not m:
+            continue
+        rest = m.group(1).strip()
+        if not rest or _BLOCK_SCALAR_RE.match(rest):
+            block_lines = []
+            for cont in lines[i + 1:]:
+                if cont.strip() == "":
+                    continue
+                if re.match(r"^\s+\S", cont):
+                    block_lines.append(cont.strip())
+                else:
+                    break
+            return " ".join(block_lines).strip()
+        return rest.strip("\"'")
+    return ""
 
 
 def build_index(vault: Path) -> dict[str, dict]:
@@ -78,10 +113,7 @@ def build_index(vault: Path) -> dict[str, dict]:
         front_m = _FRONT_RE.match(text)
         front = front_m.group(1) if front_m else ""
 
-        title = ""
-        m = _TITLE_RE.search(front)
-        if m:
-            title = m.group(1).strip().strip(">-").strip()
+        title = _extract_scalar(front, "title")
 
         tags: list[str] = []
         m = _TAGS_RE.search(front)
@@ -92,10 +124,7 @@ def build_index(vault: Path) -> dict[str, dict]:
             if m2:
                 tags = [ln.strip().lstrip("- ") for ln in m2.group(1).splitlines() if ln.strip()]
 
-        summary = ""
-        m = _SUMMARY_RE.search(front)
-        if m:
-            summary = m.group(1).strip()
+        summary = _extract_scalar(front, "summary")
 
         category = str(page.relative_to(vault).parent)
         m = _CATEGORY_RE.search(front)

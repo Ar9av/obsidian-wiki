@@ -1,24 +1,24 @@
 ---
 name: obsidian-layout-adjustment
 description: >
-  Workflow for working with Dan on changing how Obsidian looks using CSS snippets.
-  Use this whenever Dan asks to restyle Obsidian, tune a vault's visual layout,
+  Workflow for working with the user on changing how Obsidian looks using CSS snippets.
+  Use this whenever the user asks to restyle Obsidian, tune a vault's visual layout,
   adjust tabs, sidebars, note surfaces, properties, backlinks, graph panes, file
   explorer rows, icons, links, shadows, active states, or CSS snippets. Also use
-  it when Dan says a visual CSS change did nothing, still looks wrapped, is not
+  it when the user says a visual CSS change did nothing, still looks wrapped, is not
   lifted, is unreadable, or needs to be refactored without changing the current
   appearance.
 ---
 
 # Obsidian Layout Adjustment
 
-This skill is for changing how Obsidian looks with CSS files while working with Dan's visual language.
+This skill is for changing how Obsidian looks with CSS files while working with the user's visual language.
 
 Obsidian is always the same kind of environment: app frame, tab headers, side docks, view headers, pane shells, note surface, properties, file explorer, backlinks, graph, rendered markdown, and status bar. The vault, theme, snippets, plugins, and desired taste direction change, but the canvas stays Obsidian.
 
 The core behavior is translation:
 
-> Dan names a visible Obsidian object. Translate that phrase into the stable Obsidian layer/backend object, edit the active snippets safely, screenshot the result, and keep iterating without losing good states.
+> the user names a visible Obsidian object. Translate that phrase into the stable Obsidian layer/backend object, edit the active snippets safely, screenshot the result, and keep iterating without losing good states.
 
 This is not a general CSS workflow and not a fixed-theme generator.
 
@@ -39,7 +39,7 @@ Good normal update:
 
 Do not write a long workflow report unless:
 
-- Dan asks for a plan, audit, review, or explanation.
+- the user asks for a plan, audit, review, or explanation.
 - You are running evals or building this skill.
 - You are refactoring without visual changes.
 - The request is ambiguous enough that acting first would be risky.
@@ -50,7 +50,7 @@ The value is in preventing bad CSS loops while still moving quickly.
 
 Read `references/workflow-reference.md` when:
 
-- Dan names a visible Obsidian object in natural language.
+- the user names a visible Obsidian object in natural language.
 - The requested target could be more than one Obsidian layer.
 - A screenshot shows "nothing changed," "still wrapped," "not lifted," uneven edges, washed-out surfaces, or unreadable icons.
 - You are refactoring active snippets without changing the accepted look.
@@ -64,19 +64,19 @@ The reference is Obsidian-specific. Use it before treating the UI as an unknown 
 2. Read `<vault>/.obsidian/appearance.json`.
 3. Treat `enabledCssSnippets` as the active styling source of truth.
 4. Read active snippets before archives, backups, or old experiments.
-5. Translate Dan's phrase into an Obsidian object and owning layer.
+5. Translate the user's phrase into an Obsidian object and owning layer.
 6. Classify the change type: color, readability, lift, shape, structure, density, simplification, workflow, or refactor.
 7. Save a named checkpoint before subjective edits: copy the active snippets to `.obsidian/snippet-archive/`, never into `.obsidian/snippets`, so the snippet picker stays clean.
 8. Re-read the exact current block, then edit one owning layer: stage, shell, header, wrapper, or child. Formatting reshapes the file; a patch written from a remembered shape misses mechanically.
 9. Format CSS.
 10. Reload/focus Obsidian and screenshot the exact affected area.
-11. Use the screenshot and Dan's correction as evidence.
+11. Use the screenshot and the user's correction as evidence.
 12. If it fails, inspect ownership or restore; do not keep piling CSS onto the same wrong target.
-13. Refactor only after Dan accepts the visual state.
+13. Refactor only after the user accepts the visual state.
 
 ## Translate Before Editing
 
-Dan will usually name what he sees, not the selector:
+The user will usually name what they see, not the selector:
 
 - "tabs above the note"
 - "arrows/book/dots above the note"
@@ -90,20 +90,20 @@ Dan will usually name what he sees, not the selector:
 Before editing, map the phrase:
 
 ```text
-Dan phrase -> visible object -> Obsidian layer -> likely selector/settings surface -> change type -> owning layer
+user phrase -> visible object -> Obsidian layer -> likely selector/settings surface -> change type -> owning layer
 ```
 
 Say the mapping back when it could be ambiguous:
 
 > "When you say the tabs above the note, I am treating that as the workspace tab headers, not the arrows/book/dots row inside the note pane."
 
-This is the main mistake-prevention step. Most frustrating failures came from changing a plausible element that was not the object Dan meant, or changing a child when the wrapper/header/stage owned the visible shape.
+This is the main mistake-prevention step. Most frustrating failures came from changing a plausible element that was not the object the user meant, or changing a child when the wrapper/header/stage owned the visible shape.
 
 ## Stable Layer Stack
 
 Use this compact map first, then verify exact selectors in the live vault:
 
-| Dan points at | Usually means |
+| the user points at | Usually means |
 | --- | --- |
 | top-left white/native area | titlebar/native chrome or adjacent app header |
 | tabs above note | workspace tab headers |
@@ -186,7 +186,7 @@ If the screenshot disproves the fix, keep working, restore, or say it failed. Do
 
 ## Failure Signals
 
-Dan's corrections are selector evidence:
+the user's corrections are selector evidence:
 
 - "nothing changed" means wrong selector, wrong layer, clipping, coverage, or override.
 - "still wrapped" usually means both wrapper and child are styled.
@@ -201,7 +201,7 @@ If a direction fails twice, restore the last good checkpoint and change the owne
 
 Do not refactor during taste exploration.
 
-When Dan likes the look:
+When the user likes the look:
 
 1. Save a baseline checkpoint.
 2. Add or update a file map and section headers.
@@ -219,7 +219,7 @@ When done, keep the closeout short. Report:
 
 - active snippet files changed
 - checkpoint paths saved
-- what Dan phrase mapped to which Obsidian layer
+- what user phrase mapped to which Obsidian layer
 - what was screenshot-verified
 - anything not verified or intentionally deferred
 

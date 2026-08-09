@@ -161,6 +161,8 @@ Use `${QMD_CLI:-qmd} get "#docid"` to retrieve a ranked document by docid when C
 
 The returned snippets or ranked files act as pre-read section summaries. If they answer the question fully, skip Step 3 and go straight to Step 4 (reading only the pages QMD ranked highest). If not, use the ranked file list to guide which files to grep or read in Step 3.
 
+**Defensive filter: drop any `_raw/` path from wiki-collection results.** The wiki collection is supposed to index only compiled pages, but a misconfigured collection (see `.env.example`) can end up indexing `_raw/` — including stale drafts sitting in `_raw/_archived/` that were already superseded by a promoted page. Before using a QMD hit from `$QMD_WIKI_COLLECTION`, check its path: if it contains `_raw/`, discard it from the wiki-collection result set (it may still surface legitimately via `$QMD_PAPERS_COLLECTION`, cited as a raw source). This keeps a misconfigured collection degrading to "missing recall" rather than "silently citing a superseded draft as compiled knowledge." If you see `_raw/` paths coming back from the wiki collection, mention it in your working update so the user knows their collection scope needs fixing (see `.env.example` QMD section).
+
 **Also search `papers` when the question may have source material in `_raw/`:**
 
 If `QMD_PAPERS_COLLECTION` is set and the user is asking about a topic likely covered by ingested papers (research, theory, background), run a parallel search against the papers collection. Cite raw sources separately from compiled wiki pages in your answer.

@@ -16,6 +16,7 @@ import re
 import secrets
 import stat
 import tempfile
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -28,6 +29,9 @@ TRUST_SKIP_DIRS = frozenset(
 )
 TRUST_RESERVED_STEMS = frozenset({"index", "log", "hot", "_insights"})
 ALLOWED_LIFECYCLES = frozenset({"draft", "reviewed", "verified", "disputed", "archived"})
+TRUST_REQUIRED_FIELD_ALLOWLIST = frozenset(
+    {"base_confidence", "lifecycle", "lifecycle_changed", "updated"}
+)
 _REQUIRED_TRUST_KEYS = ("base_confidence", "lifecycle", "updated")
 _VOLATILE_CONFIDENCE_KEYS = (
     "updated",
@@ -93,8 +97,32 @@ def _frontmatter_scalar(raw: str) -> str:
     return value
 
 
-def _trust_metadata(path: Path) -> dict[str, Any]:
+def _effective_schema(
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> tuple[frozenset[str], tuple[str, ...]]:
+    lifecycles = frozenset(
+        ALLOWED_LIFECYCLES if allowed_lifecycles is None else allowed_lifecycles
+    )
+    required = tuple(required_trust_keys) if required_trust_keys is not None else _REQUIRED_TRUST_KEYS
+    unknown = set(required) - TRUST_REQUIRED_FIELD_ALLOWLIST
+    if unknown:
+        raise ValueError(f"unknown required trust field(s): {', '.join(sorted(unknown))}")
+    return lifecycles, required
+
+
+def _trust_metadata(
+    path: Path,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> dict[str, Any]:
     """Parse and validate trust-sensitive frontmatter without YAML ambiguity."""
+    lifecycles, required = _effective_schema(
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
     try:
         text = _normalise_text(path.read_text(encoding="utf-8"))
     except UnicodeError as exc:
@@ -121,7 +149,7 @@ def _trust_metadata(path: Path) -> dict[str, Any]:
         entries = records.get(key, [])
         if len(entries) > 1:
             raise ValueError(f"duplicate top-level field: {key}")
-    for key in _REQUIRED_TRUST_KEYS:
+    for key in required:
         if key not in records:
             raise ValueError(f"missing {key}")
 
@@ -134,27 +162,33 @@ def _trust_metadata(path: Path) -> dict[str, Any]:
         if not scalar or scalar in {">", ">-", "|", "|-"} or children:
             raise ValueError(f"{key} must be a scalar")
 
-    updated = _frontmatter_scalar(records["updated"][0][0])
-    _validate_updated(updated)
+    if "updated" in records:
+        updated = _frontmatter_scalar(records["updated"][0][0])
+        _validate_updated(updated)
 
-    confidence_raw = _frontmatter_scalar(records["base_confidence"][0][0])
-    try:
-        confidence = float(confidence_raw)
-    except ValueError as exc:
-        raise ValueError("base_confidence is not numeric") from exc
-    if not math.isfinite(confidence):
-        raise ValueError("base_confidence is not finite")
-    if not 0.0 <= confidence <= 1.0:
-        raise ValueError("base_confidence is outside [0.0, 1.0]")
+    confidence: float | None = None
+    if "base_confidence" in records:
+        confidence_raw = _frontmatter_scalar(records["base_confidence"][0][0])
+        try:
+            confidence = float(confidence_raw)
+        except ValueError as exc:
+            raise ValueError("base_confidence is not numeric") from exc
+        if not math.isfinite(confidence):
+            raise ValueError("base_confidence is not finite")
+        if not 0.0 <= confidence <= 1.0:
+            raise ValueError("base_confidence is outside [0.0, 1.0]")
 
-    lifecycle = _frontmatter_scalar(records["lifecycle"][0][0])
-    if lifecycle not in ALLOWED_LIFECYCLES:
-        raise ValueError(f"invalid lifecycle: {lifecycle}")
+    lifecycle: str | None = None
+    if "lifecycle" in records:
+        lifecycle = _frontmatter_scalar(records["lifecycle"][0][0])
+        if lifecycle not in lifecycles:
+            raise ValueError(f"invalid lifecycle: {lifecycle}")
     return {
         "text": text,
         "frontmatter": frontmatter,
         "confidence": confidence,
         "lifecycle": lifecycle,
+        "review_status": "reviewable" if confidence is not None else "not_applicable",
     }
 
 
@@ -171,9 +205,18 @@ def _strip_volatile_confidence_fields(frontmatter: str) -> str:
     return "\n".join(kept).strip()
 
 
-def page_fingerprint(path: Path) -> str:
+def page_fingerprint(
+    path: Path,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> str:
     """Hash material claims and evidence, excluding validated volatile bookkeeping."""
-    metadata = _trust_metadata(path)
+    metadata = _trust_metadata(
+        path,
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
     text = metadata["text"]
     match = _FRONTMATTER_RE.match(text)
     assert match is not None
@@ -183,8 +226,34 @@ def page_fingerprint(path: Path) -> str:
     return "sha256:" + hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
-def _parse_confidence(path: Path) -> float:
-    return float(_trust_metadata(path)["confidence"])
+def validate_trust_metadata(
+    path: Path,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> dict[str, Any]:
+    """Validate present trust fields even when no review ledger is configured."""
+    return _trust_metadata(
+        path,
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
+
+
+def _parse_confidence(
+    path: Path,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> float:
+    value = _trust_metadata(
+        path,
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )["confidence"]
+    if value is None:
+        raise ValueError("missing base_confidence for trust review")
+    return float(value)
 
 
 def iter_trust_pages(vault: Path) -> list[Path]:
@@ -200,25 +269,67 @@ def iter_trust_pages(vault: Path) -> list[Path]:
     return sorted(pages, key=lambda item: item.relative_to(vault).as_posix())
 
 
-def build_trust_ledger(vault: Path, *, reviewed_at: str) -> dict[str, Any]:
+def build_trust_ledger(
+    vault: Path,
+    *,
+    reviewed_at: str,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> dict[str, Any]:
     """Capture explicitly approved confidence values and material fingerprints."""
     reviewed_at = _validate_reviewed_at(reviewed_at)
     pages: dict[str, dict[str, Any]] = {}
+    not_applicable: list[str] = []
     for path in iter_trust_pages(vault):
         rel = path.relative_to(vault).as_posix()
-        pages[rel] = _review_entry(path, reviewed_at)
+        metadata = _trust_metadata(
+            path,
+            allowed_lifecycles=allowed_lifecycles,
+            required_trust_keys=required_trust_keys,
+        )
+        if metadata["review_status"] == "not_applicable":
+            not_applicable.append(rel)
+            continue
+        pages[rel] = _review_entry(
+            path,
+            reviewed_at,
+            allowed_lifecycles=allowed_lifecycles,
+            required_trust_keys=required_trust_keys,
+        )
     return {
         "schema_version": TRUST_LEDGER_SCHEMA_VERSION,
         "method": TRUST_REVIEW_METHOD,
         "reviewed_at": reviewed_at,
         "pages": pages,
+        "not_applicable": not_applicable,
     }
 
 
-def _review_entry(path: Path, reviewed_at: str) -> dict[str, Any]:
+def _review_entry(
+    path: Path,
+    reviewed_at: str,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> dict[str, Any]:
+    metadata = _trust_metadata(
+        path,
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
+    if metadata["review_status"] == "not_applicable":
+        raise ValueError("trust review is not applicable: base_confidence is absent")
     return {
-        "reviewed_confidence": _parse_confidence(path),
-        "material_fingerprint": page_fingerprint(path),
+        "reviewed_confidence": _parse_confidence(
+            path,
+            allowed_lifecycles=allowed_lifecycles,
+            required_trust_keys=required_trust_keys,
+        ),
+        "material_fingerprint": page_fingerprint(
+            path,
+            allowed_lifecycles=allowed_lifecycles,
+            required_trust_keys=required_trust_keys,
+        ),
         "reviewed_at": reviewed_at,
     }
 
@@ -260,8 +371,10 @@ def update_trust_ledger(
     *,
     reviewed_at: str,
     page_paths: list[str],
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
 ) -> dict[str, Any]:
-    """Update only explicitly reviewed pages while preserving every other entry."""
+    """Update reviewed pages and remove entries whose confidence is not applicable."""
     reviewed_at = _validate_reviewed_at(reviewed_at)
     if ledger_path.is_file():
         try:
@@ -294,6 +407,19 @@ def update_trust_ledger(
         }
 
     current = {path.relative_to(vault).as_posix(): path for path in iter_trust_pages(vault)}
+    not_applicable: list[str] = []
+    for rel, page in current.items():
+        metadata = _trust_metadata(
+            page,
+            allowed_lifecycles=allowed_lifecycles,
+            required_trust_keys=required_trust_keys,
+        )
+        if metadata["review_status"] == "not_applicable":
+            not_applicable.append(rel)
+    removed_not_applicable = sorted(set(ledger["pages"]) & set(not_applicable))
+    for rel in removed_not_applicable:
+        del ledger["pages"][rel]
+
     selected: list[str] = []
     for raw in page_paths:
         candidate = Path(raw)
@@ -305,8 +431,17 @@ def update_trust_ledger(
             raise RuntimeError(f"trust page is missing or lacks the trust schema: {raw}")
         if rel not in selected:
             selected.append(rel)
-            ledger["pages"][rel] = _review_entry(page, reviewed_at)
+            if rel in not_applicable:
+                continue
+            ledger["pages"][rel] = _review_entry(
+                page,
+                reviewed_at,
+                allowed_lifecycles=allowed_lifecycles,
+                required_trust_keys=required_trust_keys,
+            )
     ledger["reviewed_at"] = reviewed_at
+    ledger["not_applicable"] = sorted(not_applicable)
+    ledger["removed_not_applicable"] = removed_not_applicable
     return ledger
 
 
@@ -411,11 +546,23 @@ def write_trust_ledger(
         raise RuntimeError(f"cannot write trust ledger: {exc}") from exc
 
 
-def _empty_report(ledger_path: Path) -> dict[str, Any]:
+def _empty_report(
+    ledger_path: Path,
+    *,
+    allowed_lifecycles: Collection[str],
+    required_trust_keys: Collection[str],
+    schema_source: str,
+) -> dict[str, Any]:
     return {
         "status": "pass",
         "ledger_path": str(ledger_path),
+        "schema": {
+            "source": schema_source,
+            "allowed_lifecycles": sorted(allowed_lifecycles),
+            "required_trust_fields": list(required_trust_keys),
+        },
         "reviewed": [],
+        "not_applicable": [],
         "stale": [],
         "unreviewed": [],
         "score_mismatches": [],
@@ -425,10 +572,26 @@ def _empty_report(ledger_path: Path) -> dict[str, Any]:
     }
 
 
-def check_trust_ledger(vault: Path, ledger_path: Path | None = None) -> dict[str, Any]:
+def check_trust_ledger(
+    vault: Path,
+    ledger_path: Path | None = None,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+    schema_source: str = "framework-defaults",
+) -> dict[str, Any]:
     """Validate current pages against an approved manual review ledger."""
+    lifecycles, required = _effective_schema(
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
     path = ledger_path or vault / TRUST_LEDGER_RELATIVE_PATH
-    report = _empty_report(path)
+    report = _empty_report(
+        path,
+        allowed_lifecycles=lifecycles,
+        required_trust_keys=required,
+        schema_source=schema_source,
+    )
     try:
         ledger = json.loads(
             path.read_text(encoding="utf-8"),
@@ -486,16 +649,36 @@ def check_trust_ledger(vault: Path, ledger_path: Path | None = None) -> dict[str
     }
     for rel, page in current.items():
         try:
-            page_metadata = _trust_metadata(page)
-            stored_confidence = float(page_metadata["confidence"])
+            page_metadata = _trust_metadata(
+                page,
+                allowed_lifecycles=lifecycles,
+                required_trust_keys=required,
+            )
         except ValueError as exc:
             report["errors"].append({"page": rel, "issue": str(exc)})
             continue
+        if page_metadata["review_status"] == "not_applicable":
+            report["not_applicable"].append(
+                {"page": rel, "reason": "base_confidence_absent_by_owner_schema"}
+            )
+            if rel in validated_entries:
+                report["stale"].append(
+                    {
+                        "page": rel,
+                        "reason": "confidence_not_applicable_but_ledger_entry_exists",
+                    }
+                )
+            continue
+        stored_confidence = float(page_metadata["confidence"])
         if rel not in validated_entries:
             report["unreviewed"].append({"page": rel, "reason": "not_in_manual_ledger"})
             continue
         fingerprint, reviewed_value, reviewed_at = validated_entries[rel]
-        if page_fingerprint(page) != fingerprint:
+        if page_fingerprint(
+            page,
+            allowed_lifecycles=lifecycles,
+            required_trust_keys=required,
+        ) != fingerprint:
             report["stale"].append({"page": rel, "reason": "material_fingerprint_changed"})
             continue
         if abs(stored_confidence - reviewed_value) > 1e-9:
@@ -521,7 +704,15 @@ def check_trust_ledger(vault: Path, ledger_path: Path | None = None) -> dict[str
 
 
 def _finalise_report(report: dict[str, Any]) -> dict[str, Any]:
-    keys = ("reviewed", "stale", "unreviewed", "score_mismatches", "missing_pages", "errors")
+    keys = (
+        "reviewed",
+        "not_applicable",
+        "stale",
+        "unreviewed",
+        "score_mismatches",
+        "missing_pages",
+        "errors",
+    )
     report["counts"] = {key: len(report[key]) for key in keys}
     if report["errors"] or report["score_mismatches"]:
         report["status"] = "fail"

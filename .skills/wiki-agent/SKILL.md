@@ -116,7 +116,14 @@ If a query was given, score each session in the inventory without opening full s
 
 1. **Name/title match** — does the session name or thread title contain the query terms? Score: +3
 2. **CWD/project match** — does the working directory suggest the right project? Score: +2
-3. **Recency** — sessions from the last 90 days score higher than older ones. Score: +1 per 30-day recency bracket (max +3)
+3. **Recency** — apply exponential time decay with a 90-day half-life, as a multiplier on the match score rather than a bonus added to it:
+
+   ```
+   base  = name_match(3) + cwd_match(2)
+   score = base * (0.35 + 0.65 * 0.5 ** (age_days / 90))
+   ```
+
+   The 0.35 floor is deliberate: an old session that matches the query exactly must still outrank a recent one that barely matches, or the skill can never answer "how did I first solve this?". This is the same decay `session-brain` uses, so the two skills rank consistently.
 4. **Already ingested** — if this session was previously ingested and the wiki page already covers the query (check `hot.md` + `index.md`), flag as "covered" but still show in results
 
 Select the **top 3–5 sessions** by score. If no query was given, select the 5 most recent unprocessed sessions.

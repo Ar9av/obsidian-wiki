@@ -1,12 +1,12 @@
 # Obsidian Layout Workflow Reference
 
-Use this reference when working with Dan on changing how Obsidian looks using CSS snippets.
+Use this reference when working with the user on changing how Obsidian looks using CSS snippets.
 
 This file is intentionally Obsidian-specific. The design direction can change, but the canvas stays Obsidian: app frame, tab headers, side docks, view headers, pane shells, note surface, metadata, rendered markdown, file explorer, utility panes, graph, and status bar.
 
-## Dan Language To Obsidian Backend
+## User Language To Obsidian Backend
 
-Dan names the visible object. Translate it into the Obsidian object before editing.
+the user names the visible object. Translate it into the Obsidian object before editing.
 
 For live styling work, this translation should usually be brief and operational:
 
@@ -14,7 +14,7 @@ For live styling work, this translation should usually be brief and operational:
 
 Then inspect, checkpoint, patch, format, reload, and screenshot. Long translation tables belong in evals, audits, or planning notes, not in every small visual pass.
 
-| Dan might say | Usually means | Backend / selector family to inspect |
+| the user might say | Usually means | Backend / selector family to inspect |
 | --- | --- | --- |
 | tabs above the note | open workspace tab headers | `.workspace-tab-header-container`, `.workspace-tab-header`, `.workspace-tab-header-inner` |
 | plus next to the tab | new tab button in tab strip | `.workspace-tab-header-new-tab`, tab header `.clickable-icon` |
@@ -65,7 +65,7 @@ If the phrase could mean more than one layer, say the mapping back before editin
 
 ## Change-Type Map
 
-The same visible object can require different backend work depending on what Dan asks for.
+The same visible object can require different backend work depending on what the user asks for.
 
 ### Color or accent
 
@@ -143,7 +143,7 @@ Because Obsidian's layer map is stable, the mistakes can be specific:
 
 ## Failure Signals
 
-Dan's corrections are diagnostic:
+the user's corrections are diagnostic:
 
 - **"Nothing changed"**: wrong selector, wrong layer, clipping, coverage, override, or not reloaded.
 - **"Still wrapped"**: wrapper and child both styled; pick one.
@@ -158,7 +158,7 @@ If the same failure repeats twice, restore the last good checkpoint and change t
 ## Breakthrough Concepts
 
 - The screenshot is product truth.
-- Dan's corrections are selector evidence.
+- the user's corrections are selector evidence.
 - Obsidian is layered furniture, not a flat page.
 - The owning wrapper matters more than the prettiest selector.
 - Lift is a relationship, not a shadow.

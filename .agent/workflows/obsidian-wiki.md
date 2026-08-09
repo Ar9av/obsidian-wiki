@@ -2,6 +2,9 @@
 name: obsidian-wiki
 description: Obsidian wiki workflows — query, update, ingest, lint, status.
 commands:
+  - name: wiki-context-pack
+    description: Compile a bounded vault context slice for a downstream agent.
+    skill: .skills/wiki-context-pack/SKILL.md
   - name: wiki-query
     description: Answer questions from the compiled Obsidian wiki with [[wikilink]] citations.
     skill: .skills/wiki-query/SKILL.md

@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -94,6 +95,32 @@ def _file_size(path: Path) -> int:
         return 0
 
 
+def _git_tracked_files(source_dir: Path) -> list[Path] | None:
+    """Return repo-relative-to-source_dir file paths via `git ls-files`, or
+    None if source_dir isn't a usable git working tree (no `.git`, `git`
+    missing, not a repo, etc).
+
+    Uses `--cached --others --exclude-standard` so both committed files and
+    new-but-not-yet-committed files are picked up, while anything the repo's
+    own `.gitignore` excludes (node_modules, build output, venvs, secrets,
+    ...) is skipped automatically — no hardcoded SKIP_DIRS guesswork needed.
+    """
+    if not (source_dir / ".git").exists():
+        return None
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(source_dir), "ls-files", "-z",
+             "--cached", "--others", "--exclude-standard"],
+            capture_output=True, timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    raw = proc.stdout.decode("utf-8", errors="replace")
+    return [source_dir / rel for rel in raw.split("\0") if rel]
+
+
 # ---------------------------------------------------------------------------
 # Source discovery
 # ---------------------------------------------------------------------------
@@ -104,25 +131,38 @@ def discover_sources(
     vault: Path | None = None,
     include_code: bool = False,
 ) -> list[dict]:
-    """Walk source_dir and return a list of ingestible file dicts.
+    """Return a list of ingestible file dicts under source_dir.
 
     Each dict: {path, kind, size_bytes}. Code files are excluded by default
     because wiki-ingest Step 1c handles them via ast-extract separately.
+
+    If source_dir is the root of a git working tree, files are enumerated
+    with `git ls-files` so the repo's own `.gitignore` rules apply (this
+    correctly skips whatever a project actually ignores, not just the
+    common-case SKIP_DIRS list below). Otherwise falls back to a plain
+    directory walk.
     """
+    tracked = _git_tracked_files(source_dir)
+    if tracked is not None:
+        candidates = sorted(tracked)
+    else:
+        candidates = []
+        for dirpath, dirnames, filenames in os.walk(source_dir):
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in SKIP_DIRS and not d.startswith(".")
+            ]
+            for fn in sorted(filenames):
+                candidates.append(Path(dirpath) / fn)
+
     files = []
-    for dirpath, dirnames, filenames in os.walk(source_dir):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in SKIP_DIRS and not d.startswith(".")
-        ]
-        for fn in sorted(filenames):
-            p = Path(dirpath) / fn
-            kind = _classify(p)
-            if kind == "skip":
-                continue
-            if kind == "code" and not include_code:
-                continue
-            files.append({"path": str(p), "kind": kind, "size_bytes": _file_size(p)})
+    for p in candidates:
+        kind = _classify(p)
+        if kind == "skip":
+            continue
+        if kind == "code" and not include_code:
+            continue
+        files.append({"path": str(p), "kind": kind, "size_bytes": _file_size(p)})
     return files
 
 

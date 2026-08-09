@@ -18,9 +18,15 @@ You are performing a health check on an Obsidian wiki. Your goal is to find and 
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH`
-2. Read `index.md` for the full page inventory
-3. Read `log.md` for recent activity context
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` plus any `OBSIDIAN_ALLOWED_LIFECYCLES`, `OBSIDIAN_ALLOWED_RELATIONSHIP_TYPES`, `OBSIDIAN_REQUIRED_TRUST_FIELDS`, and `OBSIDIAN_SCHEMA_SOURCE` values.
+2. **Read owner rules** — if `$OBSIDIAN_VAULT_PATH/AGENTS.md` exists, read it before interpreting any schema. Owner rules override framework defaults.
+3. **Form the effective schema** — record the schema source locator plus effective required/optional frontmatter, lifecycle values, relationship types, and provenance markers. Framework values are defaults; preserve owner extensions and relaxed requiredness exactly. Never coerce an owner type to a framework type.
+4. Read `index.md` for the full page inventory
+5. Read `log.md` for recent activity context
+
+Pass the effective schema to deterministic checks explicitly. For example, add each owner extension with `--allow-lifecycle` / `--allow-relationship-type`, replace trust requiredness with repeatable `--required-trust-field`, and identify the authority with `--schema-source "$OBSIDIAN_VAULT_PATH/AGENTS.md"`. The JSON report's `schema` block must match the schema you formed before findings are accepted.
+
+Schema precedence is CLI flags > resolved environment/config values > framework defaults; lifecycle and relationship extensions remain additive. Strip every override before use. An explicitly configured empty or whitespace-only value—and any empty comma-separated list entry—fails closed; never treat it as a valid lifecycle, relationship type, required field, or authority locator. Remove the variable instead when defaults are intended.
 
 ## Lint Checks
 
@@ -182,13 +188,13 @@ Confidence is a semantic judgment. A deterministic tool cannot infer independent
 
 #### Rule 12a — `lifecycle` enum validation
 
-**How to check:** Grep frontmatter for `^lifecycle:` across all pages. Flag any value not in `{draft, reviewed, verified, disputed, archived}`.
+**How to check:** Grep frontmatter for `^lifecycle:` across all pages. Flag any value outside the effective lifecycle set (framework default: `{draft, reviewed, verified, disputed, archived}`).
 
 **How to fix:** n/a (only a human should set lifecycle state)
 
 #### Rule 12b — `base_confidence` range
 
-**How to check:** Grep frontmatter for `^base_confidence:` across all pages. Flag any value outside `[0.0, 1.0]` or any page missing the field entirely.
+**How to check:** Grep frontmatter for `^base_confidence:` across all pages. Flag any present value outside `[0.0, 1.0]`; flag absence only when the effective owner schema requires the field.
 
 **How to fix:** n/a (wrong value means the skill computed it wrong — surface for manual correction)
 
@@ -269,8 +275,9 @@ merely to silence warnings.
 
 #### Current enforcement
 
-Full enforcement is active. Every non-reserved content page must contain a
+Under framework defaults, every non-reserved content page must contain a
 finite `base_confidence` in `[0.0, 1.0]` and a documented lifecycle value.
+An owner schema may relax either field; present values remain validated.
 Missing or malformed trust fields, malformed ledger data, and a missing required
 ledger are hard errors. New pages with valid trust fields but no approved ledger
 entry are `unreviewed`; material changes to approved pages are `stale`.
@@ -300,7 +307,7 @@ Append to the `LINT` log entry:
 
 Validate `relationships:` frontmatter blocks. Skip pages that have no `relationships:` block — the field is optional.
 
-**Allowed types:** `extends`, `implements`, `contradicts`, `derived_from`, `uses`, `replaces`, `related_to`
+**Framework-default types:** `extends`, `implements`, `contradicts`, `derived_from`, `uses`, `replaces`, `related_to`. Validate against the effective set after applying owner extensions.
 
 **How to check:**
 - Grep frontmatter for `^relationships:` across all vault pages
@@ -311,7 +318,7 @@ Validate `relationships:` frontmatter blocks. Skip pages that have no `relations
   3. **Self-reference** — flag any entry where the resolved target equals the page's own node id
 
 **How to fix:**
-- Invalid type: correct the value to the nearest allowed type, or use `related_to` when the type is ambiguous
+- Invalid type: report the value and effective schema source. Correct it only if it is absent from both framework defaults and owner extensions; never replace a valid owner type with `related_to`.
 - Broken target: update or remove the entry; if the target page should exist, create it first
 - Self-reference: remove the entry
 
