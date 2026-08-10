@@ -107,6 +107,11 @@ Build a candidate set *without opening any page bodies*:
   4. `index.md` entry contains the query term
 - **Apply tier ordering within each rank bucket:** when two candidates score equally, prefer `tier: core` over `tier: supporting` over `tier: peripheral`. Read the `tier:` frontmatter field with the same cheap grep as other fields. Pages without a `tier:` field are treated as `supporting`.
 
+**Track retrieval counts as you go (for the transparency report in Step 5/6):**
+- `candidates_seen` — total distinct pages that matched *any* rank criterion above, before trimming to the top 5–10.
+- `candidates_used` — how many of those you actually carried forward into Steps 3/4.
+- `dropped` — `candidates_seen − candidates_used`, i.e. matches that existed but were never read. If this is non-zero, name the dropped pages (or the count if there are many) so the user knows retrieval wasn't exhaustive — this is not an error, just an honest accounting of what was left out.
+
 If you're in **index-only mode**, stop here. Answer from `summary:` fields, titles, and `index.md` descriptions only. Label the answer clearly: **"(index-only answer — page bodies not read; facts below are from page summaries and may miss nuance)"**. Then skip to Step 5.
 
 ### Step 2b: QMD Semantic Pass (optional — requires `QMD_WIKI_COLLECTION` in resolved config)
@@ -160,6 +165,8 @@ Keep operator-like or punctuation-heavy tokens such as `no-sudo`, `ansible_becom
 Use `${QMD_CLI:-qmd} get "#docid"` to retrieve a ranked document by docid when CLI output provides one.
 
 The returned snippets or ranked files act as pre-read section summaries. If they answer the question fully, skip Step 3 and go straight to Step 4 (reading only the pages QMD ranked highest). If not, use the ranked file list to guide which files to grep or read in Step 3.
+
+Fold QMD hits into the same `candidates_seen` count from Step 2 (dedupe by path — a page found by both frontmatter grep and QMD counts once).
 
 **Defensive filter: drop any `_raw/` path from wiki-collection results.** The wiki collection is supposed to index only compiled pages, but a misconfigured collection (see `.env.example`) can end up indexing `_raw/` — including stale drafts sitting in `_raw/_archived/` that were already superseded by a promoted page. Before using a QMD hit from `$QMD_WIKI_COLLECTION`, check its path: if it contains `_raw/`, discard it from the wiki-collection result set (it may still surface legitimately via `$QMD_PAPERS_COLLECTION`, cited as a raw source). This keeps a misconfigured collection degrading to "missing recall" rather than "silently citing a superseded draft as compiled knowledge." If you see `_raw/` paths coming back from the wiki collection, mention it in your working update so the user knows their collection scope needs fixing (see `.env.example` QMD section).
 
@@ -250,8 +257,10 @@ Include a **`Source code:`** line in the answer with that absolute path. When th
 
 Append to `log.md`. This `log.md` append is the *only* write this skill performs — do not edit anything else.
 ```
-- [TIMESTAMP] QUERY query="the user's question" result_pages=N mode=normal|index_only|filtered escalated=true|false
+- [TIMESTAMP] QUERY query="the user's question" result_pages=N mode=normal|index_only|filtered escalated=true|false candidates_seen=N candidates_used=N dropped=N
 ```
+
+Use the counts tracked since Step 2. If a count wasn't tracked (e.g. index-only mode never built a full candidate set), write `0` rather than omitting the field — the log format should stay parseable.
 
 ## Answer Format
 
@@ -265,7 +274,11 @@ Structure answers like this:
 >
 > **Gaps:** [What the wiki doesn't cover that might be relevant]
 >
+> **Retrieval:** N candidates seen, M read, D dropped (untouched matches, if any: [[page-d]], [[page-e]])
+>
 > **Source code:** `<source_cwd>` — to implement, the relevant files are `…`.
 > (Say the word and I'll switch out of query mode to make the change.)
 
 The **Source code** line is optional — include it only for project-scoped queries where you resolved a `source_cwd` (see Step 5).
+
+The **Retrieval** line is always included — it's the transparency report from the counts tracked since Step 2 (mirrors the `candidates_seen`/`candidates_used`/`dropped` fields logged in Step 6). In index-only mode, report the counts from the frontmatter scan; if D is 0, drop the parenthetical rather than writing an empty list.
