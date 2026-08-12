@@ -130,8 +130,10 @@ def _relative_key_index(sources: dict) -> dict[str, list[tuple[str, dict]]]:
 
 def _match_relative(path: str, index: dict[str, list[tuple[str, dict]]]) -> dict | None:
     """Return the manifest entry whose relative key is a suffix of `path`."""
+    norm_path = path.replace("\\", "/")
     for relkey, entry in index.get(os.path.basename(path), ()):
-        if path == relkey or path.endswith(os.sep + relkey):
+        norm_relkey = relkey.replace("\\", "/")
+        if norm_path == norm_relkey or norm_path.endswith("/" + norm_relkey):
             return entry
     return None
 

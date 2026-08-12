@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
@@ -20,6 +21,41 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 HOOK = ROOT / ".claude" / "hooks" / "wiki-stop-capture.sh"
+
+
+def _find_bash() -> str | None:
+    if os.name == "nt":
+        for candidate in (
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ):
+            if Path(candidate).is_file():
+                return candidate
+    return shutil.which("bash")
+
+
+BASH = _find_bash()
+
+
+def _bash_path(path: Path) -> str:
+    if os.name != "nt" or BASH is None:
+        return str(path)
+    resolved = path.resolve()
+    drive = resolved.drive.rstrip(":").lower()
+    rest = resolved.parts[1:]
+    return "/" + "/".join((drive, *rest))
+
+
+def _hook_env(tmp: Path, extra_env: dict[str, str] | None = None) -> dict[str, str]:
+    path_parts = ["/usr/bin", "/bin", "/usr/local/bin"]
+    if os.name == "nt":
+        path_parts.insert(0, _bash_path(Path(sys.executable).parent))
+    return {
+        "PATH": ":".join(path_parts),
+        "TMPDIR": _bash_path(tmp),
+        **(extra_env or {}),
+    }
 
 
 def _bash_entry(command):
@@ -57,7 +93,7 @@ _READONLY_BASH = [
 ]
 
 
-@unittest.skipIf(shutil.which("bash") is None, "requires bash")
+@unittest.skipIf(BASH is None, "requires bash")
 class StopHookBehaviorTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -79,16 +115,16 @@ class StopHookBehaviorTest(unittest.TestCase):
             session_id = f"s{self._session_seq}"
         payload = {
             "session_id": session_id,
-            "transcript_path": str(transcript),
+            "transcript_path": _bash_path(transcript),
             "stop_hook_active": stop_hook_active,
         }
         # Isolated TMPDIR so sentinel state never leaks between tests.
         return subprocess.run(
-            ["bash", str(HOOK)],
+            [BASH, _bash_path(HOOK)],
             input=json.dumps(payload),
             capture_output=True,
             text=True,
-            env={"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp), **(extra_env or {})},
+            env=_hook_env(self.tmp, extra_env),
         )
 
     def test_file_edit_triggers_nudge(self):
@@ -545,9 +581,9 @@ class StopHookBehaviorTest(unittest.TestCase):
             self._age_sentinel(sid, 7 * 3600)
             payload_file = self.tmp / f"payload{round_no}.json"
             payload_file.write_text(
-                json.dumps({"session_id": sid, "transcript_path": str(transcript)})
+                json.dumps({"session_id": sid, "transcript_path": _bash_path(transcript)})
             )
-            env = {"PATH": "/usr/bin:/bin:/usr/local/bin", "TMPDIR": str(self.tmp)}
+            env = _hook_env(self.tmp)
             # bash -x: the xtrace on stderr is evidence of WHICH path each
             # process took, asserted on below — outcome checks alone cannot
             # distinguish a genuine race from accidental serialization.
@@ -556,7 +592,7 @@ class StopHookBehaviorTest(unittest.TestCase):
                 with payload_file.open() as stdin_file:
                     procs.append(
                         subprocess.Popen(
-                            ["bash", "-x", str(HOOK)],
+                            [BASH, "-x", _bash_path(HOOK)],
                             stdin=stdin_file,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE,

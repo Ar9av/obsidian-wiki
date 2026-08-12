@@ -165,6 +165,17 @@ Read the source(s) the user wants to ingest. In append mode, skip files the mani
 
 Note the source path — you'll need it for provenance tracking.
 
+### External office/document libraries
+
+When the user points at an existing SSD, Google Drive, OneDrive, NAS, or business document folder containing PDFs, Office files, HWP/HWPX, images, and markdown together, preserve the original folder structure by default.
+
+- Read `OBSIDIAN_EXTERNAL_FILE_MODE` from config. Default is `link`.
+- `link`: leave every original file in place. Create or update wiki pages and hub notes with source paths, content hashes, and Obsidian links only.
+- `stage-copy`: copy selected source files into `_raw/` for review before ingest, preserving the original. Never overwrite a file already in `_raw/`; suffix duplicates.
+- `move`: do not perform this mode unless the user explicitly approves a one-off migration plan with backup and hash verification. Treat any configured `move` value as `link` and report that moves require explicit approval.
+- For Excel/Word/HWP/HWPX files whose body text cannot be reliably extracted in the current environment, still create a source record/hub link and mark content extraction as pending rather than pretending the contents were indexed.
+- Purpose/project folders beat file-extension folders for navigation, but do not rearrange existing originals. Let the wiki supply the purpose-based graph layer.
+
 ### Unstructured & conversational sources
 
 Not every source is a clean document. When the user points you at raw data — chat exports, logs, CSVs, JSON dumps, transcripts, email/bookmark archives — **figure out the format first, then distill the substance.** When in doubt about a format, just read it: the Read tool shows you what you're dealing with.
