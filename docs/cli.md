@@ -17,7 +17,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | `setup` | Install skills into your agents and write `~/.obsidian-wiki/config` |
 | `info` | Show install paths, version, and resolved config |
 | `list` | List the bundled skills |
-| `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills |
+| `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
 
 ```bash
 obsidian-wiki setup --vault ~/brain
@@ -159,6 +159,7 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `cache-update <vault> <source>` | Record a source's SHA-256 in `.manifest.json` after ingest |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
+| `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. Used by wiki-update Step 3b. |
 
 ```bash
 obsidian-wiki graph-query /path/to/vault "transformer architecture" --pretty
@@ -167,6 +168,7 @@ obsidian-wiki batch-plan /path/to/vault ~/research --max-mb 4 --max-files 30
 obsidian-wiki cache-check /path/to/vault ~/research/*.pdf
 obsidian-wiki cache-update /path/to/vault ~/research/paper.pdf --pages concepts/attention.md
 obsidian-wiki ast-extract ./src --pretty
+obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
 
 Most commands accept `--json` and/or `--pretty` for machine-readable output.

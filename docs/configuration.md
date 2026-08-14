@@ -131,6 +131,17 @@ QMD_CLI_SEARCH_MODE=quality
 
 Both degrade gracefully: with the collection names unset, they skip the QMD step silently and use Grep.
 
+## Code understanding (optional)
+
+`wiki-update` distills a project's structure before it writes knowledge into the vault. When a supported code graph backend is available, `wiki-update` uses it to rank the project's most important modules, trace callers and callees, and expand changed files into their impact area before distilling. Without one, the built-in `ast-extract` + `rg` fallback is used — no extra dependency.
+
+Missing CodeGraph never breaks normal `wiki-update` or `doctor` runs. The graph index lives in the project's `.codegraph/` sidecar and is never written into the vault.
+
+| Variable | What it does | Default |
+|---|---|---|
+| `CODE_UNDERSTANDING_BACKEND` | How `wiki-update` understands project structure: `auto` (CodeGraph when available, else the built-in `ast-extract` + `rg`), `builtin` (always the built-in, dependency-free), or `codegraph` (explicitly require CodeGraph; warn/error if unavailable) | `auto` |
+| `CODE_UNDERSTANDING_CODEGRAPH_BIN` | Path to the `codegraph` binary if it isn't on `PATH` | *(empty)* |
+
 ## `_raw/` staging directory
 
 `_raw/` is a staging area inside your vault for unprocessed captures — rough notes, clipboard pastes, quick voice-memo transcripts. Drop files there and the next `wiki-ingest` run promotes them to proper wiki pages and removes the originals, so nothing is processed twice.
