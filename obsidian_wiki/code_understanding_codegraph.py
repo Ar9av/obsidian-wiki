@@ -74,7 +74,7 @@ class CodeGraphProvider:
         )
         items: list[dict] = []
         seen: set[tuple] = set()
-        for symbol in seeds:
+        for symbol in seeds[:25]:
             payload = self._query("impact", symbol, warnings)
             if payload is None:
                 continue

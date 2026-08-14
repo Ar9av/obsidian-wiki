@@ -263,3 +263,33 @@ def test_index_state_heuristic(tmp_path: Path) -> None:
     build_index_state(project, fresh=False)
     initialized, fresh, _ = index_state(project)
     assert initialized is True and fresh is False
+
+
+def test_codegraph_caps_impact_queries_on_full_scan(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A full-project scan (no --changed) must not run an unbounded number of
+    codegraph impact subprocesses — regression for the timeout seen on real
+    repos with hundreds of symbols (issue #167 review note N9)."""
+    project = make_project(
+        tmp_path,
+        {f"src/mod{i}.py": f"def f{i}():\n    return {i}\n" for i in range(30)},
+    )
+    bin_path = make_fake_codegraph_bin(tmp_path)
+    env = {"CODE_UNDERSTANDING_CODEGRAPH_BIN": str(bin_path)}
+
+    from obsidian_wiki.code_understanding_codegraph import CodeGraphProvider
+
+    impact_calls: list[str] = []
+    real_query = CodeGraphProvider._query
+
+    def spy_query(self, command: str, symbol: str, warnings: list[str]):
+        if command == "impact":
+            impact_calls.append(symbol)
+        return real_query(self, command, symbol, warnings)
+
+    monkeypatch.setattr(CodeGraphProvider, "_query", spy_query)
+
+    code_understand(project, backend_flag="codegraph", env=env)
+
+    assert len(impact_calls) <= 25
