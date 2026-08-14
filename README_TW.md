@@ -55,7 +55,7 @@ https://github.com/Ar9av/obsidian-wiki — set up my wiki
 
 ```text
 /wiki-ingest ~/research
-/wiki-update                        # 蒸餾你目前所在的這個 repo（可感知程式碼結構）
+/wiki-update                        # 蒸餾你目前所在的這個 repo（支持使用 codegraph 增強程式碼結構解析）
 /wiki-capture                       # 把這段對話存下來
 /wiki-history-ingest claude         # 挖出你問過 Claude 的所有東西
 ```
