@@ -93,6 +93,7 @@ obsidian-wiki code-understand --project "$(pwd)" --since <last_commit_synced> --
 2. **Cite the evidence** — every architectural claim written to a page references its evidence as `(file:lines)` from the focus map or from the opened source; keep using the existing provenance markers.
 3. **Prune stale relationships (required)** — when updating an existing `projects/<name>/` page, cross-check each previously recorded code relationship against the current focus map (or `obsidian-wiki ast-extract` for a symbol-level recheck). Remove relationships whose target symbol no longer exists or is no longer reachable; update the page and record the removals in `log.md`. This keeps false positives from accumulating.
 4. **Never** write `.codegraph/` or the `code-understand` JSON into `$OBSIDIAN_VAULT_PATH` — the graph is a cache/sidecar in the project repo, not wiki knowledge.
+5. **Offer CodeGraph when it's missing (optional)** — if the output reports `backend: builtin` because codegraph is unavailable and the user wants the enhanced backend, offer to install it for them: `npm install -g @colbymchenry/codegraph` (or set `CODE_UNDERSTANDING_CODEGRAPH_BIN` to an existing binary), then re-run this step so the focus map uses the graph. Never install without the user's go-ahead, and never let a missing codegraph block the sync.
 
 If `obsidian-wiki` is not installed or the command fails, skip this step and proceed to Step 4 as normal — it is an optimisation, not a requirement.
 

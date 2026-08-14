@@ -142,6 +142,19 @@ Missing CodeGraph never breaks normal `wiki-update` or `doctor` runs. The graph 
 | `CODE_UNDERSTANDING_BACKEND` | How `wiki-update` understands project structure: `auto` (CodeGraph when available, else the built-in `ast-extract` + `rg`), `builtin` (always the built-in, dependency-free), or `codegraph` (explicitly require CodeGraph; warn/error if unavailable) | `auto` |
 | `CODE_UNDERSTANDING_CODEGRAPH_BIN` | Path to the `codegraph` binary if it isn't on `PATH` | *(empty)* |
 
+### Setup (optional)
+
+Install the CodeGraph CLI once to enable the enhanced backend:
+
+```bash
+npm install -g @colbymchenry/codegraph
+```
+
+Verify with `obsidian-wiki doctor --project .` — the `code-understanding.codegraph` check should flip to pass. If the binary isn't on your `PATH`, set `CODE_UNDERSTANDING_CODEGRAPH_BIN` to its location instead.
+
+- The first enhanced `wiki-update` run auto-initializes the project's `.codegraph/` index; later runs sync only what changed.
+- Your agent can run the install for you — just ask it to use CodeGraph when running `/wiki-update`.
+
 ## `_raw/` staging directory
 
 `_raw/` is a staging area inside your vault for unprocessed captures — rough notes, clipboard pastes, quick voice-memo transcripts. Drop files there and the next `wiki-ingest` run promotes them to proper wiki pages and removes the originals, so nothing is processed twice.
