@@ -69,6 +69,33 @@ Not worth distilling:
 
 The heuristic: **if reading the codebase answers the question, don't wiki it. If you'd have to re-derive the reasoning by reading git blame across 20 commits, wiki it.**
 
+### Step 3b: Build a code-understanding focus map (optional)
+
+**GUARD: If the `obsidian-wiki code-understand` command fails or is unavailable, skip this step and continue — it is an optimisation, not a requirement.**
+
+When this project contains code, run the local code-understanding extractor before distilling. It parses the codebase locally and returns a focus map — the ranked files and symbols the architecture hangs on — so you read the load-bearing parts instead of scanning everything.
+
+```bash
+obsidian-wiki code-understand --project "$(pwd)" --pretty
+```
+
+When this is not the first sync (Step 2 computed `last_commit_synced`), seed the focus map from the delta:
+
+```bash
+obsidian-wiki code-understand --project "$(pwd)" --since <last_commit_synced> --pretty
+```
+
+(First sync: omit `--since`.)
+
+#### What to do with the focus-map output
+
+1. **Read the output selectively** — when `backend: codegraph`, treat focus-map entries as structural facts with `file:line` citations; when `backend: builtin`, treat `defines`/`imports` entries as facts but treat `rg-reference` entries as weaker evidence — open the file and verify before citing. Open only the ranked `files`/`file:lines` the focus map points at; never paste the JSON into the wiki or the vault.
+2. **Cite the evidence** — every architectural claim written to a page references its evidence as `(file:lines)` from the focus map or from the opened source; keep using the existing provenance markers.
+3. **Prune stale relationships (required)** — when updating an existing `projects/<name>/` page, cross-check each previously recorded code relationship against the current focus map (or `obsidian-wiki ast-extract` for a symbol-level recheck). Remove relationships whose target symbol no longer exists or is no longer reachable; update the page and record the removals in `log.md`. This keeps false positives from accumulating.
+4. **Never** write `.codegraph/` or the `code-understand` JSON into `$OBSIDIAN_VAULT_PATH` — the graph is a cache/sidecar in the project repo, not wiki knowledge.
+
+If `obsidian-wiki` is not installed or the command fails, skip this step and proceed to Step 4 as normal — it is an optimisation, not a requirement.
+
 ## Step 4: Distill into Wiki Pages
 
 ### Project-specific knowledge
