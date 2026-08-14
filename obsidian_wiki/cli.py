@@ -488,6 +488,106 @@ def _doctor_project_check(project_dir: Path) -> dict[str, str]:
     return {"status": "pass", "detail": "bootstrap files and aliases present", "hint": ""}
 
 
+def _doctor_code_understanding_checks(
+    project_dir: Path, backend_setting: str, bin_path: str | None
+) -> list[dict[str, str]]:
+    """Code-understanding readiness checks for a project (issue #167)."""
+    checks: list[dict[str, str]] = []
+
+    from obsidian_wiki.ast_extractor import extract
+
+    try:
+        data = extract(project_dir)
+        if data.get("nodes"):
+            checks.append({
+                "name": "code-understanding.builtin",
+                "status": "pass",
+                "detail": f"found {len(data['nodes'])} AST node(s)",
+                "hint": "",
+            })
+        else:
+            checks.append({
+                "name": "code-understanding.builtin",
+                "status": "warn",
+                "detail": "no code files found",
+                "hint": "code-understand will produce an empty focus map",
+            })
+    except (OSError, ValueError) as exc:
+        checks.append({
+            "name": "code-understanding.builtin",
+            "status": "warn",
+            "detail": f"AST extraction failed: {exc}",
+            "hint": "code-understand may not find any symbols",
+        })
+
+    rg_path = shutil.which("rg")
+    checks.append({
+        "name": "code-understanding.rg",
+        "status": "pass" if rg_path else "warn",
+        "detail": rg_path or "ripgrep (rg) not found on PATH",
+        "hint": "" if rg_path else "install ripgrep for cross-file reference evidence",
+    })
+
+    from obsidian_wiki.code_understanding import index_state
+
+    codegraph_path = bin_path or shutil.which("codegraph")
+    if codegraph_path:
+        checks.append({
+            "name": "code-understanding.codegraph",
+            "status": "pass",
+            "detail": str(codegraph_path),
+            "hint": "",
+        })
+    elif backend_setting == "codegraph":
+        checks.append({
+            "name": "code-understanding.codegraph",
+            "status": "fail",
+            "detail": "codegraph backend requested but binary not found",
+            "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
+        })
+    else:
+        checks.append({
+            "name": "code-understanding.codegraph",
+            "status": "warn",
+            "detail": "codegraph binary not found (builtin backend will be used)",
+            "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
+        })
+
+    if codegraph_path:
+        initialized, fresh, detail = index_state(project_dir)
+        checks.append({
+            "name": "code-understanding.codegraph-index",
+            "status": "pass" if initialized else "warn",
+            "detail": detail,
+            "hint": "" if initialized else "run: codegraph index <project>",
+        })
+        if initialized:
+            if not (project_dir / ".git").exists():
+                # index_state's freshness heuristic needs git-tracked files;
+                # without git it cannot see a stale index — compare mtimes directly.
+                db = project_dir / ".codegraph" / "codegraph.db"
+                codegraph_prefix = str((project_dir / ".codegraph").resolve())
+                try:
+                    newest = max(
+                        p.stat().st_mtime
+                        for p in project_dir.rglob("*")
+                        if p.is_file()
+                        and not str(p.resolve()).startswith(codegraph_prefix)
+                    )
+                except OSError:
+                    newest = 0.0
+                if db.stat().st_mtime < newest:
+                    fresh = False
+                    detail = "stale (codegraph.db older than sources)"
+            checks.append({
+                "name": "code-understanding.codegraph-fresh",
+                "status": "pass" if fresh else "warn",
+                "detail": detail,
+                "hint": "" if fresh else "re-run: codegraph index <project>",
+            })
+    return checks
+
+
 def run_doctor(*, vault_override: str | None = None, project_dir: str | None = None) -> dict[str, object]:
     checks: list[dict[str, str]] = []
 
@@ -663,6 +763,20 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
                 detail=project_check["detail"],
                 hint=project_check["hint"],
             )
+            backend_setting = (
+                os.environ.get("CODE_UNDERSTANDING_BACKEND")
+                or config.get("CODE_UNDERSTANDING_BACKEND")
+                or "auto"
+            )
+            bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+            for check in _doctor_code_understanding_checks(project, backend_setting, bin_path):
+                _doctor_add(
+                    checks,
+                    name=check["name"],
+                    status=check["status"],
+                    detail=check["detail"],
+                    hint=check.get("hint", ""),
+                )
         else:
             _doctor_add(
                 checks,
@@ -1050,6 +1164,46 @@ def cmd_ast_extract(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2))
     else:
         print(json.dumps(result))
+    return 0
+
+
+def cmd_code_understand(args: argparse.Namespace) -> int:
+    from obsidian_wiki.code_understanding import ProviderError, code_understand
+
+    project = Path(args.project or os.getcwd())
+    try:
+        result = code_understand(
+            project,
+            # "auto" must pass through as None so CODE_UNDERSTANDING_BACKEND can win (flag > env > auto).
+            backend_flag=None if args.backend == "auto" else args.backend,
+            changed=args.changed,
+            since=args.since,
+            max_symbols=args.max_symbols,
+        )
+    except ProviderError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.pretty:
+        print(f"backend: {result['backend']}")
+        print(f"project: {result['project']}")
+        print(f"focus map: {len(result['focus_map'])} symbol(s)")
+        for item in result["focus_map"]:
+            lines = item.get("lines") or []
+            span = str(lines[0]) if lines else ""
+            if len(lines) > 1:
+                span += f"-{lines[-1]}"
+            print(
+                f"  {item.get('rank', '?')}. {item['symbol']} "
+                f"({item['kind']}) {item['file']}:{span} [{item.get('evidence', '')}]"
+            )
+        if result["warnings"]:
+            print("warnings:")
+            for warning in result["warnings"]:
+                print(f"  - {warning}")
+        else:
+            print("warnings: none")
+    else:
+        print(json.dumps(result, indent=2))
     return 0
 
 
@@ -1751,9 +1905,42 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ap.set_defaults(func=cmd_ast_extract)
 
+    cdu = sub.add_parser(
+        "code-understand",
+        help="build a ranked code-understanding focus map for a project — CodeGraph when available, builtin AST + rg otherwise",
+    )
+    cdu.add_argument("--project", default=None, help="project directory (defaults to the current directory)")
+    cdu.add_argument(
+        "--backend",
+        choices=["auto", "builtin", "codegraph"],
+        default="auto",
+        help="code-understanding backend (default: auto)",
+    )
+    cdu.add_argument(
+        "--changed",
+        action="append",
+        default=None,
+        metavar="FILE",
+        help="treat FILE as a seed file (repeatable; overrides --since)",
+    )
+    cdu.add_argument(
+        "--since",
+        default=None,
+        metavar="SHA",
+        help="seed files changed since this git ref",
+    )
+    cdu.add_argument(
+        "--max-symbols",
+        type=int,
+        default=50,
+        help="maximum focus-map entries (default: 50)",
+    )
+    cdu.add_argument("--pretty", action="store_true", help="print a human-readable summary instead of JSON")
+    cdu.set_defaults(func=cmd_code_understand)
+
     dr = sub.add_parser(
         "doctor",
-        help="check config, vault shape, bootstrap assets, and installed skills",
+        help="check config, vault shape, bootstrap assets, installed skills, and code-understanding readiness",
     )
     dr.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH for this health check")
     dr.add_argument("--project", help="also check project-local bootstrap files in this directory")
