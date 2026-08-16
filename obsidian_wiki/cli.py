@@ -886,12 +886,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
                 detail=project_check["detail"],
                 hint=project_check["hint"],
             )
-            backend_setting = (
-                os.environ.get("CODE_UNDERSTANDING_BACKEND")
-                or config.get("CODE_UNDERSTANDING_BACKEND")
-                or "auto"
-            )
-            bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+            backend_setting, bin_path = _resolve_code_understanding_settings(project)
             for check in _doctor_code_understanding_checks(project, backend_setting, bin_path):
                 _doctor_add(
                     checks,
@@ -1316,14 +1311,19 @@ def cmd_code_understand(args: argparse.Namespace) -> int:
     from obsidian_wiki.code_understanding import ProviderError, code_understand
 
     project = Path(args.project or os.getcwd())
+    backend, bin_path = _resolve_code_understanding_settings(project)
+    env = dict(os.environ)
+    env["CODE_UNDERSTANDING_BACKEND"] = backend
+    env["CODE_UNDERSTANDING_CODEGRAPH_BIN"] = bin_path or ""
     try:
         result = code_understand(
             project,
-            # "auto" must pass through as None so CODE_UNDERSTANDING_BACKEND can win (flag > env > auto).
+            # "auto" must pass through as None so the resolved config can win (flag > config > auto).
             backend_flag=None if args.backend == "auto" else args.backend,
             changed=args.changed,
             since=args.since,
             max_symbols=args.max_symbols,
+            env=env,
         )
     except ProviderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1630,6 +1630,48 @@ def _resolve_context_pack_vault(vault_arg: str | None) -> Path | None:
             break
         current = current.parent
     return _resolve_command_vault(None)
+
+
+_CODE_UNDERSTANDING_KEYS = ("CODE_UNDERSTANDING_BACKEND", "CODE_UNDERSTANDING_CODEGRAPH_BIN")
+
+
+def _resolve_code_understanding_settings(project: Path) -> tuple[str, str | None]:
+    """Resolve (backend, bin_path) for code-understanding.
+
+    Precedence: os.environ (empty = unset) > nearest walk-up project .env
+    (project dir to HOME, stopping at the first .env setting a
+    CODE_UNDERSTANDING key) > global config > defaults ("auto", None).
+    Mirrors the OBSIDIAN_VAULT_PATH resolution used by the schema/context-pack
+    commands.
+    """
+    backend = os.environ.get("CODE_UNDERSTANDING_BACKEND") or ""
+    bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or ""
+    if not backend or not bin_path:
+        current = Path(project).resolve()
+        home = HOME.resolve()
+        local: dict[str, str] = {}
+        while True:
+            candidate = _read_config_file(current / ".env")
+            if any(key in candidate for key in _CODE_UNDERSTANDING_KEYS):
+                local = candidate
+                break
+            if current == home or current.parent == current:
+                break
+            current = current.parent
+        global_config = _read_config()
+        if not backend:
+            backend = (
+                local.get("CODE_UNDERSTANDING_BACKEND")
+                or global_config.get("CODE_UNDERSTANDING_BACKEND")
+                or "auto"
+            )
+        if not bin_path:
+            bin_path = (
+                local.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+                or global_config.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+                or ""
+            )
+    return backend, bin_path or None
 
 
 def cmd_trust_record(args: argparse.Namespace) -> int:
