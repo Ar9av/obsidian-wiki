@@ -652,9 +652,10 @@ def _doctor_code_understanding_checks(
             "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
         })
     else:
+        # info (not warn): optional backend absent must not fail doctor --strict.
         checks.append({
             "name": "code-understanding.codegraph",
-            "status": "warn",
+            "status": "info",
             "detail": "codegraph binary not found (builtin backend will be used)",
             "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
         })
@@ -899,7 +900,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
 
 
 def _print_doctor(report: dict[str, object]) -> None:
-    icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌"}
+    icon = {"pass": "✅", "info": "ℹ️", "warn": "⚠️ ", "fail": "❌"}
     print(f"obsidian-wiki doctor: {report['status']}")
     for check in report["checks"]:
         name = check["name"]
