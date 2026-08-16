@@ -150,6 +150,8 @@ Install the CodeGraph CLI once to enable the enhanced backend:
 npm install -g @colbymchenry/codegraph
 ```
 
+**MCP configuration is not required for obsidian-wiki; only the CodeGraph CLI is required.**
+
 Verify with `obsidian-wiki doctor --project .` — the `code-understanding.codegraph` check should flip to pass. If the binary isn't on your `PATH`, set `CODE_UNDERSTANDING_CODEGRAPH_BIN` to its location instead.
 
 - The first enhanced `wiki-update` run auto-initializes the project's `.codegraph/` index; later runs sync only what changed.
