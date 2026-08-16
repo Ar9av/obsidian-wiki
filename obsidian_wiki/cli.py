@@ -692,6 +692,22 @@ def _doctor_code_understanding_checks(
                 "detail": detail,
                 "hint": "" if fresh else "re-run: codegraph index <project>",
             })
+        gitignore = project_dir / ".gitignore"
+        ignored = False
+        if gitignore.is_file():
+            for line in gitignore.read_text(encoding="utf-8").splitlines():
+                pattern = line.strip()
+                if not pattern or pattern.startswith("#"):
+                    continue
+                if pattern in (".codegraph", ".codegraph/"):
+                    ignored = True
+                    break
+        checks.append({
+            "name": "code-understanding.codegraph-gitignore",
+            "status": "pass" if ignored else "warn",
+            "detail": ".codegraph/ is ignored" if ignored else ".codegraph/ is not ignored",
+            "hint": "" if ignored else "add .codegraph/ to .gitignore",
+        })
     return checks
 
 
