@@ -666,7 +666,7 @@ def _doctor_code_understanding_checks(
             "name": "code-understanding.codegraph-index",
             "status": "pass" if initialized else "warn",
             "detail": detail,
-            "hint": "" if initialized else "run: codegraph index <project>",
+            "hint": "" if initialized else "run: obsidian-wiki code-understand --project <project>",
         })
         if initialized:
             if not (project_dir / ".git").exists():
@@ -690,7 +690,7 @@ def _doctor_code_understanding_checks(
                 "name": "code-understanding.codegraph-fresh",
                 "status": "pass" if fresh else "warn",
                 "detail": detail,
-                "hint": "" if fresh else "re-run: codegraph index <project>",
+                "hint": "" if fresh else "re-run: obsidian-wiki code-understand --project <project>",
             })
         gitignore = project_dir / ".gitignore"
         ignored = False
