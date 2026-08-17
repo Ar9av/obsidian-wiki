@@ -320,15 +320,45 @@ def resolve_vault_path(cli_vault: str | None) -> str:
 
 
 def write_config(vault_path: str) -> None:
+    """Write the setup-managed keys, preserving everything else in the file.
+
+    Only ``OBSIDIAN_VAULT_PATH``, ``OBSIDIAN_WIKI_REPO`` and
+    ``OBSIDIAN_WIKI_VERSION`` are owned by setup. Any other key the user added
+    (``OBSIDIAN_LINK_FORMAT``, ``QMD_WIKI_COLLECTION``, sync settings, …) is
+    carried over untouched, along with comments and ordering, so re-running
+    setup on an existing install is non-destructive.
+    """
     GLOBAL_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     # OBSIDIAN_WIKI_REPO points at the bundled data root so skills that reference
     # framework assets (templates, references) can find them post-install.
     repo_root = skills_dir().parent
-    GLOBAL_CONFIG.write_text(
-        f'OBSIDIAN_VAULT_PATH="{vault_path}"\n'
-        f'OBSIDIAN_WIKI_REPO="{repo_root}"\n'
-        f'OBSIDIAN_WIKI_VERSION="{__version__}"\n'
-    )
+    managed = {
+        "OBSIDIAN_VAULT_PATH": vault_path,
+        "OBSIDIAN_WIKI_REPO": str(repo_root),
+        "OBSIDIAN_WIKI_VERSION": __version__,
+    }
+
+    existing: list[str] = []
+    if GLOBAL_CONFIG.is_file():
+        existing = GLOBAL_CONFIG.read_text().splitlines()
+
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in existing:
+        stripped = raw.strip()
+        key = stripped.split("=", 1)[0].strip() if "=" in stripped else ""
+        if key in managed and not stripped.startswith("#"):
+            if key not in seen:
+                out.append(f'{key}="{managed[key]}"')
+                seen.add(key)
+            # Drop duplicate definitions of a managed key.
+            continue
+        out.append(raw)
+    for key, value in managed.items():
+        if key not in seen:
+            out.append(f'{key}="{value}"')
+
+    GLOBAL_CONFIG.write_text("\n".join(out) + "\n")
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 

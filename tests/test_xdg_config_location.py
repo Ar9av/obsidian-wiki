@@ -8,10 +8,21 @@ import sys
 from pathlib import Path
 
 
-def _resolve(home: Path, xdg_config_home: str | None = None) -> Path:
-    """Resolve GLOBAL_CONFIG_DIR in a subprocess with the given HOME/XDG env."""
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _env(home: Path) -> dict[str, str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    # Pin the import to this checkout — a separately installed obsidian_wiki
+    # would otherwise shadow it depending on the working directory.
+    env["PYTHONPATH"] = str(REPO_ROOT)
+    return env
+
+
+def _resolve(home: Path, xdg_config_home: str | None = None) -> Path:
+    """Resolve GLOBAL_CONFIG_DIR in a subprocess with the given HOME/XDG env."""
+    env = _env(home)
     if xdg_config_home is None:
         env.pop("XDG_CONFIG_HOME", None)
     else:
@@ -78,8 +89,7 @@ def test_legacy_config_is_still_read_end_to_end(tmp_path: Path) -> None:
     vault.mkdir()
     (legacy / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
 
-    env = os.environ.copy()
-    env["HOME"] = str(home)
+    env = _env(home)
     env.pop("XDG_CONFIG_HOME", None)
     proc = subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", "info"],
