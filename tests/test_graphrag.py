@@ -305,3 +305,115 @@ class TestGraphQueryCLI:
     def test_missing_vault_exits_nonzero(self, tmp_path):
         proc = self._run("graph-query", str(tmp_path / "nope"), "anything")
         assert proc.returncode != 0
+
+
+# ---------------------------------------------------------------------------
+# Unified graph layer — bookkeeping files must not pollute the query graph
+# ---------------------------------------------------------------------------
+
+class TestBookkeepingExcluded:
+    def test_index_log_hot_not_indexed(self, simple_vault):
+        for name in ("index", "log", "hot", "_insights"):
+            (simple_vault / f"{name}.md").write_text(
+                "---\ntitle: %s\n---\n" % name
+                + "\n".join(f"[[{p}]]" for p in ("transformer", "attention", "embedding", "python"))
+            )
+        idx = build_index(simple_vault)
+        assert {"index", "log", "hot", "_insights"}.isdisjoint(idx)
+
+    def test_path_does_not_route_through_index(self, simple_vault):
+        """index.md links to everything; a path through it is meaningless."""
+        (simple_vault / "index.md").write_text(
+            "---\ntitle: Index\n---\n[[python]]\n[[embedding]]\n"
+        )
+        idx = build_index(simple_vault)
+        path = find_path(idx, "python", "embedding")
+        # python and embedding are genuinely disconnected without the index hub
+        assert path is None or "index" not in path
+
+    def test_real_path_still_found(self, simple_vault):
+        idx = build_index(simple_vault)
+        assert find_path(idx, "attention", "embedding") == ["attention", "transformer", "embedding"]
+
+    def test_max_depth_respected(self, simple_vault):
+        idx = build_index(simple_vault)
+        assert find_path(idx, "attention", "embedding", max_depth=1) is None
+
+
+# ---------------------------------------------------------------------------
+# Structural intents
+# ---------------------------------------------------------------------------
+
+class TestStructuralClassification:
+    @pytest.mark.parametrize("q,expected", [
+        ("what breaks if I delete transformer", "impact"),
+        ("what depends on transformer", "impact"),
+        ("what links to attention", "impact"),
+        ("blast radius of transformer", "impact"),
+        ("which pages bridge my clusters", "bridges"),
+        ("what would fragment my vault", "bridges"),
+        ("what's central in my vault", "hubs"),
+        ("show me the top hubs", "hubs"),
+        ("what are my main topics", "hubs"),
+        ("what clusters do I have", "clusters"),
+        ("how is my wiki organised", "clusters"),
+        ("show me surprising connections", "surprising"),
+        ("any unexpected links?", "surprising"),
+    ])
+    def test_intent_detected(self, q, expected):
+        assert classify_query(q)[0] == expected
+
+    @pytest.mark.parametrize("q,expected", [
+        ("how is transformer connected to embedding", "path"),
+        ("what connects transformer and embedding", "path"),
+        ("list all pages about nlp", "list"),
+        ("what do I know about attention", "gap"),      # pre-existing gap pattern
+        ("attention mechanism", "direct"),
+    ])
+    def test_existing_intents_unchanged(self, q, expected):
+        assert classify_query(q)[0] == expected
+
+
+class TestStructuralAnswers:
+    def test_impact_lists_dependents(self, simple_vault):
+        r = query(simple_vault, "what breaks if I delete transformer")
+        g = r["graph"]
+        assert r["answer_type"] == "impact" and r["index_only"] is True
+        assert g["seed"] == "transformer"
+        assert "attention" in g["direct_dependents"]
+
+    def test_impact_unresolvable_falls_back(self, simple_vault):
+        r = query(simple_vault, "what breaks if I delete zzz-nonexistent-qqq")
+        assert r["answer_type"] == "direct"
+        assert r["graph"] is None
+
+    def test_hubs_ranked_by_degree(self, simple_vault):
+        g = query(simple_vault, "what's central in my vault")["graph"]
+        assert g["hubs"][0]["page"] == "transformer"
+        assert "title" in g["hubs"][0]
+
+    def test_bridges_have_betweenness(self, simple_vault):
+        g = query(simple_vault, "which pages bridge my clusters")["graph"]
+        assert all("betweenness" in b for b in g["bridges"])
+
+    def test_clusters_have_cohesion(self, simple_vault):
+        g = query(simple_vault, "what clusters do I have")["graph"]
+        assert g["clusters"]
+        for c in g["clusters"]:
+            assert 0.0 <= c["cohesion"] <= 1.0
+            assert isinstance(c["fragmented"], bool)
+
+    def test_surprising_returns_list(self, simple_vault):
+        g = query(simple_vault, "show me surprising connections")["graph"]
+        assert isinstance(g["connections"], list)
+
+    def test_non_structural_query_has_no_graph_payload(self, simple_vault):
+        assert query(simple_vault, "attention mechanism")["graph"] is None
+        assert query(simple_vault, "what do I know about attention")["graph"] is None
+
+    def test_structural_queries_need_no_page_reads(self, simple_vault):
+        for q in ("what's central in my vault", "what clusters do I have",
+                  "which pages bridge my clusters", "show me surprising connections"):
+            r = query(simple_vault, q)
+            assert r["index_only"] is True, q
+            assert r["should_read"] == [], q
