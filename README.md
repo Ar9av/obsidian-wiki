@@ -107,6 +107,57 @@ Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, or
 
 More → **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**
 
+## Does it actually help?
+
+Structural questions — "how is X connected to Y", "which pages hold my vault together",
+"what breaks if I delete this" — are the ones a plain agent is worst at. It has to grep
+every file and reconstruct the link graph by hand, every single time.
+
+Same model, same vault, same questions. The only difference is whether `obsidian-wiki`
+was installed:
+
+| | Plain agent | With obsidian-wiki |
+|---|---|---|
+| **Time to answer** | 81s | **19s** — 4.4× faster |
+| **Correct answers** | 44% | **83%** |
+| **Tool calls used** | 9.9 | **4.6** |
+| **API cost** | $0.202 | $0.208 — unchanged |
+
+| Question | Plain agent | With obsidian-wiki |
+|---|---|---|
+| "How is X connected to Y?" | 122s | 18s |
+| "What topic clusters do I have?" | 117s | 21s |
+| "Which pages hold my vault together?" | 61s | 12s |
+| "What breaks if I delete X?" | 26s | 24s |
+
+The accuracy gap is not a rounding error. Asked to trace a connection, the plain agent
+routed through `index.md` — which links to *every* page, so it "found" a short path that
+means nothing. It made the same mistake in both runs, and named `index` as one of the
+most important pages in the vault. The graph the skills query excludes bookkeeping files,
+so that answer isn't reachable.
+
+<details>
+<summary>Method, and what this doesn't prove</summary>
+
+Claude Sonnet, headless, on a real 38-page vault. Questions were asked in plain English
+with no definition of the graph supplied — the plain agent had `Read`/`Grep`/`Glob`/`Bash`
+and had to work it out, which it did competently (it wrote its own centrality
+implementation rather than guessing). 4 questions × 2 conditions × 2 repetitions, run
+serially so nothing competed for CPU.
+
+Ground truth came from **networkx**, not from this project's own code: betweenness matches
+to 3.5e-18 across every node, and all 630 shortest-path pairs agree.
+
+It's a small study — n=2 per cell on one 38-page vault — so treat the exact percentages as
+indicative. The wall-clock gaps (3–6×) are much larger than the run-to-run spread; the
+accuracy figures rest on fewer samples. One run in the "with" column failed outright: the
+model ignored the CLI, grepped by hand, and got it wrong.
+
+Full data, per-run logs and the scaling measurements are in
+[PR #175](https://github.com/Ar9av/obsidian-wiki/pull/175).
+
+</details>
+
 ## Documentation
 
 | | |
