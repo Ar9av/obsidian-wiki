@@ -6,7 +6,9 @@
 #
 # What it does:
 #   1. Creates .env from .env.example (if not present)
-#   2. Writes ~/.obsidian-wiki/config so skills work from any project
+#   2. Writes the global config (XDG-style, under ~/.config/obsidian-wiki by
+#      default; legacy ~/.obsidian-wiki is honored if it already exists) so
+#      skills work from any project
 #   3. Symlinks .skills/* into each agent's expected skills directory:
 #      Project-local:
 #        - .claude/skills/        (Claude Code)
@@ -111,8 +113,16 @@ else
   echo "✅  .env already exists"
 fi
 
-# ── Step 1b: ~/.obsidian-wiki/config ─────────────────────────
-GLOBAL_CONFIG_DIR="$HOME/.obsidian-wiki"
+# ── Step 1b: global config ────────────────────────────────────
+# XDG-style location by default; installs that already have the legacy
+# ~/.obsidian-wiki keep using it so upgrading doesn't strand a working config.
+XDG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki"
+LEGACY_DIR="$HOME/.obsidian-wiki"
+if [ -d "$LEGACY_DIR" ] && [ ! -e "$XDG_DIR" ]; then
+  GLOBAL_CONFIG_DIR="$LEGACY_DIR"
+else
+  GLOBAL_CONFIG_DIR="$XDG_DIR"
+fi
 GLOBAL_CONFIG="$GLOBAL_CONFIG_DIR/config"
 mkdir -p "$GLOBAL_CONFIG_DIR"
 
@@ -141,7 +151,7 @@ cat > "$GLOBAL_CONFIG" <<EOF
 OBSIDIAN_VAULT_PATH="$VAULT_PATH"
 OBSIDIAN_WIKI_REPO="$SCRIPT_DIR"
 EOF
-echo "✅  Global config written to ~/.obsidian-wiki/config"
+echo "✅  Global config written to $GLOBAL_CONFIG"
 
 # ── Step 1c: Bootstrap symlinks ──────────────────────────────
 # .hermes.md → AGENTS.md  (Hermes resolves .hermes.md before AGENTS.md;
@@ -267,7 +277,7 @@ if [[ "$SETUP_SYNC" =~ ^[Yy]$ ]]; then
         SYNC_CMD="$(command -v python3 &>/dev/null && echo "env PYTHONPATH=$SCRIPT_DIR python3 -m obsidian_wiki.cli sync" || echo "obsidian-wiki sync")"
         CRON_LINE="0 * * * * $SYNC_CMD --vault $VAULT_PATH >> $GLOBAL_CONFIG_DIR/sync.log 2>&1"
         ( crontab -l 2>/dev/null; echo "$CRON_LINE" ) | sort -u | crontab -
-        echo "✅  Hourly cron installed  (logs: ~/.obsidian-wiki/sync.log)"
+        echo "✅  Hourly cron installed  (logs: $GLOBAL_CONFIG_DIR/sync.log)"
       fi
     fi
   fi

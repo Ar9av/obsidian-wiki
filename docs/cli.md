@@ -14,7 +14,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 
 | Command | What it does |
 |---|---|
-| `setup` | Install skills into your agents and write `~/.obsidian-wiki/config` |
+| `setup` | Install skills into your agents and write the global config |
 | `info` | Show install paths, version, and resolved config |
 | `list` | List the bundled skills |
 | `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
@@ -46,7 +46,7 @@ obsidian-wiki query "rate limiting" --top 12 --max-read 5 --json
 
 obsidian-wiki lint                     # uses the configured vault
 obsidian-wiki lint /path/to/vault --strict
-obsidian-wiki lint @research --json    # uses ~/.obsidian-wiki/config.research only
+obsidian-wiki lint @research --json    # uses <config dir>/config.research only
 obsidian-wiki lint --strict-trust      # fail on trust-ledger problems, not just warn
 obsidian-wiki lint --allow-lifecycle active --allow-relationship-type synthesizes \
   --required-trust-field updated --schema-source /path/to/vault/AGENTS.md

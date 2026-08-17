@@ -531,13 +531,31 @@ Every write skill reads `OBSIDIAN_LINK_FORMAT` from config before generating lin
 
 ## Config Resolution Protocol
 
-**All skills must resolve config using this algorithm — do not hard-code `.env` or `~/.obsidian-wiki/config` directly.** This ensures single-vault, multi-vault, project-local, and VPS setups all work correctly.
+**All skills must resolve config using this algorithm — do not hard-code `.env` or the global config path directly.** This ensures single-vault, multi-vault, project-local, and VPS setups all work correctly.
+
+### Global config directory
+
+The global config directory is **XDG-style**: `$XDG_CONFIG_HOME/obsidian-wiki` (default `~/.config/obsidian-wiki`). Installs that already have a `~/.obsidian-wiki` directory keep using it — so an existing setup never breaks — but any **new** install lands under the XDG path. Resolve it with:
+
+```
+obsidian_wiki_config_dir() {
+  local xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki"
+  local legacy_dir="$HOME/.obsidian-wiki"
+  if [[ -d "$legacy_dir" && ! -e "$xdg_dir" ]]; then
+    echo "$legacy_dir"
+  else
+    echo "$xdg_dir"
+  fi
+}
+```
+
+Everywhere below, "the global config dir" means `$(obsidian_wiki_config_dir)`, and "the global config" means `$(obsidian_wiki_config_dir)/config`.
 
 ### Resolution order
 
-0. **Inline vault override (`@name`)** — if the user's request contains an `@<name>` token (e.g. `@work save this`, `query @personal about X`), resolve `~/.obsidian-wiki/config.<name>` directly and use its `OBSIDIAN_VAULT_PATH`. This **overrides** both the CWD `.env` walk-up and the active symlink, and applies to **that invocation only** — never run `ln -sf` or otherwise change the active vault for an `@name` request. If `~/.obsidian-wiki/config.<name>` doesn't exist, tell the user it doesn't exist and list the available vaults (the `wiki-switch` **List** logic), then stop — do **not** silently fall back to the default. The `@name` is a routing directive, not content: strip it out before treating the rest of the request as the actual instruction or page text.
+0. **Inline vault override (`@name`)** — if the user's request contains an `@<name>` token (e.g. `@work save this`, `query @personal about X`), resolve `<global config dir>/config.<name>` directly and use its `OBSIDIAN_VAULT_PATH`. This **overrides** both the CWD `.env` walk-up and the active symlink, and applies to **that invocation only** — never run `ln -sf` or otherwise change the active vault for an `@name` request. If `<global config dir>/config.<name>` doesn't exist, tell the user it doesn't exist and list the available vaults (the `wiki-switch` **List** logic), then stop — do **not** silently fall back to the default. The `@name` is a routing directive, not content: strip it out before treating the rest of the request as the actual instruction or page text.
 1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
-2. **Global config** — if no local `.env` found, read `~/.obsidian-wiki/config`.
+2. **Global config** — if no local `.env` found, read the global config (`$(obsidian_wiki_config_dir)/config`).
 3. **Prompt setup** — if neither exists, tell the user: "No config found. Run `wiki-setup` to initialize your wiki."
 
 `@name` is a **per-invocation override** — it targets one vault for one request. `/wiki-switch <name>` is the **persistent default** — it re-points the active symlink for all future requests. Use `@name` to touch the other vault from anywhere without disturbing your default ("brain") vault.
@@ -545,8 +563,10 @@ Every write skill reads `OBSIDIAN_LINK_FORMAT` from config before generating lin
 ```
 find_config() {
   # $1 = parsed @name from the request, if any (else empty)
+  local config_dir
+  config_dir="$(obsidian_wiki_config_dir)"
   if [[ -n "$1" ]]; then
-    [[ -f "$HOME/.obsidian-wiki/config.$1" ]] && { echo "$HOME/.obsidian-wiki/config.$1"; return; }
+    [[ -f "$config_dir/config.$1" ]] && { echo "$config_dir/config.$1"; return; }
     echo ""; return   # named vault missing → caller reports + lists, no fallback
   fi
   dir="$PWD"
@@ -554,7 +574,7 @@ find_config() {
     [[ -f "$dir/.env" ]] && grep -q "OBSIDIAN_VAULT_PATH" "$dir/.env" && { echo "$dir/.env"; return; }
     dir="$(dirname "$dir")"
   done
-  [[ -f "$HOME/.obsidian-wiki/config" ]] && { echo "$HOME/.obsidian-wiki/config"; return; }
+  [[ -f "$config_dir/config" ]] && { echo "$config_dir/config"; return; }
   echo ""
 }
 ```
@@ -565,14 +585,14 @@ Skills that write runtime state (e.g. `daily-update`) must scope that state to t
 
 ```
 VAULT_ID=$(echo "$OBSIDIAN_VAULT_PATH" | md5sum 2>/dev/null || md5 -q - <<< "$OBSIDIAN_VAULT_PATH" | cut -c1-8)
-STATE_DIR="$HOME/.obsidian-wiki/state/$VAULT_ID"
+STATE_DIR="$(obsidian_wiki_config_dir)/state/$VAULT_ID"
 ```
 
 ### Standard "Before You Start" block
 
 Every skill's setup section should read:
 
-> **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. Honor an inline `@name` override first, then walk up from CWD for `.env`, fall back to `~/.obsidian-wiki/config`, else prompt setup. This gives `OBSIDIAN_VAULT_PATH` and any tool-specific path overrides.
+> **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. Honor an inline `@name` override first, then walk up from CWD for `.env`, fall back to the global config, else prompt setup. This gives `OBSIDIAN_VAULT_PATH` and any tool-specific path overrides.
 
 ## Environment Variables
 

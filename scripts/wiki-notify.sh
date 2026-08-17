@@ -6,11 +6,18 @@
 #   fish:      bass source /path/to/obsidian-wiki/scripts/wiki-notify.sh
 #              (or copy _wiki_notify logic natively using fish syntax)
 #
-# State is vault-scoped under ~/.obsidian-wiki/state/<vault-id>/
+# State is vault-scoped under <global-config-dir>/state/<vault-id>/ — the
+# global config dir is XDG-style (~/.config/obsidian-wiki by default), with
+# the legacy ~/.obsidian-wiki honored if it already exists (see
+# llm-wiki/SKILL.md Config Resolution Protocol).
 # Multiple vaults are supported — all stale vaults are shown.
 
 _wiki_notify() {
-  local state_base="$HOME/.obsidian-wiki/state"
+  local xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki"
+  local legacy_dir="$HOME/.obsidian-wiki"
+  local config_dir="$xdg_dir"
+  [[ -d "$legacy_dir" && ! -e "$xdg_dir" ]] && config_dir="$legacy_dir"
+  local state_base="$config_dir/state"
   [[ -d "$state_base" ]] || return
 
   local now age_s age_h stale last vault_path shown=0

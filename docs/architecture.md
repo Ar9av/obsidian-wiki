@@ -30,7 +30,7 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 ## The loop
 
-1. Agent resolves the vault path (`@name` → `.env` → `~/.obsidian-wiki/config`)
+1. Agent resolves the vault path (`@name` → `.env` → global config)
 2. Agent reads `.manifest.json` to know what's already been done
 3. Agent reads the relevant skill for instructions
 4. Agent uses its built-in tools to do the work
