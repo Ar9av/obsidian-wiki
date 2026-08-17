@@ -21,7 +21,13 @@ GITIGNORE_CONTENT = (
     ".obsidian/workspace-mobile.json\n"
     ".obsidian/cache\n"
     ".trash/\n"
+    ".graph-cache.json\n"
 )
+
+#: Derived files that should never be committed — they are regenerable and
+#: churn on every graph change. Backfilled into vaults whose .gitignore
+#: predates them.
+_DERIVED_IGNORES = (".graph-cache.json",)
 
 
 def _git(vault_path: Path, *args: str) -> subprocess.CompletedProcess:
@@ -66,6 +72,17 @@ def configure_sync(vault_path: Path, remote: str) -> list[str]:
     if not gitignore.is_file():
         gitignore.write_text(GITIGNORE_CONTENT)
         messages.append("Created .gitignore in vault")
+    else:
+        # An existing .gitignore is the user's file — never edit it. Just point
+        # out regenerable files that would otherwise be committed.
+        existing = gitignore.read_text(encoding="utf-8", errors="replace").split()
+        missing = [p for p in _DERIVED_IGNORES if p not in existing]
+        if missing:
+            messages.append(
+                "Tip: add "
+                + ", ".join(missing)
+                + " to .gitignore — regenerable, and it churns on every graph change"
+            )
 
     has_origin = _git(vault_path, "remote", "get-url", "origin").returncode == 0
     verb = "set-url" if has_origin else "add"
