@@ -14,6 +14,12 @@ def run_cli(
 ) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    if cwd is None:
+        # Default to the fake HOME, not the repo: config resolution walks up
+        # from cwd looking for a `.env`, and a developer's own .env at the repo
+        # root would otherwise override the fixture config.
+        home.mkdir(parents=True, exist_ok=True)
+        cwd = home
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,

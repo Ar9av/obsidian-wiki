@@ -19,6 +19,25 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _pin_subprocess_imports_to_this_checkout() -> None:
+    """Make CLI subprocesses import this working tree, not an installed copy.
+
+    Every test helper here spawns ``python -m obsidian_wiki.cli`` with a copy
+    of ``os.environ``. Without this, ``sys.path[0]`` is the subprocess cwd, so a
+    test that runs from a temp dir silently exercises whatever ``obsidian_wiki``
+    happens to be pip-installed — which passes or fails for reasons unrelated to
+    the code under test. Setting PYTHONPATH once here covers every helper.
+    """
+    os.environ["PYTHONPATH"] = os.pathsep.join(
+        [str(REPO_ROOT), *([p] if (p := os.environ.get("PYTHONPATH")) else [])]
+    )
+
 
 def make_project(tmp_path: Path, files: dict[str, str], *, git: bool = True) -> Path:
     """Write a mini source tree from files (relpath -> content) and, if git,
