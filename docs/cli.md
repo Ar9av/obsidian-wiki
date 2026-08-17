@@ -152,8 +152,9 @@ Available for automation, scripting, and debugging. Skills call some of these in
 
 | Command | What it does |
 |---|---|
-| `graph-query <vault> <question>` | Answer from the wikilink index without reading page bodies |
-| `graph-analyse <vault>` | God nodes, communities, surprising connections |
+| `graph-query <vault> <question>` | Answer from the wikilink index without reading page bodies. Plain-English **structural questions** are answered from the graph and returned in a `graph` field: "what breaks if I delete X" (impact/blast radius), "which pages bridge my clusters" (betweenness), "what's central" (hubs), "what clusters do I have" (communities + cohesion), "surprising connections". |
+| `graph-analyse <vault> [--top N] [--snapshot] [--diff-against FILE]` | Graph analysis in pure Python (the graphify algorithm family): god nodes (degree), bridge pages (Brandes betweenness centrality), communities with cohesion scores, cross-community surprising connections, suggested questions, and — with `--diff-against` a previous `_insights.md` — a graph diff. Vault bookkeeping files (`index`, `log`, `hot`, `_insights`) are excluded. |
+| `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
 | `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json` |
 | `cache-update <vault> <source>` | Record a source's SHA-256 in `.manifest.json` after ingest |
@@ -163,7 +164,13 @@ Available for automation, scripting, and debugging. Skills call some of these in
 
 ```bash
 obsidian-wiki graph-query /path/to/vault "transformer architecture" --pretty
+obsidian-wiki graph-query /path/to/vault "what breaks if I delete tool-call-interception"
+obsidian-wiki graph-query /path/to/vault "which pages bridge my clusters"
+obsidian-wiki graph-query /path/to/vault "what clusters do I have"
 obsidian-wiki graph-analyse /path/to/vault --top 30 --pretty
+obsidian-wiki graph-analyse /path/to/vault --snapshot --diff-against /path/to/vault/_insights.md
+obsidian-wiki graph-analyse /path/to/vault --path transformers lstm
+obsidian-wiki graph-analyse /path/to/vault --around attention --depth 2 --direction in
 obsidian-wiki batch-plan /path/to/vault ~/research --max-mb 4 --max-files 30
 obsidian-wiki cache-check /path/to/vault ~/research/*.pdf
 obsidian-wiki cache-update /path/to/vault ~/research/paper.pdf --pages concepts/attention.md
@@ -172,3 +179,21 @@ obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
 
 Most commands accept `--json` and/or `--pretty` for machine-readable output.
+
+### Graph cache
+
+Betweenness centrality (the `bridges` metric) is the only expensive computation in the
+graph layer — O(V·E), roughly 0.3s on a 500-page vault but ~43s at 5 000 pages. Every
+other metric stays under a second even on the largest vaults.
+
+It is therefore memoised in `.graph-cache.json` at the vault root. The cache key is a
+hash of the **graph topology itself**, not file timestamps, which has two consequences:
+
+- Editing a page's prose without changing its links keeps the cache valid.
+- Adding, removing, or retargeting any link changes the key, so a stale hit is impossible.
+
+The file is only written when the computation actually took longer than 0.5s, so small
+and medium vaults never accumulate one. It is bounded to the 3 most recent keys, written
+atomically (safe under concurrent runs), and ignored if corrupt — deleting it is always
+safe. Running `graph-analyse` warms the same cache that `graph-query` reads, so a nightly
+`daily-update` removes the first-query cost entirely.

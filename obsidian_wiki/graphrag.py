@@ -26,7 +26,6 @@ to open, replacing the current approach of opening 10+ pages speculatively.
 from __future__ import annotations
 
 import re
-from collections import defaultdict, deque
 from pathlib import Path
 from typing import Any
 
@@ -48,13 +47,16 @@ _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
 # following indented lines, not on this line.
 _BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 
-SKIP_DIRS = frozenset(
-    "_raw _archived _staging _archives .obsidian".split()
+from obsidian_wiki.graph_analysis import (  # noqa: E402
+    SKIP_DIRS,
+    SKIP_ROOT_FILES,
+    _slug,
+    iter_pages,
+    shortest_path,
 )
 
-
-def _slug(s: str) -> str:
-    return s.strip().lower().replace(" ", "-")
+__all__ = ["SKIP_DIRS", "SKIP_ROOT_FILES", "build_index", "classify_query",
+           "find_path", "query", "rank_candidates"]
 
 
 def _extract_scalar(front: str, key: str) -> str:
@@ -97,10 +99,12 @@ def build_index(vault: Path) -> dict[str, dict]:
     """
     pages: dict[str, dict] = {}
 
-    md_files = [
-        p for p in vault.rglob("*.md")
-        if not any(part in SKIP_DIRS for part in p.relative_to(vault).parts)
-    ]
+    # Shared page selection — identical to graph_analysis, so `graph-query`
+    # and `graph-analyse` always see the same graph. Notably this drops the
+    # root index/log/hot bookkeeping files: index.md links to every page, so
+    # including it made almost any two pages look 2 hops apart and produced
+    # meaningless "A -> index -> B" paths.
+    md_files = iter_pages(vault)
 
     # First pass: collect all slugs and frontmatter
     for page in md_files:
@@ -236,28 +240,18 @@ def find_path(
     target_slug: str,
     max_depth: int = 4,
 ) -> list[str] | None:
-    """BFS shortest path from source to target through wikilinks."""
+    """Shortest wikilink path from source to target (undirected).
+
+    Delegates to `graph_analysis.shortest_path` so there is exactly one BFS
+    implementation in the codebase; `max_depth` bounds the result length.
+    """
     if source_slug not in index or target_slug not in index:
         return None
-    if source_slug == target_slug:
-        return [source_slug]
-
-    queue: deque[tuple[str, list[str]]] = deque([(source_slug, [source_slug])])
-    visited = {source_slug}
-
-    while queue:
-        node, path = queue.popleft()
-        if len(path) > max_depth:
-            continue
-        for neighbour in index[node]["out_links"] + index[node]["in_links"]:
-            if neighbour in visited:
-                continue
-            visited.add(neighbour)
-            new_path = path + [neighbour]
-            if neighbour == target_slug:
-                return new_path
-            queue.append((neighbour, new_path))
-    return None
+    outgoing = {slug: list(entry["out_links"]) for slug, entry in index.items()}
+    path = shortest_path(outgoing, source_slug, target_slug)
+    if path is None or len(path) - 1 > max_depth:
+        return None
+    return path
 
 
 # ---------------------------------------------------------------------------
@@ -281,17 +275,76 @@ _LIST_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# --- Structural intents ----------------------------------------------------
+# Questions about the SHAPE of the vault. Each maps to one graph algorithm.
+# Only `bridges` needs betweenness (the one expensive metric), so the rest
+# stay as cheap as an ordinary lookup.
+
+#: "what breaks if I delete X" / "what depends on X" -> incoming blast radius
+_IMPACT_PATTERNS = re.compile(
+    r"what (?:would )?breaks?(?: if I (?:delete|remove|rename))?\s+(.+?)[\?]?$"
+    r"|what (?:pages? )?(?:depends?|relies) on\s+(.+?)[\?]?$"
+    r"|(?:the )?blast radius (?:of|for)\s+(.+?)[\?]?$"
+    r"|what (?:links|points) to\s+(.+?)[\?]?$"
+    r"|what(?:'s| is) affected by\s+(.+?)[\?]?$",
+    re.IGNORECASE,
+)
+
+#: highest betweenness — the pages holding the graph together
+_BRIDGE_PATTERNS = re.compile(
+    r"bridge pages?|which pages? bridge|what bridges"
+    r"|would (?:fragment|split|disconnect)|load.bearing|cross.commun\w+|cut vertex|articulation",
+    re.IGNORECASE,
+)
+
+#: highest degree — the anchor concepts
+_HUB_PATTERNS = re.compile(
+    r"what(?:'s| is) central|most connected|most.linked|top hubs?|hub pages?"
+    r"|god nodes?|anchor pages?|most important pages?|what are my (?:main|core) (?:topics|concepts)",
+    re.IGNORECASE,
+)
+
+#: community detection + cohesion
+_CLUSTER_PATTERNS = re.compile(
+    r"what clusters|what communit\w+|how is my (?:vault|wiki) (?:organi[sz]ed|structured)"
+    r"|cluster cohesion|fragmented (?:clusters?|topics?)|vault structure",
+    re.IGNORECASE,
+)
+
+#: cross-community edges ranked by unexpectedness
+_SURPRISE_PATTERNS = re.compile(
+    r"surprising connections?|unexpected (?:links?|connections?)|non.obvious (?:links?|connections?)",
+    re.IGNORECASE,
+)
+
+_STRUCTURAL = (
+    ("impact", _IMPACT_PATTERNS),
+    ("bridges", _BRIDGE_PATTERNS),
+    ("hubs", _HUB_PATTERNS),
+    ("clusters", _CLUSTER_PATTERNS),
+    ("surprising", _SURPRISE_PATTERNS),
+)
+
 
 def classify_query(question: str) -> tuple[str, list[str]]:
     """Return (answer_type, extracted_terms).
 
-    answer_type: "path" | "gap" | "list" | "direct"
+    answer_type: "path" | "impact" | "bridges" | "hubs" | "clusters"
+                 | "surprising" | "gap" | "list" | "direct"
     """
     m = _PATH_PATTERNS.search(question)
     if m:
         groups = [g for g in m.groups() if g]
         terms = groups[:2] if len(groups) >= 2 else [question]
         return "path", terms
+
+    for name, pattern in _STRUCTURAL:
+        sm = pattern.search(question)
+        if sm:
+            captured = [g for g in sm.groups() if g]
+            if name == "impact" and not captured:
+                continue  # "what breaks" with no subject isn't an impact query
+            return name, (captured[:1] if captured else [])
 
     if _GAP_PATTERNS.search(question):
         # Extract what the gap is about
@@ -306,6 +359,151 @@ def classify_query(question: str) -> tuple[str, list[str]]:
     stop = {"what", "the", "a", "an", "is", "are", "how", "does", "do", "in", "of", "to", "for", "and", "or"}
     terms = [w.strip("?,.'\"") for w in question.split() if w.lower().strip("?,.'\"") not in stop and len(w) > 2]
     return "direct", terms
+
+
+# ---------------------------------------------------------------------------
+# Structural answers (graph shape, not page content)
+# ---------------------------------------------------------------------------
+
+def _outgoing_from_index(index: dict[str, dict]) -> dict[str, list[str]]:
+    return {slug: list(entry["out_links"]) for slug, entry in index.items()}
+
+
+def _resolve_page(index: dict[str, dict], term: str) -> str | None:
+    """Resolve a free-text page reference to a slug, falling back to ranking."""
+    slug = _slug(term)
+    if slug in index:
+        return slug
+    slug = _slug(term.strip().strip("`\"'.,"))
+    if slug in index:
+        return slug
+    cands = rank_candidates(index, [term], top_n=1)
+    return cands[0]["slug"] if cands else None
+
+
+def _structural_answer(
+    vault: Path,
+    index: dict[str, dict],
+    answer_type: str,
+    terms: list[str],
+    top_n: int,
+) -> dict[str, Any] | None:
+    """Answer a question about the shape of the graph.
+
+    Returns None when the question named a page that can't be resolved, so the
+    caller can fall back to ordinary retrieval.
+    """
+    from obsidian_wiki import graph_analysis as ga
+
+    outgoing = _outgoing_from_index(index)
+
+    if answer_type == "impact":
+        if not terms:
+            return None
+        seed = _resolve_page(index, terms[0])
+        if seed is None:
+            return None
+        hits = ga.neighborhood(outgoing, seed, depth=2, direction="in")
+        direct = [h["page"] for h in hits if h["depth"] == 1]
+        return {
+            "intent": "impact",
+            "seed": seed,
+            "direct_dependents": direct,
+            "transitive_dependents": [h["page"] for h in hits if h["depth"] == 2],
+            "total": len(hits),
+            "note": (
+                f"{len(direct)} pages link directly to `{seed}`, "
+                f"{len(hits)} within 2 incoming hops (excluding `{seed}` itself)."
+            ),
+        }
+
+    if answer_type == "bridges":
+        # The only intent that needs betweenness — cached on disk by topology.
+        communities = ga.detect_communities(outgoing)
+        communities.sort(key=lambda c: -len(c))
+        bridges = ga.bridge_pages(outgoing, communities, top_n=min(top_n, 10), vault=vault)
+        labels = _community_labels(index, communities)
+        for b in bridges:
+            b["label"] = labels.get(b["community"], "")
+            b["connects_labels"] = [labels.get(c, str(c)) for c in b["connects"]]
+        return {
+            "intent": "bridges",
+            "bridges": bridges,
+            "note": "Ranked by betweenness centrality — removing a high scorer fragments the vault.",
+        }
+
+    if answer_type == "hubs":
+        gods = ga.god_nodes(outgoing, top_n=min(top_n, 10))
+        for g in gods:
+            g["title"] = index.get(g["page"], {}).get("title", g["page"])
+        return {
+            "intent": "hubs",
+            "hubs": gods,
+            "note": "Ranked by total degree (incoming + outgoing wikilinks).",
+        }
+
+    if answer_type == "clusters":
+        communities = ga.detect_communities(outgoing)
+        communities.sort(key=lambda c: -len(c))
+        labels = _community_labels(index, communities)
+        out = []
+        for i, comm in enumerate(communities):
+            cohesion = ga.cohesion_score(outgoing, comm)
+            out.append({
+                "id": i,
+                "label": labels.get(i, f"cluster-{i}"),
+                "size": len(comm),
+                "cohesion": cohesion,
+                "fragmented": bool(cohesion < 0.15 and len(comm) >= 5),
+                "pages": sorted(comm)[:12],
+            })
+        return {
+            "intent": "clusters",
+            "clusters": out,
+            "note": "cohesion = actual links / possible links inside the cluster; < 0.15 with 5+ pages is fragmented.",
+        }
+
+    if answer_type == "surprising":
+        communities = ga.detect_communities(outgoing)
+        communities.sort(key=lambda c: -len(c))
+        labels = _community_labels(index, communities)
+        items = ga.surprising_connections(outgoing, communities, top_n=min(top_n, 10))
+        node_comm = {n: i for i, c in enumerate(communities) for n in c}
+        for it in items:
+            it["source_cluster"] = labels.get(node_comm.get(it["source"]), "")
+            it["target_cluster"] = labels.get(node_comm.get(it["target"]), "")
+        return {
+            "intent": "surprising",
+            "connections": items,
+            "note": "Cross-cluster links, rarest first; one per cluster pair before any pair repeats.",
+        }
+
+    return None
+
+
+def _community_labels(index: dict[str, dict], communities: list[set[str]]) -> dict[int, str]:
+    """Label each community by its most common tag, kept unique."""
+    labels: dict[int, str] = {}
+    taken: set[str] = set()
+    for i, comm in enumerate(communities):
+        freq: dict[str, int] = {}
+        for slug in comm:
+            for tag in index.get(slug, {}).get("tags", []):
+                if not tag.startswith("visibility/"):
+                    freq[tag] = freq.get(tag, 0) + 1
+        if freq:
+            ranked = sorted(freq, key=lambda t: (-freq[t], t))
+            label = ranked[0]
+            if label in taken:
+                label = next(
+                    (f"{ranked[0]}/{a}" for a in ranked[1:] if f"{ranked[0]}/{a}" not in taken),
+                    f"{ranked[0]}/{sorted(comm)[0]}",
+                )
+        else:
+            label = f"cluster-{i}"
+        labels[i] = label
+        taken.add(label)
+    return labels
 
 
 # ---------------------------------------------------------------------------
@@ -357,6 +555,16 @@ def query(
         if raw_path:
             path_result = [index[s]["path"] for s in raw_path if s in index]
 
+    # --- Structural intents ------------------------------------------------
+    # Answered entirely from the graph, so `index_only` is true and the agent
+    # never opens a page. Everything here is cheap except `bridges`, which
+    # needs betweenness and therefore goes through the on-disk cache.
+    graph_answer: dict[str, Any] | None = None
+    if answer_type in ("impact", "bridges", "hubs", "clusters", "surprising"):
+        graph_answer = _structural_answer(vault, index, answer_type, terms, top_n)
+        if graph_answer is None:
+            answer_type = "direct"   # couldn't resolve the subject — fall back
+
     candidates = rank_candidates(index, terms, top_n=top_n)
 
     # Decide whether page reads are needed
@@ -364,6 +572,8 @@ def query(
     index_only = False
     if top_candidate and top_candidate["score"] >= 10.0 and top_candidate["summary"]:
         index_only = True  # Exact title match with a summary — likely answerable from index
+    if graph_answer is not None:
+        index_only = True  # structural answers are complete without page reads
 
     should_read = [c["page"] for c in candidates[:max_should_read] if not index_only]
     if path_result and not index_only:
@@ -389,6 +599,7 @@ def query(
         "god_nodes_relevant": god_relevant,
         "should_read": should_read,
         "index_only": index_only,
+        "graph": graph_answer,
         "stats": {
             "indexed_pages": len(index),
             "query_terms": terms,

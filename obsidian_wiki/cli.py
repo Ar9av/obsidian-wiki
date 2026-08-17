@@ -1027,12 +1027,34 @@ def cmd_batch_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_graph_analyse(args: argparse.Namespace) -> int:
-    from obsidian_wiki.graph_analysis import analyse_vault
+    from obsidian_wiki import graph_analysis as ga
     vault = Path(args.vault).expanduser().resolve()
     if not vault.is_dir():
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
-    result = analyse_vault(vault, top_n=args.top)
+
+    if args.path or args.around:
+        # Query modes: no full analysis, just the graph walk.
+        outgoing, _ = ga.parse_vault_graph(vault)
+        if args.path:
+            src, tgt = args.path
+            path = ga.shortest_path(outgoing, src, tgt, directed=args.direction == "out")
+            result: dict = {"source": ga._slug(src), "target": ga._slug(tgt), "path": path,
+                            "hops": (len(path) - 1) if path else None}
+        else:
+            hits = ga.neighborhood(outgoing, args.around, depth=args.depth, direction=args.direction)
+            result = {"seed": ga._slug(args.around), "depth": args.depth,
+                      "direction": args.direction, "pages": hits, "count": len(hits),
+                      "note": "pages and count exclude the seed itself"}
+    else:
+        previous = None
+        if args.diff_against:
+            previous = ga.load_snapshot(Path(args.diff_against).expanduser())
+            if previous is None:
+                print(f"warning: no GRAPH_SNAPSHOT found in {args.diff_against}; skipping diff",
+                      file=sys.stderr)
+        result = ga.analyse_vault(vault, top_n=args.top, previous_snapshot=previous,
+                                  include_snapshot=args.snapshot)
     if args.pretty:
         print(json.dumps(result, indent=2))
     else:
@@ -1857,10 +1879,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     ga = sub.add_parser(
         "graph-analyse",
-        help="analyse the vault's wikilink graph: god nodes, communities, surprising connections",
+        help="analyse the vault's wikilink graph: god nodes, bridges, communities, "
+             "surprising connections, suggested questions; or walk paths/neighbourhoods",
     )
     ga.add_argument("vault", help="path to the Obsidian vault")
     ga.add_argument("--top", type=int, default=20, help="number of top results to return (default: 20)")
+    ga.add_argument("--path", nargs=2, metavar=("FROM", "TO"),
+                    help="shortest link path between two pages (query mode)")
+    ga.add_argument("--around", metavar="PAGE",
+                    help="pages within --depth hops of PAGE (query mode; blast radius with --direction in)")
+    ga.add_argument("--depth", type=int, default=2, help="hops for --around (default: 2)")
+    ga.add_argument("--direction", choices=["both", "in", "out"], default="both",
+                    help="link direction for --around / --path (default: both)")
+    ga.add_argument("--diff-against", metavar="FILE",
+                    help="previous _insights.md (GRAPH_SNAPSHOT comment) or snapshot JSON to diff against")
+    ga.add_argument("--snapshot", action="store_true",
+                    help="include a compact graph snapshot in the output for future --diff-against")
     ga.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ga.set_defaults(func=cmd_graph_analyse)
 
