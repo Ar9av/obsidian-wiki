@@ -289,18 +289,27 @@ Where the delta report tells the user what's pending, insights mode tells them w
 **First, run the graph analyser.** This replaces manual wikilink parsing — one command produces all the raw data you need:
 
 ```bash
-obsidian-wiki graph-analyse "$OBSIDIAN_VAULT_PATH" --pretty
+obsidian-wiki graph-analyse "$OBSIDIAN_VAULT_PATH" --pretty --snapshot \
+  --diff-against "$OBSIDIAN_VAULT_PATH/_insights.md"   # omit if no previous _insights.md
 ```
 
+The analyser runs the same algorithm family graphify applies to code graphs, in pure Python: degree ranking, community detection (Leiden if `obsidian-wiki[graph]` is installed, else label propagation), community cohesion, Brandes betweenness centrality, cross-community surprise scoring, and snapshot diffing. Vault bookkeeping files (`index`, `log`, `hot`, `_insights`, `_meta/`, `_readouts/`) are excluded so they don't dominate every ranking.
+
 Output fields used below:
-- `god_nodes` — pages ranked by total degree (in + out). Use for anchor pages and hub classification.
-- `communities` — page clusters by link density (label propagation / Leiden). Use for bridge detection and cluster labelling.
-- `surprising_connections` — cross-community edges ranked by unexpectedness. Use directly in the Surprising Connections section.
+- `god_nodes` — pages ranked by total degree (in + out), with `in_degree`/`out_degree`. Use for anchor pages and hub classification.
+- `bridges` — pages ranked by **betweenness centrality** (share of shortest paths passing through them), with `community` and the list of other communities they `connects`. Use directly for the Bridge Pages section — no manual tag-pair search needed.
+- `communities` — page clusters by link density, each with `label`, `size`, `pages`, and `cohesion` (intra-cluster edge density, 0–1). Use for cluster labelling and the cohesion section.
+- `surprising_connections` — cross-community edges ranked by unexpectedness, one per community pair before any pair repeats, each with a `note` naming the two communities. Use directly in the Surprising Connections section.
+- `suggested_questions` — `{type, question, why}` derived from bridges, sink hubs, isolates and low-cohesion clusters. Seed the Questions section with these.
 - `dead_ends` — pages with zero outgoing links. Use for orphan-adjacent and cross-linker suggestions.
 - `isolated` — pages with zero links in either direction. Use for stubs/orphan reporting.
-- `stats` — total pages, edges, communities.
+- `stats` — total pages, edges, communities, graph `density`.
+- `diff` (only with `--diff-against`) — `added_pages`, `removed_pages`, `added_edges`, `removed_edges`, `newly_connected`, `lost_incoming`, `summary`. Use for the Graph Delta section.
+- `snapshot` (only with `--snapshot`) — write this JSON verbatim into the `<!-- GRAPH_SNAPSHOT: ... -->` comment at the end of `_insights.md`.
 
-**Fallback** (if `obsidian-wiki` is not installed): glob all `.md` pages, extract every `[[wikilink]]`, and build `incoming`, `outgoing`, and `tags` maps manually.
+Query modes (useful when the user asks a follow-up): `--path A B` returns the shortest link chain between two pages; `--around PAGE --depth N [--direction in|out|both]` returns the N-hop neighbourhood (`--direction in` = the blast radius if PAGE were renamed or removed).
+
+**Fallback** (if `obsidian-wiki` is not installed): glob all `.md` pages, extract every `[[wikilink]]`, and build `incoming`, `outgoing`, and `tags` maps manually, then approximate the sections below by hand.
 
 You'll reuse this data across all sections below.
 
@@ -311,39 +320,33 @@ You'll reuse this data across all sections below.
    - For each, note both incoming and outgoing counts: pages with high incoming *and* high outgoing are connector hubs (most valuable)
    - Pages with high incoming but zero outgoing are sink hubs — flag as cross-linker candidates
 
-2. **Bridge pages.** Pages that connect otherwise-disconnected tag clusters — removing them would partition the graph. These are often more structurally important than raw hub count suggests.
-   - For each page P, find pairs of pages (A, B) where:
-     - A links to P, B is linked from P (or vice versa)
-     - A and B share **no tags** with each other
-     - P is the only path between A's tag cluster and B's tag cluster within 2 hops
-   - Rank by how many cross-cluster pairs P bridges; show top 5
-   - Label each: "`P` bridges `[tag-cluster-A]` ↔ `[tag-cluster-B]`"
+2. **Bridge pages.** Pages that connect otherwise-disconnected clusters — removing them would partition the graph. These are often more structurally important than raw hub count suggests.
+   - Take the top 5 of `bridges` (already ranked by betweenness centrality)
+   - Label each using the community labels: "`P` bridges `[label of community]` ↔ `[labels of connects]`". A bridge with an empty `connects` list is an *intra*-cluster chokepoint — note it as "internal hub of `[label]`"
+   - Show the betweenness score so runs are comparable over time
 
-3. **Tag cluster cohesion.** For each tag with ≥ 5 pages, score how tightly the pages within it are interconnected:
-   - `n` = number of pages sharing this tag
-   - `actual_links` = number of wikilinks between any two pages in this tag group
-   - `cohesion = actual_links / (n × (n−1) / 2)` — ratio of actual links to maximum possible
-   - **Fragmented clusters** (cohesion < 0.15, n ≥ 5): these pages share a topic but aren't woven together. Surface them as cross-linker targets.
-   - Show top 5 tags by cohesion (strongest clusters) and bottom 5 (most fragmented)
+3. **Cluster cohesion.** How tightly each community's pages are interlinked — read straight from `communities[].cohesion` (`actual_links / (n × (n−1) / 2)`).
+   - **Fragmented clusters** (cohesion < 0.15, size ≥ 5): these pages share a topic but aren't woven together. Surface them as cross-linker targets.
+   - Show the top 5 communities by cohesion (strongest clusters) and bottom 5 (most fragmented), each with its label and size
+   - Optionally repeat the same formula per tag (for tags with ≥ 5 pages) if the user cares about tag-level cohesion
 
-4. **Surprising connections.** Cross-category wikilinks that are non-obvious — scored by how unexpected they are:
-   - Score each wikilink that crosses category boundaries (e.g., `concepts/` → `entities/`, `skills/` → `synthesis/`):
+4. **Surprising connections.** Cross-community wikilinks that are non-obvious.
+   - Start from `surprising_connections` (structural score = 1/√(cross-degree(A)·cross-degree(B)); one edge per community pair before any pair repeats, so a single hub can't fill the list)
+   - Re-rank the candidates with content signals the analyser can't see:
      - **+3** if the linking page or claim is marked `^[ambiguous]` (uncertain connection, worth reviewing)
      - **+2** if the linking page is marked `^[inferred]` (synthesized, not directly stated)
      - **+2** if the categories are in different knowledge layers (e.g., `concepts` ↔ `entities` more surprising than `concepts` ↔ `concepts`)
-     - **+2** if source page has ≤ 2 total links (peripheral) but target has ≥ 8 (hub) — unexpected reach from edge to center
-   - Show top 5 scored connections with a plain-language reason for each
+   - Show top 5 with a plain-language reason for each (use the `note` — "bridges `[label A]` → `[label B]`" — plus any content bonus)
 
 5. **Orphan-adjacent suggestions.** Pages linked from a top-10 hub but with zero outgoing links of their own. Dead-ends in high-traffic areas — prime cross-linker candidates.
 
 6. **Rough clusters.** Group anchor pages by dominant tag. (Simple tag intersection — just for orientation.)
 
-7. **Graph delta since last run.** Compare the current link graph to the snapshot stored in the previous `_insights.md`:
-   - Read the `<!-- GRAPH_SNAPSHOT: ... -->` line at the bottom of the previous `_insights.md` (if it exists) — it contains a compact JSON edge list
-   - Compute: new pages added, pages removed, new wikilinks created, wikilinks removed
-   - Flag: pages that were isolated last run but now have incoming links ("newly connected: X, Y")
-   - Flag: pages that lost incoming links since last run ("link target may have been renamed: A, B")
-   - If no previous snapshot exists, skip this section
+7. **Graph delta since last run.** Read straight from the `diff` field (produced by `--diff-against` on the previous `_insights.md`, which the analyser reads from its `<!-- GRAPH_SNAPSHOT: ... -->` comment):
+   - `summary` → "+N pages, +M wikilinks"; list `added_pages` / `removed_pages`
+   - `newly_connected` → "newly connected: X, Y" (pages that had no incoming links last run)
+   - `lost_incoming` → "link target may have been renamed: A, B"
+   - If no previous snapshot exists (no `diff` field), skip this section
 
 8. **Tier assignment suggestions.** After computing hubs and bridges, recommend `tier:` changes. Never write `tier:` to pages — only surface suggestions so the human can decide.
    - **Promote to `core`:** pages with ≥5 incoming links OR top-5 bridge position that currently have `tier: supporting` or no `tier:` field
@@ -358,17 +361,15 @@ You'll reuse this data across all sections below.
    - If all high-link pages already have `tier: core` and all low-link pages have `tier: peripheral`, emit: "Tier assignments look healthy — no changes suggested."
 
 9. **Suggested questions.** Questions this wiki structure is uniquely positioned to answer — or that reveal gaps:
-   - From `^[ambiguous]` claims: "Resolve: What is the exact relationship between `X` and `Y`?"
-   - From bridge pages: "Explore: Why does `P` connect `[cluster-A]` to `[cluster-B]`?"
-   - From pages with zero incoming links: "Link: `X` has no incoming links — what should reference it?"
-   - From fragmented clusters (cohesion < 0.15): "Audit: Should tag `[T]` be split into more focused sub-tags?"
-   - Show up to 7, prioritizing AMBIGUOUS first, then bridge nodes, then isolates
+   - From `^[ambiguous]` claims (content scan — the analyser doesn't see these): "Resolve: What is the exact relationship between `X` and `Y`?"
+   - From `suggested_questions` — already generated for you: `bridge_node` → "Explore: …", `sink_hub` → "Link: …", `isolated_nodes` → "Link: …", `low_cohesion` → "Audit: …". Rewrite each into the matching prefix form
+   - Show up to 7, prioritizing AMBIGUOUS first, then bridge nodes, then sink hubs / isolates, then cohesion audits
 
 ---
 
 ### Output
 
-Write the result to `_insights.md` at the vault root. Overwrite freely — it's regenerable. At the very end, embed a compact graph snapshot as an HTML comment so the next run can diff against it.
+Write the result to `_insights.md` at the vault root. Overwrite freely — it's regenerable. At the very end, embed the analyser's `snapshot` field verbatim as an HTML comment so the next run can diff against it with `--diff-against`.
 
 ```markdown
 # Wiki Insights — <TIMESTAMP>
