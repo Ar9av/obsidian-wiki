@@ -57,12 +57,17 @@ def _page(
 def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["HOME"] = str(home)
+    # Run from the fake HOME, not the repo: config resolution walks up from cwd
+    # looking for a `.env`, and a developer's own .env at the repo root would
+    # otherwise override the fixture config and point at their real vault.
+    home.mkdir(parents=True, exist_ok=True)
     return subprocess.run(
         [sys.executable, "-m", "obsidian_wiki.cli", *args],
         capture_output=True,
         check=False,
         text=True,
         env=env,
+        cwd=home,
     )
 
 

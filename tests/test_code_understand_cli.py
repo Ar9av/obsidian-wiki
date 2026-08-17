@@ -1,8 +1,7 @@
 """Subprocess tests for the `code-understand` CLI command (issue #167).
 
-The command does not exist yet — these tests are RED by design: argparse must
-reject `code-understand` with an "invalid choice" error (exit 2) until the
-wiring wave registers the subcommand. They pin the exact CLI contract:
+These were written RED-first, before the subcommand existed; the wiring landed
+in fd30720 and they are green now. They pin the exact CLI contract:
 
     obsidian-wiki code-understand [--project <dir>] [--backend auto|builtin|codegraph]
         [--changed <file> ...] [--since <sha>] [--max-symbols N] [--pretty]
