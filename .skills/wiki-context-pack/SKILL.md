@@ -16,7 +16,7 @@ This is a read-only skill. It must not modify the vault, including `log.md`,
 
 1. Resolve config using the Config Resolution Protocol in
    `llm-wiki/SKILL.md`: inline `@name`, then walk up from CWD for `.env`,
-   then `~/.obsidian-wiki/config`.
+   then the global config.
 2. If `$OBSIDIAN_VAULT_PATH/AGENTS.md` exists, read it as trusted owner
    conventions. Do not include that file as a knowledge excerpt.
 3. Canonicalize the configured vault to a physical absolute path before

@@ -230,13 +230,16 @@ inconclusive sessions are skipped automatically.
    - `<REPO_PATH>/.claude/hooks/wiki-stop-capture.sh` — source checkout.
 
    If neither exists (e.g. an older wheel that predates bundling the hook), fetch the canonical
-   copy to a stable location and point at that instead:
+   copy to a stable location and point at that instead. Use the global config dir from the
+   Config Resolution Protocol in `llm-wiki/SKILL.md` (XDG-style `~/.config/obsidian-wiki` by
+   default, or the legacy `~/.obsidian-wiki` if that already exists):
 
    ```bash
-   mkdir -p ~/.obsidian-wiki/hooks
+   CONFIG_DIR="$( [[ -d "$HOME/.obsidian-wiki" && ! -e "${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki" ]] && echo "$HOME/.obsidian-wiki" || echo "${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki" )"
+   mkdir -p "$CONFIG_DIR/hooks"
    curl -fsSL https://raw.githubusercontent.com/Ar9av/obsidian-wiki/main/.claude/hooks/wiki-stop-capture.sh \
-     -o ~/.obsidian-wiki/hooks/wiki-stop-capture.sh
-   chmod +x ~/.obsidian-wiki/hooks/wiki-stop-capture.sh
+     -o "$CONFIG_DIR/hooks/wiki-stop-capture.sh"
+   chmod +x "$CONFIG_DIR/hooks/wiki-stop-capture.sh"
    ```
 
    Use the resolved absolute path as `<HOOK_PATH>` below.

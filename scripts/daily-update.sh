@@ -7,8 +7,20 @@ set -euo pipefail
 #
 # Config resolution order (mirrors llm-wiki/SKILL.md protocol):
 #   1. Walk up from CWD looking for .env with OBSIDIAN_VAULT_PATH
-#   2. Fall back to ~/.obsidian-wiki/config
+#   2. Fall back to the global config (XDG-style; legacy ~/.obsidian-wiki honored)
 #   3. Exit with error if neither found
+
+# XDG-style global config dir, with legacy ~/.obsidian-wiki fallback for
+# installs that already have it (see llm-wiki/SKILL.md Config Resolution Protocol).
+_obsidian_wiki_config_dir() {
+  local xdg_dir="${XDG_CONFIG_HOME:-$HOME/.config}/obsidian-wiki"
+  local legacy_dir="$HOME/.obsidian-wiki"
+  if [[ -d "$legacy_dir" && ! -e "$xdg_dir" ]]; then
+    echo "$legacy_dir"
+  else
+    echo "$xdg_dir"
+  fi
+}
 
 _find_config() {
   local dir="$PWD"
@@ -19,8 +31,10 @@ _find_config() {
     fi
     dir="$(dirname "$dir")"
   done
-  if [[ -f "$HOME/.obsidian-wiki/config" ]]; then
-    echo "$HOME/.obsidian-wiki/config"
+  local global_config
+  global_config="$(_obsidian_wiki_config_dir)/config"
+  if [[ -f "$global_config" ]]; then
+    echo "$global_config"
     return
   fi
   echo ""
@@ -45,7 +59,7 @@ fi
 VAULT_ID=$(echo "$OBSIDIAN_VAULT_PATH" | md5sum 2>/dev/null | cut -c1-8 || \
            md5 -q - <<< "$OBSIDIAN_VAULT_PATH" 2>/dev/null | cut -c1-8 || \
            echo "default")
-STATE_DIR="$HOME/.obsidian-wiki/state/$VAULT_ID"
+STATE_DIR="$(_obsidian_wiki_config_dir)/state/$VAULT_ID"
 mkdir -p "$STATE_DIR"
 
 # Write vault path so wiki-notify.sh can find this state dir

@@ -14,11 +14,11 @@ You run a lightweight maintenance pass over the wiki: check source freshness, re
 
 ## Before You Start
 
-1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → `~/.obsidian-wiki/config` → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_WIKI_REPO`.
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → global config → prompt setup). This gives `OBSIDIAN_VAULT_PATH` and `OBSIDIAN_WIKI_REPO`.
 2. **Derive vault-scoped state dir** — all runtime state is scoped to the resolved vault, not global:
    ```bash
    VAULT_ID=$(echo "$OBSIDIAN_VAULT_PATH" | md5sum 2>/dev/null | cut -c1-8 || md5 -q - <<< "$OBSIDIAN_VAULT_PATH" | cut -c1-8)
-   STATE_DIR="$HOME/.obsidian-wiki/state/$VAULT_ID"
+   STATE_DIR="$(obsidian_wiki_config_dir)/state/$VAULT_ID"
    mkdir -p "$STATE_DIR"
    ```
 3. Read `$OBSIDIAN_VAULT_PATH/.manifest.json`.
@@ -159,7 +159,7 @@ This initializes `$STATE_DIR/.last_update` so the terminal notification works im
 Tell the user:
 - The cron runs daily at 9 AM (or on next login if missed)
 - Terminal notifications appear when the wiki is >20 hours stale
-- State is stored in `~/.obsidian-wiki/state/<vault-id>/` — supports multiple vaults independently
+- State is stored in `<global config dir>/state/<vault-id>/` (XDG-style `~/.config/obsidian-wiki` by default, or the legacy `~/.obsidian-wiki` if that already exists) — supports multiple vaults independently
 - They can run `/daily-update` anytime to force a sync
 - Logs go to `/tmp/obsidian-wiki-daily.log`
 

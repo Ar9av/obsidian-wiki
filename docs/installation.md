@@ -1,6 +1,8 @@
 # Installation
 
-Four ways in. Pick one — they all end at the same place: your vault path in `~/.obsidian-wiki/config` and the skills discoverable by your agent.
+Four ways in. Pick one — they all end at the same place: your vault path in the global config (`~/.config/obsidian-wiki/config`) and the skills discoverable by your agent.
+
+> **Upgrading from an older version?** The config directory used to be `~/.obsidian-wiki`. If you already have it, everything keeps working — that path is still honored and nothing needs to move. See [Where the global config lives](configuration.md#where-the-global-config-lives).
 
 | Path | Best for | Writes global config | Installs into all agents |
 |---|---|---|---|
@@ -16,7 +18,7 @@ pip install obsidian-wiki
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
 
-`obsidian-wiki setup` writes the config to `~/.obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere — just re-run `obsidian-wiki setup` to pick up new skills.
+`obsidian-wiki setup` writes the config to `~/.config/obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere — just re-run `obsidian-wiki setup` to pick up new skills.
 
 Then open a project in your agent and say **"set up my wiki"**.
 
@@ -27,7 +29,7 @@ obsidian-wiki setup --project .   # also drop project-local skills + AGENTS.md i
 obsidian-wiki setup --copy        # copy skill files instead of symlinking
 ```
 
-`OBSIDIAN_VAULT_PATH` is just any directory where you want your digital brain to live — a new empty folder or an existing Obsidian vault. Omit `--vault` to be prompted, or set it later in `~/.obsidian-wiki/config`.
+`OBSIDIAN_VAULT_PATH` is just any directory where you want your digital brain to live — a new empty folder or an existing Obsidian vault. Omit `--vault` to be prompted, or set it later in `~/.config/obsidian-wiki/config`.
 
 Run `obsidian-wiki info` to see the resolved paths and `obsidian-wiki doctor` to health-check the result. See the [CLI reference](cli.md) for everything else the package ships.
 
@@ -51,7 +53,7 @@ cd obsidian-wiki
 bash setup.sh
 ```
 
-`setup.sh` asks for your vault path, writes the config to `~/.obsidian-wiki/config`, symlinks skills into all your agents, and installs `wiki-update`, `wiki-query`, and `wiki-context-pack` globally so you can use them from any project.
+`setup.sh` asks for your vault path, writes the config to `~/.config/obsidian-wiki/config`, symlinks skills into all your agents, and installs `wiki-update`, `wiki-query`, and `wiki-context-pack` globally so you can use them from any project.
 
 Open the project in your agent and say **"set up my wiki"**.
 
@@ -59,7 +61,7 @@ For local-only config, copy `.env.example` to `.env` and set `OBSIDIAN_VAULT_PAT
 
 ### What `setup.sh` wires up
 
-1. **Global config** at `~/.obsidian-wiki/config` with your vault path and the repo location. This is how skills know where to read and write.
+1. **Global config** at `~/.config/obsidian-wiki/config` with your vault path and the repo location. This is how skills know where to read and write.
 2. **Portable skills** — `wiki-update`, `wiki-query`, and `wiki-context-pack` symlinked into `~/.claude/skills/` so they're available from any project in Claude Code.
 3. **Global symlinks** for every agent's discovery path:
    - `~/.gemini/skills/` — Gemini CLI (canonical)
@@ -84,7 +86,7 @@ For local-only config, copy `.env.example` to `.env` and set `OBSIDIAN_VAULT_PAT
 npx skills add Ar9av/obsidian-wiki
 ```
 
-This only installs the markdown skills into the current agent. It does **not** write `~/.obsidian-wiki/config`, configure GitHub sync, or wire the global multi-agent bootstrap that `obsidian-wiki setup` / `setup.sh` performs.
+This only installs the markdown skills into the current agent. It does **not** write the global config, configure GitHub sync, or wire the global multi-agent bootstrap that `obsidian-wiki setup` / `setup.sh` performs.
 
 Use this path only if you intentionally want a partial, agent-local install and are prepared to manage config yourself. For a complete setup, use pip or git clone instead.
 
@@ -96,7 +98,7 @@ Open your vault directory in Obsidian (File → Open Vault). The wiki pages, wik
 
 ## Multiple vaults
 
-Keep a default vault active in `~/.obsidian-wiki/config`, or create named configs like `~/.obsidian-wiki/config.work` with `/wiki-switch new work`.
+Keep a default vault active in `~/.config/obsidian-wiki/config`, or create named configs like `~/.config/obsidian-wiki/config.work` with `/wiki-switch new work`.
 
 From any directory, route one request to a named vault with `@name`:
 

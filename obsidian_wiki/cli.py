@@ -3,8 +3,9 @@
 Python port of ``setup.sh`` for the pip-installed package. The skill content
 lives inside the installed package (``obsidian_wiki/_data/skills``) instead of a
 cloned repo, so this wires the bundled skills into every supported AI agent's
-skills directory and writes ``~/.obsidian-wiki/config`` so the skills resolve
-the vault from any project.
+skills directory and writes the global config (XDG-style, under
+``$XDG_CONFIG_HOME/obsidian-wiki`` by default) so the skills resolve the vault
+from any project.
 """
 
 from __future__ import annotations
@@ -22,7 +23,25 @@ from typing import TypedDict
 from obsidian_wiki import __version__
 
 HOME = Path.home()
-GLOBAL_CONFIG_DIR = HOME / ".obsidian-wiki"
+
+
+def _resolve_global_config_dir() -> Path:
+    """Resolve the global config directory, XDG-first with legacy fallback.
+
+    New installs land under ``$XDG_CONFIG_HOME/obsidian-wiki`` (default
+    ``~/.config/obsidian-wiki``, per the XDG Base Directory spec). Installs that
+    already have a ``~/.obsidian-wiki`` directory keep using it, so upgrading
+    doesn't strand a working config.
+    """
+    xdg_home = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    xdg_dir = (Path(xdg_home).expanduser() if xdg_home else HOME / ".config") / "obsidian-wiki"
+    legacy_dir = HOME / ".obsidian-wiki"
+    if legacy_dir.is_dir() and not xdg_dir.exists():
+        return legacy_dir
+    return xdg_dir
+
+
+GLOBAL_CONFIG_DIR = _resolve_global_config_dir()
 GLOBAL_CONFIG = GLOBAL_CONFIG_DIR / "config"
 
 # Skills usable from any project (no vault context needed beyond the global
@@ -870,7 +889,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     write_config(vault_path)
     if not vault_path:
         print("    → Vault path not set yet. Re-run with `--vault /path/to/vault`")
-        print("      or edit OBSIDIAN_VAULT_PATH in ~/.obsidian-wiki/config.")
+        print(f"      or edit OBSIDIAN_VAULT_PATH in {GLOBAL_CONFIG}.")
     else:
         vault_dir = Path(vault_path).expanduser()
         vault_created = scaffold_vault(vault_dir)

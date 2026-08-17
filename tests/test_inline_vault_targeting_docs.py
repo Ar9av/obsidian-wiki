@@ -17,7 +17,7 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
 
         self.assertIn("0. **Inline vault override (`@name`)", llm_wiki)
         self.assertIn("0. **Inline vault override (`@name`)", agents)
-        self.assertIn("resolve `~/.obsidian-wiki/config.<name>` directly", llm_wiki)
+        self.assertIn("resolve `<global config dir>/config.<name>` directly", llm_wiki)
         self.assertIn("do **not** silently fall back to the default", agents)
 
     def test_skill_resolution_summaries_include_inline_override(self) -> None:
