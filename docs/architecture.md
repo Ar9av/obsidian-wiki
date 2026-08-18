@@ -43,6 +43,8 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 With the default `CODE_UNDERSTANDING_BACKEND=auto`, CodeGraph is used when available and the built-in extractor + `rg` is used otherwise. CodeGraph is an optional local accelerator, not part of the vault: its `.codegraph/` index stays beside the project and is never copied into wiki pages.
 
+Use `obsidian-wiki doctor --project .` from the project root to verify CodeGraph availability and index freshness. With `auto`, a healthy CodeGraph backend is preferred; otherwise the built-in fallback is used.
+
 ### First project ingest
 
 On the first `/wiki-update`, there is no `last_commit_synced` entry for the project, so the agent needs an initial architecture map:
