@@ -109,6 +109,8 @@ checkout, so check both layouts under `$OBSIDIAN_WIKI_REPO` and use the first th
   at the bundled `_data/` dir, which ships the skills under `skills/`).
 - `$OBSIDIAN_WIKI_REPO/.skills/skill-creator/scripts/` — source checkout.
 
+Whichever resolves, it holds:
+
 - `improve_description.py` — tighten the generated `description` for better triggering.
 - `package_skill.py` — bundle the skill dir into a distributable archive.
 - `quick_validate.py` — sanity-check the skill's structure.
