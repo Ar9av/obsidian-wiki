@@ -37,6 +37,70 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 5. Agent updates `.manifest.json`, `index.md`, `log.md`, and `hot.md`
 6. Output is standard Obsidian-compatible markdown with frontmatter and `[[wikilinks]]`
 
+## Code-aware project ingest
+
+`/wiki-update` adds a code-understanding step before distillation when the current project contains source code. Git answers **what changed**; `code-understand` answers **what that change touches**; the agent decides **what is worth remembering**; the vault stores only the distilled result.
+
+With the default `CODE_UNDERSTANDING_BACKEND=auto`, CodeGraph is used when available and the built-in extractor + `rg` is used otherwise. CodeGraph is an optional local accelerator, not part of the vault: its `.codegraph/` index stays beside the project and is never copied into wiki pages.
+
+Use `obsidian-wiki doctor --project .` from the project root to verify CodeGraph availability and index freshness. With `auto`, a healthy CodeGraph backend is preferred; otherwise the built-in fallback is used.
+
+### First project ingest
+
+On the first `/wiki-update`, there is no `last_commit_synced` entry for the project, so the agent needs an initial architecture map:
+
+1. Resolve the vault and read `.manifest.json`; treat the project as new when no previous sync exists.
+2. Run `obsidian-wiki code-understand --project "$(pwd)" --pretty` across the tracked project.
+3. If CodeGraph is available, the first enhanced run initializes the local `.codegraph/` index. Otherwise the built-in extractor + `rg` produces the focus map.
+4. Use the ranked symbols and `file:line` evidence to read the load-bearing code selectively instead of opening the whole repository.
+5. Distill architecture, decisions, dependencies, and reusable knowledge into project/global wiki pages.
+6. Update `.manifest.json`, `index.md`, `log.md`, and `hot.md`, recording the current `HEAD` as `last_commit_synced`.
+
+```text
+project
+   ↓
+full code-understand pass
+   ↓
+CodeGraph index (when available)
+   ↓
+ranked focus map
+   ↓
+selective source reads
+   ↓
+LLM distillation
+   ↓
+Obsidian wiki + last_commit_synced
+```
+
+### Ongoing project maintenance
+
+Later `/wiki-update` runs are delta-based. The previous `last_commit_synced` narrows the work to what changed and the impact area around it:
+
+1. Read `last_commit_synced` from `.manifest.json` and verify that commit is still an ancestor of `HEAD`. If history was rewritten, fall back to the first-ingest/full-scan path.
+2. Compute the Git delta since the previous sync. If nothing meaningful changed, stop without rewriting the wiki.
+3. Run `obsidian-wiki code-understand --project "$(pwd)" --since <last_commit_synced> --pretty`.
+4. When CodeGraph is active, reuse the existing local index, sync the changed code, and expand changed files into relevant callers, callees, tests, and impact areas.
+5. Read only the ranked affected code, re-check previously recorded relationships, and prune relationships that are no longer valid.
+6. Merge only meaningful new knowledge into the wiki, then advance `last_commit_synced` to the current `HEAD`.
+
+```text
+last_commit_synced
+   ↓
+Git delta
+   ↓
+code-understand --since
+   ↓
+changed symbols + impact area
+   ↓
+selective re-read / stale-link pruning
+   ↓
+LLM distillation
+   ↓
+updated wiki + new last_commit_synced
+```
+
+This keeps the responsibilities separate: Git tracks change history, CodeGraph (or the built-in fallback) maps code structure and impact, the LLM performs judgement and distillation, and the Obsidian vault remains the persistent knowledge artifact.
+
 ## Vault structure
 
 ```
