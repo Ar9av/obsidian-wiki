@@ -102,7 +102,15 @@ one-line-install convention) — still **not** an install, just a manifest.
 
 ## Step 4: Optionally lean on skill-creator
 
-`skill-creator` ships reusable scripts (`$OBSIDIAN_WIKI_REPO/.skills/skill-creator/scripts/`):
+`skill-creator` ships reusable scripts. Their path differs between a pip/uv install and a source
+checkout, so check both layouts under `$OBSIDIAN_WIKI_REPO` and use the first that exists:
+
+- `$OBSIDIAN_WIKI_REPO/skills/skill-creator/scripts/` — packaged install (`OBSIDIAN_WIKI_REPO` points
+  at the bundled `_data/` dir, which ships the skills under `skills/`).
+- `$OBSIDIAN_WIKI_REPO/.skills/skill-creator/scripts/` — source checkout.
+
+Whichever resolves, it holds:
+
 - `improve_description.py` — tighten the generated `description` for better triggering.
 - `package_skill.py` — bundle the skill dir into a distributable archive.
 - `quick_validate.py` — sanity-check the skill's structure.
