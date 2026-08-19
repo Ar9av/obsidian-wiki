@@ -171,7 +171,7 @@ The [original gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519
 
 - **Wiki insights.** `wiki-status` can analyze the shape of the vault itself: top hubs, bridge pages (nodes whose removal would partition the graph), tag cluster cohesion, scored surprising connections, a graph delta since last run, and questions the structure is uniquely positioned to answer. Output goes to `_insights.md`.
 
-- **Graph export and import.** `wiki-export` turns the wikilink graph into `graph.json`, `graph.graphml` (Gephi/yEd), `cypher.txt` (Neo4j), a self-contained interactive `graph.html`, or an OKF bundle. `wiki-import` reads any of it back.
+- **Graph export and import.** `wiki-export` turns the wikilink graph into `graph.json`, `graph.graphml` (Gephi/yEd), `cypher.txt` (Neo4j), `postgres.sql` (Postgres), a self-contained interactive `graph.html`, or an OKF bundle. `wiki-import` reads any of it back.
 
 - **Tiered retrieval.** `wiki-query` reads titles, tags, and summaries first, opening page bodies only when the cheap pass can't answer. Say "quick answer" to force index-only mode. Query cost stays roughly flat from 20 pages to 2000.
 

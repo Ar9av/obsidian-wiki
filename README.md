@@ -94,7 +94,7 @@ Open the vault in Obsidian and hit the graph view (Cmd/Ctrl+P → "Open graph vi
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
 
-Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, or a self-contained interactive `graph.html`.
+Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
 
 ## Why this and not a notes folder
 

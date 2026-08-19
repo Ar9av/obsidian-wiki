@@ -69,7 +69,7 @@ These two build a retrieval index over your raw agent sessions. They write a sid
 |---|---|---|
 | `graph-colorize` | Color-code the Obsidian graph view by tag, category, or visibility | `/graph-colorize` |
 | `wiki-dashboard` | Create dynamic Obsidian Bases dashboard views | `/wiki-dashboard` |
-| `wiki-export` | Export the graph to JSON, GraphML, Neo4j Cypher, interactive HTML, or an OKF bundle | `/wiki-export` |
+| `wiki-export` | Export the graph to JSON, GraphML, Neo4j Cypher, Postgres SQL, interactive HTML, or an OKF bundle | `/wiki-export` |
 | `wiki-import` | Import a `graph.json` export or an OKF markdown bundle into the current vault | `/wiki-import` |
 | `obsidian-layout-adjustment` | Restyle Obsidian via CSS snippets — tabs, sidebars, graph panes, note surfaces | — |
 

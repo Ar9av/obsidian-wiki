@@ -3,9 +3,10 @@ name: wiki-export
 description: >
   Export the Obsidian wiki's knowledge graph to structured formats for use in external tools.
   Use this skill when the user says "export wiki", "export graph", "export to JSON", "export to Gephi",
-  "export to Neo4j", "graphml", "visualize wiki", "knowledge graph export", "export to OKF",
-  "OKF bundle", "open knowledge format", "export as markdown bundle", or wants to use their
-  wiki data in another tool. Outputs graph.json, graph.graphml, cypher.txt (Neo4j), and graph.html
+  "export to Neo4j", "export to Postgres", "export to SQL", "graphml", "visualize wiki",
+  "knowledge graph export", "export to OKF", "OKF bundle", "open knowledge format",
+  "export as markdown bundle", or wants to use their wiki data in another tool. Outputs
+  graph.json, graph.graphml, cypher.txt (Neo4j), postgres.sql (Postgres), and graph.html
   (interactive browser visualization) into a wiki-export/ directory at the vault root, plus an
   optional OKF (Open Knowledge Format) markdown bundle under wiki-export/okf/.
 ---
@@ -88,7 +89,7 @@ This enables community-based coloring in the HTML visualization and tools like G
 
 ## Step 3: Write the Output Files
 
-Create `wiki-export/` at the vault root if it doesn't exist. Write all four files:
+Create `wiki-export/` at the vault root if it doesn't exist. Write all five files:
 
 ---
 
@@ -200,7 +201,61 @@ Write one `MERGE` node statement per page, then one `MATCH`/`MERGE` relationship
 
 ---
 
-### 3d. `graph.html`
+### 3d. `postgres.sql`
+
+Plain SQL — loadable into any Postgres database (local, Supabase, RDS, Neon, …) with `psql -f postgres.sql` or a migration runner. Two tables: `wiki_pages` (nodes) and `wiki_edges` (links), with `ON CONFLICT` upserts so re-running the export is safe and idempotent, mirroring the `MERGE` semantics of `cypher.txt`.
+
+```sql
+-- Wiki knowledge graph export — <TIMESTAMP>
+-- Load with: psql -d yourdb -f postgres.sql
+
+CREATE TABLE IF NOT EXISTS wiki_pages (
+  id        TEXT PRIMARY KEY,
+  label     TEXT NOT NULL,
+  category  TEXT,
+  tags      JSONB NOT NULL DEFAULT '[]'::jsonb,
+  summary   TEXT,
+  community INT
+);
+
+CREATE TABLE IF NOT EXISTS wiki_edges (
+  source     TEXT NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  target     TEXT NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
+  relation   TEXT NOT NULL DEFAULT 'wikilink',
+  confidence TEXT,
+  typed      BOOLEAN NOT NULL DEFAULT false,
+  PRIMARY KEY (source, target, relation)
+);
+
+CREATE INDEX IF NOT EXISTS wiki_edges_source_idx ON wiki_edges(source);
+CREATE INDEX IF NOT EXISTS wiki_edges_target_idx ON wiki_edges(target);
+
+-- Nodes
+INSERT INTO wiki_pages (id, label, category, tags, summary, community)
+VALUES ('concepts/transformers', 'Transformer Architecture', 'concepts', '["ml","architecture"]'::jsonb, 'The attention-based architecture introduced in Attention Is All You Need.', 0)
+ON CONFLICT (id) DO UPDATE SET
+  label = EXCLUDED.label, category = EXCLUDED.category, tags = EXCLUDED.tags,
+  summary = EXCLUDED.summary, community = EXCLUDED.community;
+
+-- Edges
+-- Untyped wikilink
+INSERT INTO wiki_edges (source, target, relation, confidence, typed)
+VALUES ('concepts/transformers', 'entities/vaswani', 'wikilink', 'EXTRACTED', false)
+ON CONFLICT (source, target, relation) DO UPDATE SET confidence = EXCLUDED.confidence, typed = EXCLUDED.typed;
+
+-- Typed edge from relationships: block
+INSERT INTO wiki_edges (source, target, relation, confidence, typed)
+VALUES ('concepts/transformers', 'concepts/lstm', 'contradicts', 'EXTRACTED', true)
+ON CONFLICT (source, target, relation) DO UPDATE SET confidence = EXCLUDED.confidence, typed = EXCLUDED.typed;
+```
+
+Write one `INSERT ... ON CONFLICT (id) DO UPDATE` statement per page (values escaped: single quotes doubled, `tags` serialized as a JSON array literal cast to `jsonb`), then one `INSERT ... ON CONFLICT (source, target, relation) DO UPDATE` per edge. `relation` stays lowercase here (unlike the uppercased Cypher relationship label) since it's a plain column value, not a schema identifier — this keeps it directly filterable with `WHERE relation = 'contradicts'` or joinable without case-folding. `typed` is `true` only for edges promoted by a `relationships:` frontmatter entry; plain wikilinks stay `false`.
+
+Skip pages whose `id` collides only after the `ON CONFLICT` clause fires from a prior run — do not attempt to deduplicate synthetic multi-edges (e.g. same source/target with both a `wikilink` and a typed relation) since the composite primary key `(source, target, relation)` already keeps them as distinct rows, matching the "typed version wins" merge behavior of `graph.json`/`graph.graphml` at the query layer (`SELECT * FROM wiki_edges WHERE source=$1 AND target=$2 ORDER BY typed DESC LIMIT 1`).
+
+---
+
+### 3e. `graph.html`
 
 A self-contained interactive visualization using the vis.js CDN (no local dependencies). The user opens this file in any browser — no server needed.
 
@@ -309,9 +364,9 @@ Replace `/* NODES_JSON */` and `/* EDGES_JSON */` with the actual JSON arrays yo
 
 ## Step 3.5: OKF Bundle Export (optional)
 
-Run this step **only** when the user asks for OKF / a markdown bundle (phrases like "export to OKF", "OKF bundle", "open knowledge format", "export as markdown bundle"). It is additive — the four graph files above are always produced; this writes an extra full-fidelity markdown bundle.
+Run this step **only** when the user asks for OKF / a markdown bundle (phrases like "export to OKF", "OKF bundle", "open knowledge format", "export as markdown bundle"). It is additive — the five graph files above are always produced; this writes an extra full-fidelity markdown bundle.
 
-The four graph files are a *lossy* projection (graph skeleton only). An **OKF bundle is the actual page bodies**, so an export→`wiki-import` round-trip through OKF preserves full content, and the bundle drops straight into MkDocs, Notion, Hugo, GitHub's renderer, or any [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) consumer.
+The five graph files are a *lossy* projection (graph skeleton only). An **OKF bundle is the actual page bodies**, so an export→`wiki-import` round-trip through OKF preserves full content, and the bundle drops straight into MkDocs, Notion, Hugo, GitHub's renderer, or any [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) consumer.
 
 ### Canonical frontmatter mapping (obsidian-wiki ⇄ OKF)
 
@@ -365,6 +420,7 @@ Wiki export complete → wiki-export/
   graph.json    — N nodes, M edges (NetworkX node_link format)
   graph.graphml — N nodes, M edges (Gephi / yEd / Cytoscape)
   cypher.txt    — N MERGE nodes + M MERGE relationships (Neo4j)
+  postgres.sql  — N upsert rows (wiki_pages) + M upsert rows (wiki_edges) (any Postgres)
   graph.html    — interactive browser visualization (open in any browser)
 ```
 

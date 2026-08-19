@@ -94,7 +94,7 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
 
-你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher，或一個自帶所有資源的互動式 `graph.html`。
+你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
 
 ## 為什麼不是一個筆記資料夾就好
 
