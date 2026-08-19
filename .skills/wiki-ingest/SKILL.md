@@ -348,7 +348,7 @@ If the source is not project-specific, put everything in global categories.
 
 ### Step 4: Plan Updates
 
-Before writing anything, plan which pages to update or create. Aim for 10-15 pages per ingest. For each:
+Before writing anything, plan which pages to update or create. Cap the plan at `OBSIDIAN_MAX_PAGES_PER_INGEST` pages (default `15` if unset) — aim for 10 pages up to that cap. If the plan would exceed the cap, prioritize by importance tier (`core` > `supporting` > `peripheral`, see below) and defer the rest to a follow-up ingest; tell the user how many pages were deferred. For each:
 - Does this page already exist? (Check `index.md` and use Glob to search `OBSIDIAN_VAULT_PATH`)
 - If it exists, what new information does this source add?
 - If it's new, which category does it belong in?
