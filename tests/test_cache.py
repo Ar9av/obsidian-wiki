@@ -69,6 +69,20 @@ class TestHashing:
         assert len(compute_hash(src_file)) == 64  # hex SHA-256
         assert len(compute_hash(src_dir)) == 64
 
+    def test_sha256_dir_independent_of_path_separator(self, src_dir):
+        """Hash must match hashlib computed with POSIX separators regardless of platform (#178)."""
+        import hashlib
+
+        (src_dir / "sub").mkdir()
+        (src_dir / "sub" / "c.py").write_text("z = 3")
+
+        h = hashlib.sha256()
+        for fp in sorted(src_dir.rglob("*"), key=lambda p: p.relative_to(src_dir).as_posix()):
+            if fp.is_file():
+                h.update(fp.relative_to(src_dir).as_posix().encode())
+                h.update(sha256_file(fp).encode())
+        assert sha256_dir(src_dir) == h.hexdigest()
+
     def test_hash_file_alias(self, src_file):
         assert hash_file(src_file) == sha256_file(src_file)
 
