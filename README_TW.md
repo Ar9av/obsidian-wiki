@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <img width="768" alt="obsidian-wiki" src="https://github.com/user-attachments/assets/b44cf63b-3197-4fb1-8e18-dbc9a39f27a7" />
+  <img width="768" alt="obsidian-wiki" src="assets/hero.png" />
 </p>
 
 <p align="center">
