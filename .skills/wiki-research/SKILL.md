@@ -17,6 +17,7 @@ You are running an autonomous research loop on a topic, synthesizing what you fi
 2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand what's already in the wiki — don't re-research things the wiki covers well
 3. Read `$OBSIDIAN_VAULT_PATH/hot.md` if it exists — it surfaces recent context
 4. Check `$OBSIDIAN_VAULT_PATH/references/research-config.md` if it exists — it may define source preferences, domains to skip, or confidence rules for this vault
+5. Check `$OBSIDIAN_VAULT_PATH/references/research-backends.md` if it exists — it registers optional CLI retrieval backends (social media, video transcripts, paid APIs, etc.). Load any available backends into your working state for this session.
 
 When writing internal links in generated pages, apply the link format from `llm-wiki/SKILL.md` (Link Format section) using the `OBSIDIAN_LINK_FORMAT` value.
 
@@ -32,13 +33,86 @@ If `references/research-config.md` exists in the vault, read it and apply any ru
 
 If the file doesn't exist, proceed with defaults.
 
+## Research Backends (optional)
+
+If `references/research-backends.md` exists in the vault, load it before starting research. It defines zero or more CLI retrieval backends as a YAML list:
+
+```yaml
+backends:
+  - name: yt-dlp-transcript      # friendly label
+    binary: yt-dlp                # CLI binary (checked with `command -v`)
+    invoke: "yt-dlp --skip-download --write-auto-sub --sub-lang en --sub-format json3 -o /tmp/ytvid '{url}'"
+    when_to_use: YouTube video URLs, video transcripts
+    cost_tier: free               # free | paid
+    env_key: ""                   # required env var for paid tiers (empty = always enabled)
+    output: text                  # json | text | markdown
+
+  - name: perplexity-sonar
+    binary: perplexity
+    invoke: "perplexity search '{query}'"
+    when_to_use: deep synthesis queries needing multi-source aggregation
+    cost_tier: paid
+    env_key: PERPLEXITY_API_KEY   # skipped if unset
+    output: text
+```
+
+**Backend availability check (run once at session start):**
+- For each backend: `command -v <binary> 2>/dev/null` — if not found, mark unavailable and note it in the run summary
+- For `paid` backends: also check that `$env_key` is non-empty — if unset, mark unavailable and note it
+- Build a list of *active backends* (available + key-gated checks pass) to use in Rounds 1–2
+
+**Invocation rules (per angle/URL during research):**
+- Substitute `{url}` or `{query}` in the `invoke` template with the current URL or search query
+- Capture stdout; on non-zero exit code → skip this backend for this angle, note the short error, continue
+- Fold backend output into the same claims/concepts/entities/contradictions extraction, citing the source URL the backend returns (or the query string for query-mode backends)
+- A backend failure never aborts the research run — always fall back to `WebSearch`/`WebFetch`
+
+**Free-first ordering:** Evaluate `free` backends before `paid` ones for each angle. If a free backend returns sufficient content, paid backends for the same angle can be skipped.
+
+**No `research-backends.md`** → skip this section entirely; behavior is identical to today.
+
+### Starter registry template
+
+If the user asks for an example registry, offer this file at `$VAULT/references/research-backends.md`:
+
+```yaml
+# Optional CLI backends for wiki-research. Delete rows you don't need.
+# Skill docs: .skills/wiki-research/SKILL.md — Research Backends section
+backends:
+  # --- free / local ---
+  - name: defuddle-fetch
+    binary: defuddle
+    invoke: "defuddle '{url}'"
+    when_to_use: any URL — cleaner extraction than WebFetch alone
+    cost_tier: free
+    env_key: ""
+    output: markdown
+
+  - name: yt-dlp-transcript
+    binary: yt-dlp
+    invoke: "yt-dlp --skip-download --write-auto-sub --sub-lang en --sub-format json3 -o /tmp/ytvid '{url}'"
+    when_to_use: YouTube video URLs for transcript extraction
+    cost_tier: free
+    env_key: ""
+    output: text
+
+  # --- paid / gated (skipped when env key is unset) ---
+  - name: perplexity-sonar
+    binary: perplexity
+    invoke: "perplexity search '{query}'"
+    when_to_use: deep synthesis queries needing multi-source aggregation
+    cost_tier: paid
+    env_key: PERPLEXITY_API_KEY
+    output: text
+```
+
 ## Round 1 — Broad Survey
 
 **Goal:** Get a wide map of the topic.
 
 1. Decompose the topic into **3-5 distinct angles** (e.g., for "vector databases": what they are, when to use them, leading implementations, trade-offs, production gotchas)
 2. For each angle, run **2-3 `WebSearch` queries** using varied phrasing
-3. For the top 2-3 results per angle, use `WebFetch` (or `defuddle <url>` if available — cleaner extraction) to get content
+3. For the top 2-3 results per angle, use `WebFetch` (or `defuddle <url>` if available — cleaner extraction) to get content. For each URL, also invoke any *active backends* whose `when_to_use` matches (e.g., a YouTube URL triggers `yt-dlp-transcript`); fold their output into extraction alongside `WebFetch` results, citing the source URL the backend returns.
 4. From each fetched page, extract:
    - **Key claims** — what the source explicitly states
    - **Concepts** — ideas, terms, frameworks introduced
@@ -56,7 +130,7 @@ Review what Round 1 produced:
 - Where do sources contradict each other?
 - Which angles got thin coverage?
 
-Run **up to 5 targeted searches** specifically addressing these gaps. Prefer primary sources, official documentation, and authoritative analyses over link aggregators.
+Run **up to 5 targeted searches** specifically addressing these gaps. Prefer primary sources, official documentation, and authoritative analyses over link aggregators. For gap-fill queries, also invoke any *active query-mode backends* (e.g., `perplexity-sonar`) by substituting `{query}` in their `invoke` template — fold results into extraction with backend name as citation context.
 
 Add findings to your working set. Update the contradiction list.
 
@@ -190,7 +264,7 @@ Check `index.md` for existing pages on the same topics — merge into existing p
 
 **`log.md`** — Append:
 ```
-- [TIMESTAMP] WIKI_RESEARCH topic="<topic>" rounds=N sources_fetched=N pages_created=M
+- [TIMESTAMP] WIKI_RESEARCH topic="<topic>" rounds=N sources_fetched=N pages_created=M backends_used=[<name,...>|none]
 ```
 
 **`hot.md`** — Update **Recent Activity** with the research topic and core finding. Update **Active Threads** if this is ongoing. Update `updated` timestamp.
@@ -204,6 +278,7 @@ Check `index.md` for existing pages on the same topics — merge into existing p
 - [ ] Contradictions flagged in synthesis page
 - [ ] All pages cross-linked
 - [ ] `index.md`, `log.md`, `hot.md`, `.manifest.json` updated
+- [ ] Backend summary reported: which backends were active, which were skipped (unavailable binary / unset key / error), and why
 
 ## QMD Refresh After Vault Writes
 
