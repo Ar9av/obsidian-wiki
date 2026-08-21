@@ -166,9 +166,9 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
 def sha256_dir(path: Path) -> str:
     """Stable SHA-256 over all files in a directory tree (sorted by relative path)."""
     h = hashlib.sha256()
-    for fp in sorted(path.rglob("*")):
+    for fp in sorted(path.rglob("*"), key=lambda p: p.relative_to(path).as_posix()):
         if fp.is_file():
-            rel = str(fp.relative_to(path))
+            rel = fp.relative_to(path).as_posix()
             h.update(rel.encode())
             h.update(sha256_file(fp).encode())
     return h.hexdigest()
