@@ -38,6 +38,8 @@ dependencies = []
 ast = ["tree-sitter>=0.21", "tree-sitter-languages>=1.10"]
 # Higher-fidelity community detection (Leiden algorithm; greedy label propagation is the default fallback).
 graph = ["leidenalg>=0.10", "igraph>=0.11"]
+# HTTP + MCP memory server (obsidian_wiki/server.py). The core wheel stays dependency-free.
+server = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "mcp>=2.0"]
 
 [project.urls]
 Homepage = "https://github.com/Ar9av/obsidian-wiki"

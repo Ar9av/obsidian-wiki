@@ -251,3 +251,14 @@ Pages can carry a `visibility/` tag marking their intended reach. This is **enti
 **Filtered mode** is opt-in, triggered by phrases like "public only", "user-facing answer", "no internal content", or "as a user would see it" in a query. Default mode shows everything.
 
 `visibility/` tags are **system tags** — they don't count toward the 5-tag limit and are listed separately from domain/type tags in the taxonomy.
+
+## Memory server (optional)
+
+Only read by `obsidian_wiki/server.py`, the Dockerized HTTP + MCP front end. Irrelevant to local
+skill use. Full guide: [Deployment](deployment.md).
+
+| Variable | What it does | Default |
+|---|---|---|
+| `WIKI_API_KEY` | Bearer token required on every `/v1/*` and `/mcp` request | *(none — the server refuses to start without it)* |
+| `WIKI_ALLOW_ANONYMOUS` | `1` disables auth entirely. Local development only | *(unset)* |
+| `WIKI_PORT` | Port the server listens on | `8080` |
