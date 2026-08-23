@@ -265,6 +265,17 @@ def test_index_state_heuristic(tmp_path: Path) -> None:
     assert initialized is True and fresh is False
 
 
+def test_index_state_initialized_without_source_json(tmp_path: Path) -> None:
+    """codegraph 1.5.0 never writes source.json; codegraph.db alone must count (#192)."""
+    project = make_project(tmp_path, {"src/foo.py": "class Foo:\n    pass\n"})
+    codegraph_dir = project / ".codegraph"
+    codegraph_dir.mkdir(exist_ok=True)
+    (codegraph_dir / "codegraph.db").touch()
+
+    initialized, _, _ = index_state(project)
+    assert initialized is True
+
+
 def test_codegraph_caps_impact_queries_on_full_scan(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
