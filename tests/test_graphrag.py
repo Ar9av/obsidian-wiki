@@ -243,6 +243,24 @@ class TestClassifyQuery:
         assert "the" not in terms
         assert "is" not in terms
 
+    def test_gap_query_strips_trailing_punctuation(self):
+        # A trailing "?" used to survive on the gap path, leaving a term like
+        # "mise?" that can never match a title, tag or summary.
+        _, terms = classify_query("What do I know about mise?")
+        assert terms == ["mise"]
+
+    def test_list_query_strips_trailing_punctuation(self):
+        _, terms = classify_query("List all pages about transformers?")
+        assert "transformers" in terms
+        assert not any(t.endswith("?") for t in terms)
+
+    def test_gap_and_direct_agree_on_punctuation(self):
+        # Both paths must yield the same term for the same subject.
+        _, gap_terms = classify_query("What do I know about transformers?")
+        _, direct_terms = classify_query("What is transformers?")
+        assert "transformers" in gap_terms
+        assert "transformers" in direct_terms
+
 
 # ---------------------------------------------------------------------------
 # query (integration)
