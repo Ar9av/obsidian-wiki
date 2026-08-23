@@ -326,6 +326,16 @@ _STRUCTURAL = (
 )
 
 
+# Trailing punctuation to strip off extracted terms. A question mark left on a
+# token means it can never match a title, tag or summary.
+_TERM_PUNCT = "?,.'\""
+
+
+def _split_terms(text: str) -> list[str]:
+    """Split on whitespace, strip surrounding punctuation, drop empties."""
+    return [t for t in (w.strip(_TERM_PUNCT) for w in text.split()) if t]
+
+
 def classify_query(question: str) -> tuple[str, list[str]]:
     """Return (answer_type, extracted_terms).
 
@@ -348,16 +358,16 @@ def classify_query(question: str) -> tuple[str, list[str]]:
 
     if _GAP_PATTERNS.search(question):
         # Extract what the gap is about
-        terms = re.sub(r"what (?:do|don't) I (?:not )?know about|what.?s missing", "", question, flags=re.IGNORECASE).strip().split()
+        terms = _split_terms(re.sub(r"what (?:do|don't) I (?:not )?know about|what.?s missing", "", question, flags=re.IGNORECASE))
         return "gap", terms
 
     if _LIST_PATTERNS.search(question):
-        terms = re.sub(r"(?:list|show|find|give me) (?:all|every|pages about)", "", question, flags=re.IGNORECASE).strip().split()
+        terms = _split_terms(re.sub(r"(?:list|show|find|give me) (?:all|every|pages about)", "", question, flags=re.IGNORECASE))
         return "list", terms
 
     # Default: extract meaningful terms (drop stop words)
     stop = {"what", "the", "a", "an", "is", "are", "how", "does", "do", "in", "of", "to", "for", "and", "or"}
-    terms = [w.strip("?,.'\"") for w in question.split() if w.lower().strip("?,.'\"") not in stop and len(w) > 2]
+    terms = [w.strip(_TERM_PUNCT) for w in question.split() if w.lower().strip(_TERM_PUNCT) not in stop and len(w) > 2]
     return "direct", terms
 
 
