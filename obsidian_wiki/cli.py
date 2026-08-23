@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -108,6 +109,35 @@ def list_skills() -> list[str]:
 
 
 # ── Skill installation ───────────────────────────────────────────────────────
+def _is_link_or_junction(path: Path) -> bool:
+    """Return whether *path* is a link, including a Windows directory junction."""
+    if path.is_symlink():
+        return True
+
+    is_junction = getattr(path, "is_junction", None)
+    if is_junction is not None:
+        return bool(is_junction())
+
+    if os.name != "nt":
+        return False
+    try:
+        file_info = path.lstat()
+    except OSError:
+        return False
+
+    reparse_tag = getattr(file_info, "st_reparse_tag", None)
+    if reparse_tag is not None:
+        return reparse_tag == getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
+
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x0400)
+    return bool(getattr(file_info, "st_file_attributes", 0) & reparse_flag)
+
+
+def _is_symlink_privilege_error(error: OSError) -> bool:
+    """Return whether Windows rejected link creation for missing privilege."""
+    return os.name == "nt" and getattr(error, "winerror", None) == 1314
+
+
 def install_skills(
     target_dir: Path,
     label: str,
@@ -120,13 +150,15 @@ def install_skills(
     src_root = skills_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
     installed = 0
+    install_mode = mode
+    warned_copy_fallback = False
     for skill in sorted(p for p in src_root.iterdir() if p.is_dir()):
         name = skill.name
         if subset is not None and name not in subset:
             continue
         link_path = target_dir / name
 
-        if link_path.is_symlink() or link_path.is_file():
+        if _is_link_or_junction(link_path) or link_path.is_file():
             link_path.unlink()
         elif link_path.is_dir():
             # A real directory we previously copied here is safe to replace;
@@ -137,8 +169,21 @@ def install_skills(
                 print(f"   ⚠️  {link_path} is not a managed skill, skipping")
                 continue
 
-        if mode == "symlink":
-            link_path.symlink_to(skill, target_is_directory=True)
+        if install_mode == "symlink":
+            try:
+                link_path.symlink_to(skill, target_is_directory=True)
+            except OSError as error:
+                if not _is_symlink_privilege_error(error):
+                    raise
+                install_mode = "copy"
+                if not warned_copy_fallback:
+                    print(
+                        "Warning: symbolic links are unavailable; "
+                        "copying skills instead. Use Developer Mode or "
+                        "--copy to choose this explicitly."
+                    )
+                    warned_copy_fallback = True
+                shutil.copytree(skill, link_path)
         else:  # copy
             shutil.copytree(skill, link_path)
 
@@ -2222,7 +2267,20 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
     )
 
 
+def _configure_console_output() -> None:
+    """Keep status output from aborting when a console encoding lacks Unicode."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (OSError, ValueError):
+            continue
+
+
 def main(argv: list[str] | None = None) -> int:
+    _configure_console_output()
     parser = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
     # No subcommand → default to `setup` (the common case).
