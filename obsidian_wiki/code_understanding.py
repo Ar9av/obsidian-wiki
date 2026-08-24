@@ -68,21 +68,24 @@ def resolve_backend(
 def index_state(project: Path) -> tuple[bool, bool, str]:
     """Return (initialized, fresh, detail) for project/.codegraph.
 
-    initialized: codegraph.db exists AND source.json parses with a sourceDir
-    resolving to *project*. fresh: codegraph.db mtime >= the newest
+    initialized: codegraph.db exists. If source.json is also present (not
+    guaranteed — codegraph 1.5.0 never writes it), it must parse with a
+    sourceDir resolving to *project*, else the index is treated as
+    uninitialized (mismatch guard). fresh: codegraph.db mtime >= the newest
     git-tracked source file (no git or no files counts as fresh).
     """
     db = project / ".codegraph" / "codegraph.db"
     src = project / ".codegraph" / "source.json"
-    if not (db.exists() and src.exists()):
-        return False, False, "no index (missing .codegraph/codegraph.db or source.json)"
-    try:
-        data = json.loads(src.read_text(encoding="utf-8"))
-        source_dir = Path(str(data.get("sourceDir", ""))).resolve()
-    except (OSError, ValueError, TypeError):
-        return False, False, "source.json is invalid"
-    if source_dir != project.resolve():
-        return False, False, f"sourceDir {source_dir} does not match project"
+    if not db.exists():
+        return False, False, "no index (missing .codegraph/codegraph.db)"
+    if src.exists():
+        try:
+            data = json.loads(src.read_text(encoding="utf-8"))
+            source_dir = Path(str(data.get("sourceDir", ""))).resolve()
+        except (OSError, ValueError, TypeError):
+            return False, False, "source.json is invalid"
+        if source_dir != project.resolve():
+            return False, False, f"sourceDir {source_dir} does not match project"
     fresh = True
     try:
         tracked = _tracked_files_only(project)
