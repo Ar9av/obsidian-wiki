@@ -54,7 +54,7 @@ These two build a retrieval index over your raw agent sessions. They write a sid
 
 | Skill | What it does | Slash command |
 |---|---|---|
-| `wiki-status` | What's ingested, what's pending, the delta — plus vault-shape insights (hubs, bridges, clusters) | `/wiki-status` |
+| `wiki-status` | What's ingested, what's pending, the delta — plus vault-shape insights (hubs, bridges, clusters) and an equilibrium check across the maintenance skills | `/wiki-status` |
 | `wiki-lint` | Find broken links, orphans, stale content, contradictions, missing frontmatter | `/wiki-lint` |
 | `wiki-dedup` | Identity resolution — merge pages covering the same concept under different names | `/wiki-dedup` |
 | `cross-linker` | Auto-discover unlinked mentions and weave them into the graph with `[[wikilinks]]` | `/cross-linker` |
