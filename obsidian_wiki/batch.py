@@ -264,6 +264,8 @@ def plan_batches(
 
     merge_hint = (
         "Dispatch each batch as a parallel subagent with /wiki-ingest on its file list. "
+        "Each subagent must record its sources with `obsidian-wiki cache-update` (it takes "
+        "the manifest lock); hand-editing .manifest.json in parallel batches loses entries. "
         "Once all batches complete, run /cross-linker to wire up cross-references."
     )
 

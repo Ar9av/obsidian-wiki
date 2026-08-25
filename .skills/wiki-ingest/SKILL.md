@@ -470,6 +470,8 @@ After writing pages, check that wikilinks work in both directions. If page A lin
 
 Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
+**In parallel runs** (batch fan-out, or while the Docker server is writing the same vault), record sources with `obsidian-wiki cache-update` rather than hand-editing `.manifest.json`. That command takes an advisory lock and writes atomically; concurrent hand edits are a plain read-modify-write and silently drop whichever entry lands second.
+
 If the manifest doesn't exist yet, create it with `version: 1`.
 
 **`index.md`** — Add entries for any new pages, update summaries for modified pages.
