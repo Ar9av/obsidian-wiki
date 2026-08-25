@@ -407,6 +407,15 @@ def write_config(vault_path: str) -> None:
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 
+def ensure_global_writing_profile() -> Path:
+    target = GLOBAL_CONFIG_DIR / "WRITING.md"
+    if target.exists():
+        return target
+    template = skills_dir() / "llm-wiki" / "references" / "WRITING.md"
+    target.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+    return target
+
+
 VAULT_SUBDIRS = (
     "concepts",
     "entities",
@@ -962,6 +971,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
     vault_path = resolve_vault_path(args.vault)
     write_config(vault_path)
+    writing_profile = ensure_global_writing_profile()
     if not vault_path:
         print("    → Vault path not set yet. Re-run with `--vault /path/to/vault`")
         print(f"      or edit OBSIDIAN_VAULT_PATH in {GLOBAL_CONFIG}.")
@@ -991,6 +1001,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     print(f" Skills installed: {n}  (mode: {mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
+    print(f" Writing profile:  {writing_profile.resolve()}")
     if sync_configured:
         print(" GitHub sync:      obsidian-wiki sync")
     print("\n Next steps:")

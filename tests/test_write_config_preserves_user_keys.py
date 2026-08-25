@@ -92,6 +92,7 @@ def test_setup_on_legacy_config_preserves_keys(tmp_path: Path) -> None:
     values = _values(config)
     assert values["OBSIDIAN_LINK_FORMAT"] == "markdown"
     assert values["OBSIDIAN_VAULT_PATH"] == str(vault)
+    assert (legacy / "WRITING.md").exists()
 
 
 def test_setup_writes_managed_keys_on_a_fresh_config(tmp_path: Path) -> None:
@@ -107,6 +108,34 @@ def test_setup_writes_managed_keys_on_a_fresh_config(tmp_path: Path) -> None:
     assert values["OBSIDIAN_VAULT_PATH"] == str(vault)
     assert values["OBSIDIAN_WIKI_REPO"]
     assert values["OBSIDIAN_WIKI_VERSION"]
+
+
+def test_setup_creates_global_writing_profile(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    proc = _setup(home, vault)
+    assert proc.returncode == 0, proc.stderr
+
+    profile = _config_dir(home) / "WRITING.md"
+    template = REPO_ROOT / ".skills" / "llm-wiki" / "references" / "WRITING.md"
+    assert profile.read_text() == template.read_text()
+
+
+def test_setup_preserves_existing_writing_profile(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    config_dir = home / ".config" / "obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    profile = config_dir / "WRITING.md"
+    profile.write_text("# My custom profile\n\nUse concise Traditional Chinese.\n")
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    proc = _setup(home, vault)
+    assert proc.returncode == 0, proc.stderr
+    assert profile.read_text() == "# My custom profile\n\nUse concise Traditional Chinese.\n"
 
 
 def test_setup_collapses_duplicate_managed_keys(tmp_path: Path) -> None:
