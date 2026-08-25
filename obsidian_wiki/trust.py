@@ -29,6 +29,17 @@ TRUST_SKIP_DIRS = frozenset(
 )
 TRUST_RESERVED_STEMS = frozenset({"index", "log", "hot", "_insights"})
 ALLOWED_LIFECYCLES = frozenset({"draft", "reviewed", "verified", "disputed", "archived"})
+# Transitions the llm-wiki state machine forbids outright: only ingest sets
+# `draft`, so nothing may fall back to it, and `archived` is terminal (a restore
+# is a deliberate human delete-and-recreate, not a transition).
+#
+# Deliberately NOT listed: draft -> verified. Ledger snapshots are sparse, so an
+# intermediate `reviewed` may well have happened between two reviews; flagging
+# that pair would fire on legitimate history.
+ILLEGAL_TRANSITIONS = frozenset(
+    {("reviewed", "draft"), ("verified", "draft"), ("disputed", "draft")}
+    | {("archived", nxt) for nxt in ALLOWED_LIFECYCLES - {"archived"}}
+)
 TRUST_REQUIRED_FIELD_ALLOWLIST = frozenset(
     {"base_confidence", "lifecycle", "lifecycle_changed", "updated"}
 )
@@ -331,6 +342,10 @@ def _review_entry(
             required_trust_keys=required_trust_keys,
         ),
         "reviewed_at": reviewed_at,
+        # Recorded so lint can check the next transition against
+        # ILLEGAL_TRANSITIONS. Ledgers written before this field simply skip
+        # the check.
+        "lifecycle": metadata["lifecycle"],
     }
 
 
@@ -721,3 +736,55 @@ def _finalise_report(report: dict[str, Any]) -> dict[str, Any]:
     else:
         report["status"] = "pass"
     return report
+
+
+def check_lifecycle_transitions(
+    vault: Path,
+    ledger_path: Path | None = None,
+    *,
+    allowed_lifecycles: Collection[str] | None = None,
+    required_trust_keys: Collection[str] | None = None,
+) -> list[dict[str, str]]:
+    """Report pages whose lifecycle moved along a forbidden edge.
+
+    Compares each page's current ``lifecycle`` against the value recorded in the
+    approved ledger at its last review. Ledgers written before the ``lifecycle``
+    field existed carry no baseline, so those pages are skipped — the check is
+    additive and silent on legacy vaults.
+    """
+    lifecycles, required = _effective_schema(
+        allowed_lifecycles=allowed_lifecycles,
+        required_trust_keys=required_trust_keys,
+    )
+    path = ledger_path or vault / TRUST_LEDGER_RELATIVE_PATH
+    try:
+        ledger = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError):
+        return []  # check_trust_ledger already reports unreadable ledgers
+    entries = ledger.get("pages") if isinstance(ledger, dict) else None
+    if not isinstance(entries, dict):
+        return []
+
+    findings: list[dict[str, str]] = []
+    for page in iter_trust_pages(vault):
+        rel = page.relative_to(vault).as_posix()
+        entry = entries.get(rel)
+        if not isinstance(entry, dict):
+            continue
+        previous = entry.get("lifecycle")
+        if not isinstance(previous, str):
+            continue  # pre-lifecycle ledger entry: no baseline to compare
+        try:
+            metadata = _trust_metadata(
+                page,
+                allowed_lifecycles=lifecycles,
+                required_trust_keys=required,
+            )
+        except ValueError:
+            continue  # malformed frontmatter is another check's finding
+        current = metadata["lifecycle"]
+        if not isinstance(current, str):
+            continue
+        if (previous, current) in ILLEGAL_TRANSITIONS:
+            findings.append({"page": rel, "from": previous, "to": current})
+    return sorted(findings, key=lambda f: f["page"])

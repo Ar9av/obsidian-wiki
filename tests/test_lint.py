@@ -623,3 +623,104 @@ def test_correction_contract_requires_temporal_authority_and_immutable_hash_chec
     assert correction["speaker_type"] != "user"
     after = hashlib.sha256(source.read_bytes()).hexdigest()
     assert before == after == correction["source_text_sha256"]
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle transition validation (state machine enforcement)
+# ---------------------------------------------------------------------------
+
+def _vault_with_ledger(tmp_path: Path, lifecycle: str = "reviewed") -> Path:
+    """A clean two-page vault whose ledger records *lifecycle* for alpha."""
+    vault = tmp_path / "vault"
+    _page(vault, "index.md", links=["alpha"])
+    _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    if lifecycle != "reviewed":
+        _set_lifecycle(vault / "concepts" / "alpha.md", lifecycle)
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    return vault
+
+
+def _set_lifecycle(page: Path, lifecycle: str) -> None:
+    text = page.read_text(encoding="utf-8")
+    for existing in ("draft", "reviewed", "verified", "disputed", "archived"):
+        if f"lifecycle: {existing}" in text:
+            page.write_text(
+                text.replace(f"lifecycle: {existing}", f"lifecycle: {lifecycle}"),
+                encoding="utf-8",
+            )
+            return
+    raise AssertionError("page has no lifecycle field")
+
+
+def test_ledger_records_lifecycle(tmp_path: Path) -> None:
+    vault = _vault_with_ledger(tmp_path)
+    ledger = json.loads(
+        (vault / "_meta" / "trust-ledger.json").read_text(encoding="utf-8")
+    )
+    assert ledger["pages"]["concepts/alpha.md"]["lifecycle"] == "reviewed"
+
+
+def test_demotion_to_draft_is_flagged(tmp_path: Path) -> None:
+    vault = _vault_with_ledger(tmp_path, lifecycle="verified")
+    _set_lifecycle(vault / "concepts" / "alpha.md", "draft")
+
+    report = lint_vault(vault)
+
+    findings = report["findings"]["illegal_lifecycle_transitions"]
+    assert findings == [{"page": "concepts/alpha.md", "from": "verified", "to": "draft"}]
+    assert report["status"] == "warn"
+
+
+def test_exit_from_archived_is_flagged(tmp_path: Path) -> None:
+    vault = _vault_with_ledger(tmp_path, lifecycle="archived")
+    _set_lifecycle(vault / "concepts" / "alpha.md", "reviewed")
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["illegal_lifecycle_transitions"] == [
+        {"page": "concepts/alpha.md", "from": "archived", "to": "reviewed"}
+    ]
+
+
+def test_draft_to_verified_is_not_flagged(tmp_path: Path) -> None:
+    """Sparse ledger snapshots may hide a legitimate intermediate `reviewed`."""
+    vault = _vault_with_ledger(tmp_path, lifecycle="draft")
+    _set_lifecycle(vault / "concepts" / "alpha.md", "verified")
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["illegal_lifecycle_transitions"] == []
+
+
+def test_illegal_transition_fails_under_strict_trust(tmp_path: Path) -> None:
+    vault = _vault_with_ledger(tmp_path, lifecycle="verified")
+    _set_lifecycle(vault / "concepts" / "alpha.md", "draft")
+
+    assert lint_vault(vault, strict_trust=True)["status"] == "fail"
+
+
+def test_legacy_ledger_without_lifecycle_is_skipped(tmp_path: Path) -> None:
+    """Old ledgers carry no baseline — the check stays silent, not noisy."""
+    vault = _vault_with_ledger(tmp_path, lifecycle="verified")
+    ledger_path = vault / "_meta" / "trust-ledger.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    for entry in ledger["pages"].values():
+        entry.pop("lifecycle", None)
+    ledger_path.write_text(json.dumps(ledger, indent=2), encoding="utf-8")
+    _set_lifecycle(vault / "concepts" / "alpha.md", "draft")
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["illegal_lifecycle_transitions"] == []
+
+
+def test_no_ledger_means_no_transition_findings(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "index.md", links=["alpha"])
+    _page(vault, "concepts/alpha.md", links=["index"])
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["illegal_lifecycle_transitions"] == []

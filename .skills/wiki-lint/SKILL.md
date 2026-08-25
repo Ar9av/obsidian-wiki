@@ -208,6 +208,18 @@ Staleness is never stored — it is computed at read time: `is_stale = (today �
 
 **How to fix:** `--fix` does **not** rewrite `lifecycle`. Staleness clears automatically when a re-ingest bumps `updated`.
 
+#### Rule 12c-2 — Illegal lifecycle transitions
+
+The lifecycle enum is a state machine, not a free-form label. `obsidian-wiki lint` reports `illegal_lifecycle_transitions` by comparing each page's current `lifecycle` against the value recorded in `_meta/trust-ledger.json` at its last review.
+
+**Flagged:** any state falling back to `draft` (only ingest sets `draft`), and any exit from `archived` (terminal — a restore is a deliberate human delete-and-recreate).
+
+**Not flagged:** `draft → verified`. Ledger snapshots are sparse, so a legitimate intermediate `reviewed` may have happened between two reviews; flagging it would fire on valid history.
+
+Warns by default; fails under `--strict-trust`. Pages whose ledger entry predates the `lifecycle` field have no baseline and are skipped silently.
+
+**How to fix:** n/a — a page that moved along a forbidden edge means either a skill wrote `lifecycle` when it shouldn't have, or a human transition needs recording. Surface for human resolution.
+
 #### Rule 12d — Supersession integrity
 
 **How to check:** For each page with `superseded_by: "[[target]]"`:
