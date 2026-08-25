@@ -17,6 +17,30 @@ Earlier versions used `~/.obsidian-wiki`. That location is still honored: if `~/
 
 After resolving, skills also read `$OBSIDIAN_VAULT_PATH/AGENTS.md` if it exists. That's where you put owner-specific conventions — domain vocabulary, ingest preferences, writing style, project scoping — which override framework defaults for every skill.
 
+## Global wiki writing profile
+
+Setup creates a global `WRITING.md` profile for preferences that should apply across projects. New installs use `~/.config/obsidian-wiki/WRITING.md`. When the legacy `~/.obsidian-wiki` directory is active, the profile is `~/.obsidian-wiki/WRITING.md` instead.
+
+Start with a small profile and edit it to suit your habits:
+
+```markdown
+## Language
+
+Write in English. Keep technical terms in their original form.
+
+## Tone and Voice
+
+Be clear, concise, and practical.
+
+## Avoid
+
+Avoid filler, repetition, and unsupported claims.
+```
+
+Writing preferences are applied in this order, from highest to lowest precedence: framework and task requirements, project `AGENTS.md`, vault `AGENTS.md`, then global `WRITING.md`. The global profile guides wiki Markdown prose only. It does not change lint rules or create blocking behavior.
+
+If the profile is missing, empty, or unreadable, skills fall back to the framework defaults and continue without custom global preferences.
+
 Both the global config and `.env` use the same `KEY=value` format. Start from [`.env.example`](../.env.example).
 
 The deterministic `lint`, `trust-record`, and `trust-check` commands use the same vault-scoped resolution: an explicit path uses no unrelated config, `@name` reads only `<config dir>/config.<name>`, otherwise the nearest CWD `.env` wins before global config. Schema settings are read from that same resolved config only, so one vault's lifecycle extensions cannot leak into another vault.
