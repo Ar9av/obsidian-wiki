@@ -2,6 +2,7 @@
 .DS_Store
 *.pyc
 __pycache__/
+.worktrees/
 
 # Skill creator benchmark/review workspaces and local packages
 .skills/*-workspace/
