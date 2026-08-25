@@ -598,9 +598,9 @@ Every skill's setup section should read:
 
 Before drafting or rewriting natural-language Markdown, resolve the global config directory with the XDG/legacy algorithm above, then read `<global config dir>/WRITING.md` when it exists. A missing or empty `WRITING.md` means there are no custom writing preferences. If that optional read fails, warn and continue with the default framework guidance.
 
-Apply writing guidance from the current project and the resolved vault's `AGENTS.md` over global `WRITING.md` preferences. Framework invariants — including schema, provenance, safety, and operation-specific requirements — always take precedence over all writing preferences.
+The effective precedence is framework invariants > current task/skill requirements > current project `AGENTS.md` > vault `AGENTS.md` > global `WRITING.md`. Framework invariants include schema, provenance, and safety; operation-specific requirements remain authoritative for the current task. Unspecified project and vault rules are inherited from less-specific layers, and more specific same-topic rules win.
 
-Writing preferences apply only to newly drafted or rewritten natural-language fields and body content. They do not change YAML frontmatter, JSON, structured logs, or pass-through content, which retain their required formats and source fidelity.
+Writing preferences apply only to newly drafted or rewritten natural-language fields and body content. This includes natural-language title and summary values in YAML frontmatter, but preferences cannot alter YAML syntax, required keys, structure, types, or machine-generated fields. JSON, structured logs, and pass-through content remain unchanged and retain their required formats and source fidelity.
 
 ## Environment Variables
 

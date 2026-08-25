@@ -297,6 +297,7 @@ echo "────────────────────────�
 echo " Setup complete!"
 echo ""
 echo " Skills found:    $SKILL_COUNT"
+echo " Writing profile:  $WRITING_PROFILE"
 echo " Agents ready:    Claude Code, Cursor, Windsurf, Gemini CLI, Antigravity,"
 echo "                  Codex, Hermes, OpenClaw, OpenCode, Aider, Factory Droid,"
 echo "                  Trae, Trae CN, Kiro, Pi, GitHub Copilot (CLI + VS Code Chat)"
