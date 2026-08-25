@@ -126,6 +126,12 @@ fi
 GLOBAL_CONFIG="$GLOBAL_CONFIG_DIR/config"
 mkdir -p "$GLOBAL_CONFIG_DIR"
 
+WRITING_PROFILE="$GLOBAL_CONFIG_DIR/WRITING.md"
+WRITING_TEMPLATE="$SKILLS_DIR/llm-wiki/references/WRITING.md"
+if [ ! -e "$WRITING_PROFILE" ]; then
+  cp "$WRITING_TEMPLATE" "$WRITING_PROFILE"
+fi
+
 # Read vault path from .env if it's already set
 VAULT_PATH=""
 if [ -f "$SCRIPT_DIR/.env" ]; then

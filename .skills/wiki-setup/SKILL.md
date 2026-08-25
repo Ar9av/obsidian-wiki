@@ -62,6 +62,30 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - When enabled: all new/updated pages land in `_staging/` first; run `/wiki-stage-commit` to review and promote them
    - `wiki-status` shows a "Staged writes pending" count when files are waiting
 
+After resolving the global config directory using the Config Resolution Protocol in
+`.skills/llm-wiki/SKILL.md`, create the shared writing profile only when it does not
+already exist. Preserve an existing `$GLOBAL_CONFIG_DIR/WRITING.md`; never overwrite it
+and do not ask additional writing-style questions.
+
+Resolve the canonical template from `OBSIDIAN_WIKI_REPO` as follows:
+
+- Packaged install: `$OBSIDIAN_WIKI_REPO/skills/llm-wiki/references/WRITING.md`
+- Source checkout: `$OBSIDIAN_WIKI_REPO/.skills/llm-wiki/references/WRITING.md`
+
+Copy the first layout whose template exists:
+
+```bash
+WRITING_PROFILE="$GLOBAL_CONFIG_DIR/WRITING.md"
+if [ ! -e "$WRITING_PROFILE" ]; then
+  if [ -e "$OBSIDIAN_WIKI_REPO/skills/llm-wiki/references/WRITING.md" ]; then
+    WRITING_TEMPLATE="$OBSIDIAN_WIKI_REPO/skills/llm-wiki/references/WRITING.md"
+  else
+    WRITING_TEMPLATE="$OBSIDIAN_WIKI_REPO/.skills/llm-wiki/references/WRITING.md"
+  fi
+  cp "$WRITING_TEMPLATE" "$WRITING_PROFILE"
+fi
+```
+
 ## Step 2: Create Vault Directory Structure
 
 ```bash

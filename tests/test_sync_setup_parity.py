@@ -22,6 +22,10 @@ class SetupShDelegatesToCliTest(unittest.TestCase):
     def test_calls_sync_setup_subcommand(self) -> None:
         self.assertIn("sync-setup", self.setup_sh)
 
+    def test_creates_global_writing_profile_from_canonical_template(self) -> None:
+        self.assertIn("WRITING.md", self.setup_sh)
+        self.assertIn("llm-wiki/references/WRITING.md", self.setup_sh)
+
     def test_calls_cli_module_not_a_standalone_git_flow(self) -> None:
         self.assertIn("obsidian_wiki.cli", self.setup_sh)
 
