@@ -27,6 +27,9 @@ new compiled knowledge pages.
 
 ## Retrieval
 
+**Writing profile:** Before drafting or rewriting natural-language Markdown, read and apply the `Writing Profile Resolution` section in `llm-wiki/SKILL.md`. Framework schema, provenance, safety, and operation-specific requirements take precedence.
+`WRITING.md` preferences apply only to newly drafted or rewritten natural-language Markdown; preserve source content and structured records.
+
 1. Resolve configuration with the Config Resolution Protocol, including an inline
    `@name` vault override, then read the target vault's `AGENTS.md` when it exists.
    Load `OBSIDIAN_LINK_FORMAT` before drafting citations.

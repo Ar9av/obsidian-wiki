@@ -34,6 +34,9 @@ If no query is given, default to **recent sessions mode**: ingest the last 5 unp
 
 ## Before You Start
 
+**Writing profile:** Before drafting or rewriting natural-language Markdown, read and apply the `Writing Profile Resolution` section in `llm-wiki/SKILL.md`. Framework schema, provenance, safety, and operation-specific requirements take precedence.
+`WRITING.md` preferences apply only to newly drafted or rewritten natural-language Markdown; preserve source content and structured records.
+
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → global config → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
 2. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` → know what's already ingested.
 3. Read `$OBSIDIAN_VAULT_PATH/hot.md` if it exists → warm context on recent wiki activity.

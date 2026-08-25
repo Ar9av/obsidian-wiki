@@ -14,6 +14,9 @@ Two tools available: **Obsidian Bases** (native, GUI-driven, no plugin) and **Da
 
 ## Before You Start
 
+**Writing profile:** Before drafting or rewriting natural-language Markdown, read and apply the `Writing Profile Resolution` section in `llm-wiki/SKILL.md`. Framework schema, provenance, safety, and operation-specific requirements take precedence.
+Apply `WRITING.md` preferences only to optional Markdown dashboard prose; `.base` syntax remains unchanged.
+
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → global config → prompt setup). This gives `OBSIDIAN_VAULT_PATH`.
 2. Read `$OBSIDIAN_VAULT_PATH/index.md` to understand what categories and pages exist.
 3. Ask the user what they want to view if not specified — folder, tag, category, date range?

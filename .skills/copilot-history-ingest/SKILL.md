@@ -19,6 +19,9 @@ This skill can be invoked directly or via the `wiki-history-ingest` router (`/wi
 
 ## Before You Start
 
+**Writing profile:** Before drafting or rewriting natural-language Markdown, read and apply the `Writing Profile Resolution` section in `llm-wiki/SKILL.md`. Framework schema, provenance, safety, and operation-specific requirements take precedence.
+`WRITING.md` preferences apply only to newly drafted or rewritten natural-language Markdown; preserve source content and structured records.
+
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → global config → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `COPILOT_HISTORY_PATH` (defaults to `~/.copilot/session-state`), and `COPILOT_VSCODE_STORAGE_PATH` (VS Code `workspaceStorage`; platform-specific — ask the user if absent)
 2. Read `.manifest.json` at the vault root to check what's already been ingested
 3. Read `index.md` at the vault root to know what the wiki already contains
