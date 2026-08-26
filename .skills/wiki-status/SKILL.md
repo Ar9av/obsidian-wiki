@@ -8,6 +8,9 @@ description: >
   to append or rebuild. Includes an insights mode triggered by "wiki insights", "what's central",
   "show me the hubs", "central pages", "what's connected", "wiki structure" — analyzes the shape of
   the wiki itself to surface top hubs, cross-domain bridges, and orphan-adjacent pages.
+  Also includes an equilibrium mode triggered by "is my vault at equilibrium", "wiki equilibrium",
+  "is maintenance done", "is the vault converged", or "are my skills fighting" — runs every maintenance
+  skill's audit-only pass and reports whether any of them still has a pending change.
 ---
 
 # Wiki Status — Audit & Delta
@@ -431,6 +434,81 @@ After writing the file, append to `log.md`:
 
 - Vaults with fewer than 20 pages — not enough graph structure. Tell the user and skip.
 - After a fresh `wiki-rebuild` — wait until at least one ingest has happened.
+
+## Equilibrium Mode
+
+Triggered when the user asks "is my vault at equilibrium", "wiki equilibrium", "is the vault converged", "is maintenance done", "are my skills fighting", or "what's still pending across all the maintenance skills".
+
+The maintenance skills are **players in a game over one shared vault**. Each has a move set (lint fixes, dedup merges, new links, tag normalizations) and each judges the vault by its own objective. The vault is at **equilibrium** when no player has a profitable deviation — every audit pass proposes zero changes. That is the real "maintenance is done" signal, and it is stronger than any single skill reporting clean, because skills can undo each other.
+
+This mode is **read-only over the players**: run every audit in its report-only form and never let one apply changes. It writes nothing except the snapshot line in `_insights.md`.
+
+### The players
+
+| Player | Audit-only invocation | Counts as a move |
+|---|---|---|
+| `wiki-lint` | `obsidian-wiki lint "$OBSIDIAN_VAULT_PATH" --json` | each finding in `findings` (sum the `stats.findings` counts) |
+| `wiki-dedup` | audit mode (no `--merge`, no `--auto`) | each HIGH or MEDIUM duplicate pair |
+| `cross-linker` | audit pass only — report proposed links, insert none | each unlinked mention it would link |
+| `tag-taxonomy` | Step 1 audit only — report drift, normalize nothing | each tag it would rename or drop |
+
+Only `wiki-lint` is deterministic; the other three are LLM passes, so their counts are estimates from their own reports. Say so in the output rather than implying exactness.
+
+### What to report
+
+```
+# Vault Equilibrium — <TIMESTAMP>
+
+equilibrium: no
+
+| Player | Pending moves | Top proposed move |
+|---|---|---|
+| wiki-lint | 4 | fix broken link [[concepts/old-name]] in synthesis/foo.md |
+| wiki-dedup | 1 | merge entities/gpt-4.md ← entities/gpt4.md (0.91) |
+| cross-linker | 12 | link "attention mechanism" in concepts/transformers.md |
+| tag-taxonomy | 0 | — |
+
+Deviating players: wiki-lint, wiki-dedup, cross-linker
+Converged players: tag-taxonomy
+```
+
+When every count is zero, report `equilibrium: yes` and state plainly that running any maintenance skill right now would change nothing.
+
+### Oscillation detection
+
+A player whose count keeps returning after being driven to zero means two players are **fighting** — the classic case is `tag-taxonomy` normalizing a tag that an ingest skill's defaults keep re-adding, so the vault cycles forever and never converges.
+
+Append a snapshot beside the existing `GRAPH_SNAPSHOT` in `_insights.md`:
+
+```
+<!-- EQUILIBRIUM_SNAPSHOT: {"ts":"2026-08-25T10:00:00Z","lint":4,"dedup":1,"crosslink":12,"tags":0} -->
+```
+
+Read the previous `EQUILIBRIUM_SNAPSHOT` lines (keep the last 5; drop older ones) and compare:
+- A player going `0 → N → 0 → N` across runs is **oscillating** — flag it by name and name the likely opponent (the skill whose writes reintroduce those moves).
+- A player whose count only ever grows is **losing ground** — nobody is running it.
+- No previous snapshot: report "first run, no baseline yet" and skip the comparison.
+
+Oscillation is a report, not a fix. The resolution is a human decision about which player's objective wins — usually a rule change in `_meta/taxonomy.md` or the owner's `AGENTS.md`, not another maintenance run.
+
+### Source track record
+
+Pending moves are not evenly distributed across sources. Attribute them back: for each page appearing in a player's findings, look up which manifest source produced it (`.manifest.json` → `pages_created` / `pages_produced`).
+
+When one source accounts for ≥3 issues or ≥50% of a player's pending moves, add a line:
+
+```
+Source track record:
+- ~/exports/slack-dump/ — 7 of 12 cross-linker moves, 3 of 4 lint findings.
+  Its pages consistently need repair; consider reviewing its source_quality bucket.
+```
+
+This is the repeated-game view: a source that keeps producing pages needing repair has earned a lower `source_quality`. **Report only** — never adjust `source_quality` or the trust ledger automatically. The owner decides, through the existing trust flow (`obsidian-wiki trust-record`), exactly as with every other confidence change.
+
+### When to skip
+
+- Vaults with fewer than 20 pages — the audits are noise at that size.
+- If any player's audit can't be run cleanly in report-only form, omit that row and say which player is missing rather than guessing a count.
 
 ## Notes
 

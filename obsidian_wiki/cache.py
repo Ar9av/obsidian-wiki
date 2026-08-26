@@ -31,6 +31,8 @@ import hashlib
 import json
 import os
 import re
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, TypedDict
@@ -74,13 +76,90 @@ def _load_manifest(vault: Path):
     return _load_raw(vault).get("sources", {})
 
 
+def _lock_path(vault: Path) -> Path:
+    return vault / ".manifest.lock"
+
+
+class ManifestLockTimeout(RuntimeError):
+    """Raised when the manifest lock could not be acquired within the timeout."""
+
+
+@contextmanager
+def manifest_lock(vault: Path, *, timeout: float = 10.0, stale_after: float = 60.0):
+    """Advisory lock around a manifest read-modify-write.
+
+    Parallel ingest agents (``batch-plan`` fan-out) and the Docker server can
+    all write one vault's manifest; without this the read-modify-write races
+    and a whole entry is silently lost. ``O_CREAT | O_EXCL`` is the portable
+    stdlib primitive here — ``fcntl`` is POSIX-only and this ships on Windows.
+
+    A lockfile older than *stale_after* is assumed to belong to a crashed
+    process and is stolen.
+    """
+    # ponytail: whole-manifest advisory lock; per-entry locking if batch fan-out ever contends
+    lock = _lock_path(vault)
+    deadline = time.monotonic() + timeout
+    fd = None
+    while True:
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - lock.stat().st_mtime
+            except FileNotFoundError:
+                continue  # holder released it between our open and stat
+            if age > stale_after:
+                # ponytail: last-writer-wins steal; a pid check would narrow the
+                # window if two processes ever race to steal the same stale lock
+                try:
+                    lock.unlink()
+                except FileNotFoundError:
+                    pass
+                continue
+            if time.monotonic() >= deadline:
+                raise ManifestLockTimeout(
+                    f"could not acquire {lock} within {timeout}s "
+                    f"(held for {age:.1f}s; stale after {stale_after}s)"
+                )
+            time.sleep(0.1)
+    try:
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        fd = None
+        yield
+    finally:
+        if fd is not None:
+            os.close(fd)
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _write_manifest(vault: Path, manifest: dict) -> None:
+    """Atomically replace the manifest file — no torn reads, no partial file."""
+    target = _manifest_path(vault)
+    tmp = target.with_name(f".manifest.json.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(
+            json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        os.replace(tmp, target)  # atomic on POSIX and Windows
+    except BaseException:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
 def _save_manifest(vault: Path, sources) -> None:
     """Write *sources* back into the manifest, preserving other top-level keys."""
-    manifest = _load_raw(vault)
-    manifest["sources"] = sources
-    _manifest_path(vault).write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    with manifest_lock(vault):
+        manifest = _load_raw(vault)
+        manifest["sources"] = sources
+        _write_manifest(vault, manifest)
 
 
 def _iter_entries(sources) -> Iterator[tuple[str | None, dict]]:
@@ -234,10 +313,27 @@ def update_source(
     updates it, otherwise appends a new one — preserving the manifest's shape
     (dict or list), duplicate-path entries, and any skill-written fields.
     """
-    manifest = _load_raw(vault)
-    sources = manifest.get("sources")
+    # Hash outside the lock — hashing a large source tree can take seconds and
+    # nothing else in the manifest depends on it.
     current_hash = compute_hash(source_path)
     now = datetime.now(timezone.utc).isoformat()
+
+    with manifest_lock(vault):
+        return _update_source_locked(
+            vault, source_path, current_hash, now, pages_produced
+        )
+
+
+def _update_source_locked(
+    vault: Path,
+    source_path: Path,
+    current_hash: str,
+    now: str,
+    pages_produced: list[str] | None,
+) -> str:
+    """The manifest read-modify-write half of :func:`update_source`."""
+    manifest = _load_raw(vault)
+    sources = manifest.get("sources")
 
     if isinstance(sources, list):
         target: dict | None = None
@@ -271,9 +367,7 @@ def update_source(
         sources[key] = entry
 
     manifest["sources"] = sources
-    _manifest_path(vault).write_text(
-        json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
-    )
+    _write_manifest(vault, manifest)
     return current_hash
 
 

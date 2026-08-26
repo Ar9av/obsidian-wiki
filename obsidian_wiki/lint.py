@@ -11,6 +11,7 @@ from typing import Any
 from obsidian_wiki.trust import (
     ALLOWED_LIFECYCLES,
     TRUST_LEDGER_RELATIVE_PATH,
+    check_lifecycle_transitions,
     check_trust_ledger,
     validate_trust_metadata,
 )
@@ -337,6 +338,16 @@ def lint_vault(
         if ledger_path.is_file() or require_trust_ledger
         else None
     )
+    illegal_lifecycle_transitions = (
+        check_lifecycle_transitions(
+            vault,
+            ledger_path,
+            allowed_lifecycles=lifecycles,
+            required_trust_keys=trust_fields,
+        )
+        if ledger_path.is_file()
+        else []
+    )
 
     findings = {
         "broken_links": broken_links,
@@ -351,6 +362,7 @@ def lint_vault(
         "confidence_unreviewed": trust_report["unreviewed"] if trust_report else [],
         "confidence_mismatches": trust_report["score_mismatches"] if trust_report else [],
         "confidence_ledger_errors": trust_report["errors"] if trust_report else [],
+        "illegal_lifecycle_transitions": illegal_lifecycle_transitions,
     }
     counts = {name: len(items) for name, items in findings.items()}
 
@@ -365,6 +377,7 @@ def lint_vault(
         "confidence_ledger_errors",
         "confidence_review_stale",
         "confidence_unreviewed",
+        "illegal_lifecycle_transitions",
     )
     trust_findings_present = any(counts[name] for name in trust_finding_names)
     trust_fails = strict_trust and any(
@@ -374,6 +387,7 @@ def lint_vault(
             "confidence_mismatches",
             "confidence_ledger_errors",
             "confidence_review_stale",
+            "illegal_lifecycle_transitions",
         )
     )
 

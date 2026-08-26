@@ -54,6 +54,14 @@ obsidian-wiki lint --allow-lifecycle active --allow-relationship-type synthesize
 
 Lint resolves its vault and schema together: explicit path (no config inheritance), positional `@name`, nearest CWD `.env`, then global config. CLI schema flags extend/replace that resolved vault's settings and are recorded in the JSON `schema` block.
 
+### Lifecycle transition checking
+
+`illegal_lifecycle_transitions` compares each page's current `lifecycle` against the value recorded in `_meta/trust-ledger.json` at its last review, and flags moves the state machine forbids: any state falling back to `draft` (only ingest sets `draft`), and any exit from `archived` (a restore is a deliberate delete-and-recreate, not a transition).
+
+`draft → verified` is deliberately **not** flagged — ledger snapshots are sparse, so a legitimate intermediate `reviewed` may have happened between two reviews.
+
+The check warns by default and fails only under `--strict-trust`. Pages whose ledger entry predates the `lifecycle` field carry no baseline and are skipped silently, so existing vaults behave exactly as before until their next `trust-record`.
+
 ## Context packs
 
 `wiki-context-pack` compiles a task-scoped snapshot from existing Markdown.
@@ -179,6 +187,14 @@ obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
 
 Most commands accept `--json` and/or `--pretty` for machine-readable output.
+
+### Manifest write safety
+
+`.manifest.json` is a read-modify-write, and parallel ingest agents (`batch-plan` fan-out) or the Docker server writing while a local skill writes would otherwise clobber each other — losing a whole source entry silently.
+
+`cache-update` therefore takes an advisory lock (`.manifest.lock` in the vault root, `O_CREAT|O_EXCL`, stdlib only so it works on Windows) and writes the manifest atomically via a temp file plus `os.replace`. A reader never sees a partial file, and a crashed writer's lock is stolen after 60 seconds.
+
+In parallel runs, always update the manifest through `obsidian-wiki cache-update` rather than hand-editing `.manifest.json` — hand edits bypass the lock.
 
 ### Graph cache
 

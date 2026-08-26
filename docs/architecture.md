@@ -109,6 +109,7 @@ $OBSIDIAN_VAULT_PATH/
 ├── log.md                  # Chronological activity log
 ├── hot.md                  # ~500-word semantic snapshot of recent activity
 ├── .manifest.json          # Ingest ledger: path, timestamps, pages produced
+├── .manifest.lock          # Transient advisory lock held during manifest writes
 ├── _meta/
 │   ├── taxonomy.md         # Controlled tag vocabulary
 │   └── *.base              # Obsidian Bases dashboard definitions
@@ -132,6 +133,8 @@ Knowledge that's project-specific goes under `projects/`. Knowledge that's gener
 Every page carries required frontmatter: `title`, `category`, `tags`, `sources`, `created`, `updated`.
 
 `hot.md` deserves a mention — it's a running semantic snapshot every write skill updates, so the next session picks up where the last one left off without crawling the whole vault.
+
+`.manifest.json` is the one file several writers touch at once — parallel ingest subagents from `batch-plan`, and the Dockerized server writing a vault a local skill is also using. Updates to it go through `obsidian-wiki cache-update`, which takes an advisory lock (`.manifest.lock`) and replaces the file atomically. Hand-editing the manifest in a parallel run bypasses that and drops whichever write lands second. The prose files take no lock: `log.md` is append-only, and `index.md`/`hot.md` are rewritten wholesale by whichever skill last ran.
 
 ## Core principles
 
@@ -170,6 +173,8 @@ The [original gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519
 - **Multimodal sources.** Screenshots, whiteboard photos, slide captures, and diagrams ingest like text — visible text transcribed verbatim, interpreted content tagged as inferred.
 
 - **Wiki insights.** `wiki-status` can analyze the shape of the vault itself: top hubs, bridge pages (nodes whose removal would partition the graph), tag cluster cohesion, scored surprising connections, a graph delta since last run, and questions the structure is uniquely positioned to answer. Output goes to `_insights.md`.
+
+- **Vault equilibrium.** The maintenance skills (`wiki-lint`, `wiki-dedup`, `cross-linker`, `tag-taxonomy`) each optimize one shared vault for a different objective, so any of them can undo another's work. `wiki-status` equilibrium mode runs every audit in report-only form and reports whether any skill still has a pending change — the vault is converged only when all of them propose nothing. It also detects oscillation, where two skills keep reversing each other and the vault can never settle.
 
 - **Graph export and import.** `wiki-export` turns the wikilink graph into `graph.json`, `graph.graphml` (Gephi/yEd), `cypher.txt` (Neo4j), `postgres.sql` (Postgres), a self-contained interactive `graph.html`, or an OKF bundle. `wiki-import` reads any of it back.
 

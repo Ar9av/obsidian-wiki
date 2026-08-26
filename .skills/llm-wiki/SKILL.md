@@ -433,6 +433,8 @@ Five states. **`stale` is not a state** — it is a computed overlay: `is_stale 
 
 Only ingest skills set `draft`. All other transitions require a human editor. Update `lifecycle_changed` whenever the state changes.
 
+Two edge classes are therefore **illegal** and are reported by `obsidian-wiki lint` as `illegal_lifecycle_transitions`: anything falling back to `draft` (`reviewed|verified|disputed → draft`), and any exit from `archived` (it is terminal — restoring a page is a deliberate delete-and-recreate, not a transition). The check compares against the lifecycle recorded in `_meta/trust-ledger.json` at the page's last review, so it only sees pages that have been reviewed at least once.
+
 ## Importance Tiering
 
 The `tier:` field controls which pages get updated on each ingest pass and their priority in retrieval. As wikis grow, re-reading every page on every ingest wastes tokens — tiering lets ingest and query skills focus effort where it matters most.
