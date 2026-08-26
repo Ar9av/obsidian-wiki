@@ -300,6 +300,22 @@ class TestQuery:
         result = query(simple_vault, "deep learning")
         json.dumps(result)
 
+    def test_non_english_question_about_absent_topic_returns_no_candidates(self, simple_vault):
+        # Regression for #191: short German function words ("ich", "über")
+        # used to substring-match inside unrelated title words ("Architektur"),
+        # scoring a page unrelated to the actual topic and flagging it
+        # index_only — telling the agent it can answer without reading a page.
+        result = query(simple_vault, "Was weiß ich über Kubernetes?")
+        assert result["candidates"] == []
+        assert result["index_only"] is False
+
+    def test_mid_word_substring_does_not_match_title(self, simple_vault):
+        idx = build_index(simple_vault)
+        # "bed" sits mid-word inside "embedding" (em-BED-ding), not at a word
+        # boundary. A bare substring check used to score this a title hit.
+        result = rank_candidates(idx, ["bed"])
+        assert result == []
+
 
 # ---------------------------------------------------------------------------
 # CLI

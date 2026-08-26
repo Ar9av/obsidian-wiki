@@ -191,13 +191,18 @@ def _score(slug: str, entry: dict, terms: list[str]) -> float:
     tags_lower = [t.lower() for t in entry["tags"]]
     for term in terms:
         t = term.lower()
+        # Prefix word-boundary match: `\b{t}` rather than a bare substring, so
+        # a short function word ("ich", "den") can't hit inside an unrelated
+        # longer word ("tatsächlich", "Herausfinden"). Prefix (not `\bt\b`) is
+        # kept so inflected/plural forms ("Tags" vs "tag") still match.
+        pattern = re.compile(rf"\b{re.escape(t)}")
         if t == slug or t == title_lower:
             score += 10.0
-        elif t in title_lower:
+        elif pattern.search(title_lower):
             score += 6.0
-        elif any(t in tag for tag in tags_lower):
+        elif any(pattern.search(tag) for tag in tags_lower):
             score += 4.0
-        elif t in summary_lower:
+        elif pattern.search(summary_lower):
             score += 2.0
 
     if score > 0:
@@ -330,6 +335,27 @@ _STRUCTURAL = (
 # token means it can never match a title, tag or summary.
 _TERM_PUNCT = "?,.'\""
 
+# Function words dropped from the "direct" fallback query terms. English is the
+# primary vault language, but German/French/Spanish words are common enough in
+# mixed-language questions that leaving them in feeds noise straight into
+# `_score()` (a short function word can prefix-match inside an unrelated
+# longer word). Not exhaustive — vault-language-aware stop words are future
+# work — just enough to cover the common short pronouns/articles/prepositions.
+_STOP_WORDS = {
+    "what", "the", "a", "an", "is", "are", "how", "does", "do", "in", "of",
+    "to", "for", "and", "or",
+    # German
+    "was", "wie", "ich", "der", "die", "das", "den", "dem", "des", "ein",
+    "eine", "einer", "einem", "einen", "ist", "sind", "über", "und", "oder",
+    "für", "auf", "mit", "im",
+    # French
+    "que", "qui", "quoi", "comment", "le", "la", "les", "un", "une", "des",
+    "est", "sont", "sur", "pour", "et", "ou", "dans",
+    # Spanish
+    "qué", "que", "cómo", "el", "la", "los", "las", "un", "una", "es", "son",
+    "para", "por", "en", "sobre",
+}
+
 
 def _split_terms(text: str) -> list[str]:
     """Split on whitespace, strip surrounding punctuation, drop empties."""
@@ -366,8 +392,7 @@ def classify_query(question: str) -> tuple[str, list[str]]:
         return "list", terms
 
     # Default: extract meaningful terms (drop stop words)
-    stop = {"what", "the", "a", "an", "is", "are", "how", "does", "do", "in", "of", "to", "for", "and", "or"}
-    terms = [w.strip(_TERM_PUNCT) for w in question.split() if w.lower().strip(_TERM_PUNCT) not in stop and len(w) > 2]
+    terms = [w.strip(_TERM_PUNCT) for w in question.split() if w.lower().strip(_TERM_PUNCT) not in _STOP_WORDS and len(w) > 2]
     return "direct", terms
 
 
@@ -581,7 +606,13 @@ def query(
     top_candidate = candidates[0] if candidates else None
     index_only = False
     if top_candidate and top_candidate["score"] >= 10.0 and top_candidate["summary"]:
-        index_only = True  # Exact title match with a summary — likely answerable from index
+        # A high absolute score alone isn't enough evidence: on a well-linked
+        # page even noise terms can clear 10.0 via the degree bonus and tier
+        # weight. Require the top candidate to also clearly lead the runner-up
+        # — a real topical hit does; noise scores cluster together.
+        runner_up = candidates[1]["score"] if len(candidates) > 1 else 0.0
+        if runner_up == 0.0 or top_candidate["score"] >= 2 * runner_up:
+            index_only = True  # Exact title match with a summary — likely answerable from index
     if graph_answer is not None:
         index_only = True  # structural answers are complete without page reads
 
