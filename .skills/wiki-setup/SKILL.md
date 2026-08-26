@@ -62,6 +62,54 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
    - When enabled: all new/updated pages land in `_staging/` first; run `/wiki-stage-commit` to review and promote them
    - `wiki-status` shows a "Staged writes pending" count when files are waiting
 
+After resolving config, assign the global config directory with the exact
+`obsidian_wiki_config_dir` algorithm from the Config Resolution Protocol in
+`.skills/llm-wiki/SKILL.md`. Create the shared writing profile only when it does not
+already exist. Preserve an existing `$GLOBAL_CONFIG_DIR/WRITING.md`; never overwrite it
+and do not ask additional writing-style questions.
+
+Use `OBSIDIAN_WIKI_REPO` when it was loaded from config. When it is absent, derive the
+absolute repository/data root from this loaded skill's absolute path, distinguishing the
+packaged `<root>/skills/wiki-setup/SKILL.md` layout from the source
+`<root>/.skills/wiki-setup/SKILL.md` layout. Then check both canonical template layouts:
+
+- Packaged install: `<root>/skills/llm-wiki/references/WRITING.md`
+- Source checkout: `<root>/.skills/llm-wiki/references/WRITING.md`
+
+```bash
+GLOBAL_CONFIG_DIR="$(obsidian_wiki_config_dir)"
+mkdir -p "$GLOBAL_CONFIG_DIR"
+
+SKILL_FILE="<absolute path of this loaded wiki-setup/SKILL.md>"
+SKILL_DIR="$(cd "$(dirname "$SKILL_FILE")" && pwd)"
+if [ -n "${OBSIDIAN_WIKI_REPO:-}" ]; then
+  WIKI_ROOT="${OBSIDIAN_WIKI_REPO%/}"
+else
+  case "$SKILL_DIR" in
+    */.skills/wiki-setup) WIKI_ROOT="${SKILL_DIR%/.skills/wiki-setup}" ;;
+    */skills/wiki-setup) WIKI_ROOT="${SKILL_DIR%/skills/wiki-setup}" ;;
+    *) echo "Cannot derive writing-profile template root from $SKILL_DIR" >&2; exit 1 ;;
+  esac
+fi
+
+WRITING_TEMPLATE=""
+for candidate in \
+  "$WIKI_ROOT/skills/llm-wiki/references/WRITING.md" \
+  "$WIKI_ROOT/.skills/llm-wiki/references/WRITING.md"
+do
+  if [ -f "$candidate" ]; then
+    WRITING_TEMPLATE="$candidate"
+    break
+  fi
+done
+[ -n "$WRITING_TEMPLATE" ] || { echo "Writing profile template not found under $WIKI_ROOT" >&2; exit 1; }
+
+WRITING_PROFILE="$GLOBAL_CONFIG_DIR/WRITING.md"
+if [ ! -e "$WRITING_PROFILE" ]; then
+  cp "$WRITING_TEMPLATE" "$WRITING_PROFILE"
+fi
+```
+
 ## Step 2: Create Vault Directory Structure
 
 ```bash
@@ -194,9 +242,10 @@ Run a quick sanity check:
 - [ ] `.env` has `OBSIDIAN_VAULT_PATH` set
 - [ ] `.obsidian/` directory exists
 - [ ] `_staging/` directory exists (required even when `WIKI_STAGED_WRITES` is not set — created on setup for future use)
+- [ ] `WRITING_PROFILE` exists at the resolved global config directory
 - [ ] Source directories (if configured) exist and are readable
 
-Report the results and tell the user they can now:
+Report the results, including the resolved absolute `WRITING_PROFILE` path, and tell the user they can now:
 1. Open the vault in Obsidian (File → Open Vault → select the directory)
 2. Run `wiki-status` to see what's available to ingest
 3. Run `wiki-ingest` to add their first sources

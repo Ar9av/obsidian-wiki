@@ -2,6 +2,8 @@
 
 Four ways in. Pick one — they all end at the same place: your vault path in the global config (`~/.config/obsidian-wiki/config`) and the skills discoverable by your agent.
 
+All full setup entry points — `obsidian-wiki setup`, `setup.sh`, and an agent running the `wiki-setup` skill — also create the global writing profile at `~/.config/obsidian-wiki/WRITING.md` (or the active legacy config directory). Rerunning setup never overwrites an existing profile. Edit `WRITING.md` to define your writing habits for every project that uses wiki skills.
+
 > **Upgrading from an older version?** The config directory used to be `~/.obsidian-wiki`. If you already have it, everything keeps working — that path is still honored and nothing needs to move. See [Where the global config lives](configuration.md#where-the-global-config-lives).
 
 | Path | Best for | Writes global config | Installs into all agents |

@@ -23,6 +23,7 @@ except ModuleNotFoundError:  # Python < 3.11
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
 PACKAGED_SCRIPTS_DEST = "obsidian_wiki/_data/scripts"
+WRITING_PROFILE_TEMPLATE = ROOT / ".skills" / "llm-wiki" / "references" / "WRITING.md"
 
 REFERENCED_SCRIPTS = (
     "daily-update.sh",
@@ -48,6 +49,17 @@ class ScriptsPackagingTest(unittest.TestCase):
             PACKAGED_SCRIPTS_DEST,
             "wheel must force-include scripts/ under _data/scripts/",
         )
+
+    def test_writing_profile_template_exists(self) -> None:
+        self.assertTrue(WRITING_PROFILE_TEMPLATE.is_file())
+        body = WRITING_PROFILE_TEMPLATE.read_text()
+        self.assertIn("# Wiki Writing Profile", body)
+        self.assertIn("## Language", body)
+        self.assertIn("## Conditional Rules", body)
+
+    def test_wheel_force_includes_skills_tree(self) -> None:
+        mapping = self.pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+        self.assertEqual(mapping.get(".skills"), "obsidian_wiki/_data/skills")
 
     def test_scripts_dir_not_excluded_from_sdist(self) -> None:
         # Unlike /.claude, scripts/ isn't pruned, so the default VCS-tracked
