@@ -89,6 +89,14 @@ print(d.get('transcript_path', ''))
 
 [[ -z "$TRANSCRIPT_PATH" || ! -f "$TRANSCRIPT_PATH" ]] && exit 0
 
+# Plan mode restricts Claude to read-only actions plus the plan file, so it
+# cannot run /wiki-capture (which writes to the vault) even if nudged. Skip
+# without claiming the sentinel, so the real nudge still fires once the
+# session leaves plan mode and crosses the threshold again.
+PERMISSION_MODE=$(printf '%s' "$INPUT" | python3 -c "
+import json, sys; print(json.load(sys.stdin).get('permission_mode', ''))" 2>/dev/null || echo "")
+[[ "$PERMISSION_MODE" == "plan" ]] && exit 0
+
 # Count meaningful tool uses: Write/Edit = file mutations, Bash = shell work.
 # Bash commands are additionally classified read-only vs mutating so that
 # edit-free research sessions can be exempted below.
