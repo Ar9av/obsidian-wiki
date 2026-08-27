@@ -724,3 +724,114 @@ def test_no_ledger_means_no_transition_findings(tmp_path: Path) -> None:
     report = lint_vault(vault, require_trust_ledger=False)
 
     assert report["findings"]["illegal_lifecycle_transitions"] == []
+
+
+def test_lint_vault_warns_on_pages_sharing_a_stem(tmp_path: Path) -> None:
+    """`graph_analysis` keys a page by its bare stem, so these two are one node.
+
+    Nothing in the vault references the stem: the collision is the defect, not
+    the reference to it.
+    """
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/mercury.md", title="Mercury the concept", links=["alpha"])
+    _page(vault, "entities/mercury.md", title="Mercury the planet", links=["beta"])
+    _page(vault, "concepts/alpha.md", title="Alpha")
+    _page(vault, "concepts/beta.md", title="Beta")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "warn"
+    assert report["findings"]["duplicate_stems"] == [
+        {"stem": "mercury", "pages": ["concepts/mercury.md", "entities/mercury.md"]}
+    ]
+
+
+def test_duplicate_stems_ignores_how_the_link_was_written(tmp_path: Path) -> None:
+    """Both documented link formats carry a folder; neither creates a collision."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/vector-search.md", title="Vector Search")
+    _page(
+        vault,
+        "projects/renewal.md",
+        title="Renewal",
+        links=["concepts/vector-search|Vector Search"],
+    )
+    _page(vault, "projects/rollout.md", title="Rollout")
+    (vault / "projects/rollout.md").write_text(
+        (vault / "projects/rollout.md").read_text(encoding="utf-8")
+        + "\n[Vector Search](../concepts/vector-search.md)\n",
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == []
+    assert report["status"] == "pass"
+
+
+def test_duplicate_stems_follows_the_graph_page_selection(tmp_path: Path) -> None:
+    """Root `index.md` is not a graph page; `_bootstrap/` is."""
+    vault = tmp_path / "vault"
+    _page(vault, "index.md", title="Index")
+    _page(vault, "concepts/index.md", title="Concepts index")
+    _page(vault, "_bootstrap/vector-search.md", title="Bootstrap copy")
+    _page(vault, "concepts/vector-search.md", title="Vector Search")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["_bootstrap/vector-search.md", "concepts/vector-search.md"],
+        }
+    ]
+
+
+def test_duplicate_stems_rows_and_pages_are_sorted(tmp_path: Path) -> None:
+    """Neither ordering follows the page walk: `concepts/` precedes `concepts-x/`
+    by path but not by string, and `zebra` is walked before `dup`."""
+    vault = tmp_path / "vault"
+    _page(vault, "a-dir/zebra.md", title="Zebra one")
+    _page(vault, "b-dir/zebra.md", title="Zebra two")
+    _page(vault, "concepts/dup.md", title="Dup one")
+    _page(vault, "concepts-x/dup.md", title="Dup two")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {"stem": "dup", "pages": ["concepts-x/dup.md", "concepts/dup.md"]},
+        {"stem": "zebra", "pages": ["a-dir/zebra.md", "b-dir/zebra.md"]},
+    ]
+
+
+def test_duplicate_stems_slugs_the_filename(tmp_path: Path) -> None:
+    """`Vector Search.md` and `vector-search.md` are the same node; a raw
+    `Path.stem` would not see it."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/Vector Search.md", title="Vector Search")
+    _page(vault, "entities/vector-search.md", title="The Pinecone product")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["concepts/Vector Search.md", "entities/vector-search.md"],
+        }
+    ]
+
+
+def test_duplicate_stems_reports_a_collision_inside_one_folder(tmp_path: Path) -> None:
+    """A hand-named page beside a tool-written one: same folder, same node."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/Vector Search.md", title="Vector Search")
+    _page(vault, "concepts/vector-search.md", title="Vector search notes")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["concepts/Vector Search.md", "concepts/vector-search.md"],
+        }
+    ]

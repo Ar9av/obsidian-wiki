@@ -8,6 +8,8 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
+from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
+from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
 from obsidian_wiki.trust import (
     ALLOWED_LIFECYCLES,
     TRUST_LEDGER_RELATIVE_PATH,
@@ -245,6 +247,23 @@ def lint_vault(
         except ValueError as exc:
             trust_metadata_errors.append({"page": page["path"], "issue": str(exc)})
 
+    # `graph_analysis` identifies a page by its slugged stem (`_page_slug`), so
+    # two pages with the same slugged stem are ONE node in the graph metrics:
+    # degree, communities, betweenness, and the `neighborhood` blast radius.
+    # `Vector Search.md` and `vector-search.md` collide, in one folder or two.
+    # Key this check with that module's own slug and page selection, borrowed
+    # rather than reimplemented, so the report keys as the merge does.
+    stem_index: dict[str, list[str]] = defaultdict(list)
+    for graph_page in iter_graph_pages(vault):
+        stem_index[graph_page_slug(graph_page, vault)].append(
+            graph_page.relative_to(vault).as_posix()
+        )
+    duplicate_stems = [
+        {"stem": stem, "pages": sorted(paths)}
+        for stem, paths in sorted(stem_index.items())
+        if len(paths) > 1
+    ]
+
     title_index: dict[str, list[str]] = defaultdict(list)
     for page in pages:
         title_index[page["title"].strip().lower()].append(page["path"])
@@ -353,6 +372,7 @@ def lint_vault(
         "broken_links": broken_links,
         "missing_frontmatter": missing_frontmatter,
         "duplicate_titles": duplicate_titles,
+        "duplicate_stems": duplicate_stems,
         "missing_summaries": sorted(missing_summaries),
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
@@ -401,7 +421,13 @@ def lint_vault(
     elif (
         any(
             counts[name]
-            for name in ("duplicate_titles", "missing_summaries", "orphan_pages", "typed_relationship_issues")
+            for name in (
+                "duplicate_titles",
+                "duplicate_stems",
+                "missing_summaries",
+                "orphan_pages",
+                "typed_relationship_issues",
+            )
         )
         or trust_findings_present
     ):
