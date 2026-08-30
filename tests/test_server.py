@@ -84,3 +84,12 @@ def test_write_cannot_escape_the_vault(client, tmp_path):
     # The category is slugified before it becomes a directory, so dots never survive.
     assert ".." not in resp.json()["path"]
     assert not (tmp_path.parent / "escape.md").exists()
+
+
+def test_reserved_raw_category_keeps_its_underscore(client):
+    # The four skip lists exclude a page by exact path match against "_raw";
+    # a dropped leading underscore would land it in "raw/" instead.
+    written = client.post("/v1/pages", json={
+        "title": "Clipped Note", "category": "_raw", "content": "x",
+    }).json()
+    assert written["path"] == "_raw/clipped-note.md"
