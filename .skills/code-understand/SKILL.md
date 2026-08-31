@@ -86,5 +86,5 @@ or point `CODE_UNDERSTANDING_CODEGRAPH_BIN` at an existing binary. Never install
 user's go-ahead — ask first, then re-run the command.
 
 Check `obsidian-wiki doctor --project <dir>` for the `code-understanding.*` capability lines
-(`builtin`, `rg`, `codegraph`, `codegraph-index`, `codegraph-fresh`) to see what's available
-before deciding which backend to request explicitly.
+(`builtin`, `rg`, `codegraph`, `codegraph-index`, `codegraph-fresh`, `codegraph-gitignore`) to
+see what's available before deciding which backend to request explicitly.

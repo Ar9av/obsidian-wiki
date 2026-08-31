@@ -152,7 +152,7 @@ def test_doctor_project_shows_builtin_checks(tmp_path: Path) -> None:
     assert data["status"] != "fail"
 
 
-def test_doctor_project_auto_missing_codegraph_is_warn_not_fail(tmp_path: Path) -> None:
+def test_doctor_project_auto_missing_codegraph_is_info_not_fail(tmp_path: Path) -> None:
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _make_vault(vault)
@@ -168,7 +168,7 @@ def test_doctor_project_auto_missing_codegraph_is_warn_not_fail(tmp_path: Path) 
     data = json.loads(proc.stdout)
     assert data["status"] != "fail"
     check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph")
-    assert check["status"] == "warn"
+    assert check["status"] == "info"
 
 
 def test_doctor_project_explicit_codegraph_broken_fails(tmp_path: Path) -> None:
@@ -203,7 +203,11 @@ def test_doctor_project_codegraph_enhanced_checks_pass(tmp_path: Path) -> None:
     _make_vault(vault)
     _write_config(home, vault)
     _install_all_skills(home)
-    project = make_project(tmp_path, {"src/foo.py": "def foo():\n    return 1\n"}, git=False)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": ".codegraph/\n"},
+        git=False,
+    )
     codegraph_bin = make_fake_codegraph_bin(tmp_path)
     build_index_state(project)
     no_bin = tmp_path / "no-bin"
@@ -232,7 +236,11 @@ def test_doctor_project_index_stale_warns(tmp_path: Path) -> None:
     _make_vault(vault)
     _write_config(home, vault)
     _install_all_skills(home)
-    project = make_project(tmp_path, {"src/foo.py": "def foo():\n    return 1\n"}, git=False)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": ".codegraph/\n"},
+        git=False,
+    )
     codegraph_bin = make_fake_codegraph_bin(tmp_path)
     build_index_state(project, fresh=False)
     no_bin = tmp_path / "no-bin"
@@ -251,3 +259,208 @@ def test_doctor_project_index_stale_warns(tmp_path: Path) -> None:
     data = json.loads(proc.stdout)
     check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-fresh")
     assert check["status"] == "warn"
+    assert check["hint"] == "re-run: obsidian-wiki code-understand --project <project>"
+
+
+def test_doctor_strict_passes_when_optional_codegraph_missing(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(
+        tmp_path,
+        {
+            "AGENTS.md": "# project\n",
+            ".cursor/rules/obsidian-wiki.mdc": "# r\n",
+            ".windsurf/rules/obsidian-wiki.md": "# r\n",
+            ".kiro/steering/obsidian-wiki.md": "# r\n",
+            ".agent/rules/obsidian-wiki.md": "# r\n",
+            ".agent/workflows/obsidian-wiki.md": "# r\n",
+            ".github/copilot-instructions.md": "# r\n",
+            "CLAUDE.md": "# a\n",
+            "GEMINI.md": "# a\n",
+            ".hermes.md": "# a\n",
+            "src/foo.py": "def foo():\n    return 1\n",
+        },
+        git=False,
+    )
+    rg_bin = tmp_path / "rg-bin"
+    rg_bin.mkdir()
+    rg_script = rg_bin / "rg"
+    rg_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    rg_script.chmod(0o755)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": f"{rg_bin}:{no_bin}", "CODE_UNDERSTANDING_BACKEND": "", "CODE_UNDERSTANDING_CODEGRAPH_BIN": ""},
+        "doctor",
+        "--json",
+        "--strict",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["status"] == "pass"
+
+
+def test_doctor_project_codegraph_gitignore_warns_without_gitignore(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(tmp_path, {"src/foo.py": "def foo():\n    return 1\n"}, git=False)
+    codegraph_bin = make_fake_codegraph_bin(tmp_path)
+    build_index_state(project)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": str(no_bin), "CODE_UNDERSTANDING_CODEGRAPH_BIN": str(codegraph_bin)},
+        "doctor",
+        "--json",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-gitignore")
+    assert check["status"] == "warn"
+    assert check["detail"] == ".codegraph/ is not ignored"
+    assert check["hint"] == "add .codegraph/ to .gitignore"
+
+
+def test_doctor_project_codegraph_gitignore_ignores_comments(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": "# .codegraph/\n"},
+        git=False,
+    )
+    codegraph_bin = make_fake_codegraph_bin(tmp_path)
+    build_index_state(project)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": str(no_bin), "CODE_UNDERSTANDING_CODEGRAPH_BIN": str(codegraph_bin)},
+        "doctor",
+        "--json",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-gitignore")
+    assert check["status"] == "warn"
+
+
+def test_doctor_project_codegraph_gitignore_passes_when_ignored(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": ".codegraph/\n"},
+        git=False,
+    )
+    codegraph_bin = make_fake_codegraph_bin(tmp_path)
+    build_index_state(project)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": str(no_bin), "CODE_UNDERSTANDING_CODEGRAPH_BIN": str(codegraph_bin)},
+        "doctor",
+        "--json",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-gitignore")
+    assert check["status"] == "pass"
+    assert check["detail"] == ".codegraph/ is ignored"
+    assert check["hint"] == ""
+
+
+def test_doctor_project_codegraph_bin_from_project_env(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": ".codegraph/\n"},
+        git=False,
+    )
+    codegraph_bin = make_fake_codegraph_bin(tmp_path)
+    (project / ".env").write_text(
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{codegraph_bin}"\n', encoding="utf-8"
+    )
+    build_index_state(project)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": str(no_bin), "CODE_UNDERSTANDING_BACKEND": "", "CODE_UNDERSTANDING_CODEGRAPH_BIN": ""},
+        "doctor",
+        "--json",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph")
+    assert check["status"] == "pass"
+
+
+def test_doctor_project_codegraph_not_initialized_hints_run_command(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    project = make_project(
+        tmp_path,
+        {"src/foo.py": "def foo():\n    return 1\n", ".gitignore": ".codegraph/\n"},
+        git=False,
+    )
+    codegraph_bin = make_fake_codegraph_bin(tmp_path)
+    no_bin = tmp_path / "no-bin"
+    no_bin.mkdir()
+
+    proc = _run_env(
+        home,
+        {"PATH": str(no_bin), "CODE_UNDERSTANDING_CODEGRAPH_BIN": str(codegraph_bin)},
+        "doctor",
+        "--json",
+        "--project",
+        str(project),
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-index")
+    assert check["status"] == "warn"
+    assert check["hint"] == "run: obsidian-wiki code-understand --project <project>"

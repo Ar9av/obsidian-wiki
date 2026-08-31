@@ -187,3 +187,107 @@ def test_code_understand_pretty_flag(tmp_path: Path) -> None:
     with pytest.raises(json.JSONDecodeError):
         json.loads(proc.stdout)
     assert "backend" in proc.stdout
+
+
+def test_code_understand_backend_from_project_env(tmp_path: Path) -> None:
+    """RED: backend resolution must consult <project>/.env, not just os.environ.
+
+    With CODE_UNDERSTANDING_BACKEND explicitly unset in the subprocess env, the
+    resolver should fall through to the project's `.env` (backend=codegraph +
+    fake bin). Current cli.py ignores .env, so the backend auto-falls back to
+    "builtin" and this test fails until the config-resolution chain lands.
+    """
+    project = _mini_project(tmp_path)
+    bin_path = make_fake_codegraph_bin(tmp_path)
+    (project / ".env").write_text(
+        f'CODE_UNDERSTANDING_BACKEND="codegraph"\n'
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{bin_path}"\n',
+        encoding="utf-8",
+    )
+
+    proc = _run_cli(
+        project,
+        "code-understand",
+        "--project",
+        str(project),
+        env_overrides={
+            "PATH": _NO_CODEGRAPH_PATH,
+            "CODE_UNDERSTANDING_BACKEND": "",
+            "CODE_UNDERSTANDING_CODEGRAPH_BIN": "",
+        },
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["backend"] == "codegraph"
+
+
+def test_code_understand_backend_from_global_config(tmp_path: Path) -> None:
+    """RED: backend resolution must consult ~/.obsidian-wiki/config.
+
+    With both env vars unset and no project `.env`, the resolver should fall
+    through to the global config under $HOME/.obsidian-wiki/config (backend
+    "codegraph" + fake bin). Current cli.py ignores the config file, so the
+    backend resolves to "builtin" and this test fails until the chain lands.
+    """
+    project = _mini_project(tmp_path)
+    bin_path = make_fake_codegraph_bin(tmp_path)
+    home = tmp_path / "home"
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(
+        f'CODE_UNDERSTANDING_BACKEND="codegraph"\n'
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{bin_path}"\n',
+        encoding="utf-8",
+    )
+
+    proc = _run_cli(
+        project,
+        "code-understand",
+        "--project",
+        str(project),
+        env_overrides={
+            "HOME": str(home),
+            "PATH": _NO_CODEGRAPH_PATH,
+            "CODE_UNDERSTANDING_BACKEND": "",
+            "CODE_UNDERSTANDING_CODEGRAPH_BIN": "",
+        },
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["backend"] == "codegraph"
+
+
+def test_code_understand_backend_flag_beats_project_env(tmp_path: Path) -> None:
+    """GREEN regression guard: explicit --backend beats .env config.
+
+    Once the config-resolution chain lands (project .env wins over env
+    fallback), an explicit `--backend builtin` must still take precedence over
+    the project `.env` that would otherwise select codegraph.
+    """
+    project = _mini_project(tmp_path)
+    bin_path = make_fake_codegraph_bin(tmp_path)
+    (project / ".env").write_text(
+        f'CODE_UNDERSTANDING_BACKEND="codegraph"\n'
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{bin_path}"\n',
+        encoding="utf-8",
+    )
+
+    proc = _run_cli(
+        project,
+        "code-understand",
+        "--backend",
+        "builtin",
+        "--project",
+        str(project),
+        env_overrides={
+            "PATH": _NO_CODEGRAPH_PATH,
+            "CODE_UNDERSTANDING_BACKEND": "",
+            "CODE_UNDERSTANDING_CODEGRAPH_BIN": "",
+        },
+    )
+
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["backend"] == "builtin"
