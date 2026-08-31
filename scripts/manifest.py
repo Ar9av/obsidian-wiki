@@ -112,6 +112,12 @@ def _skip_patterns(cli_skip: str | None) -> list[str]:
     return pats
 
 
+def _normalize_for_match(path: str) -> str:
+    """Normalize either slash style for host-independent path comparison."""
+    portable = path.replace("\\", os.sep).replace("/", os.sep)
+    return os.path.normcase(os.path.normpath(portable))
+
+
 def _relative_key_index(sources: dict) -> dict[str, list[tuple[str, dict]]]:
     """Index relative source keys by basename for suffix matching.
 
@@ -124,14 +130,20 @@ def _relative_key_index(sources: dict) -> dict[str, list[tuple[str, dict]]]:
     index: dict[str, list[tuple[str, dict]]] = {}
     for k, v in sources.items():
         if not os.path.isabs(k):
-            index.setdefault(os.path.basename(k), []).append((k, v))
+            basename = os.path.basename(_normalize_for_match(k))
+            index.setdefault(basename, []).append((k, v))
     return index
 
 
 def _match_relative(path: str, index: dict[str, list[tuple[str, dict]]]) -> dict | None:
     """Return the manifest entry whose relative key is a suffix of `path`."""
-    for relkey, entry in index.get(os.path.basename(path), ()):
-        if path == relkey or path.endswith(os.sep + relkey):
+    normalized_path = _normalize_for_match(path)
+    basename = os.path.basename(normalized_path)
+    for relkey, entry in index.get(basename, ()):
+        normalized_relkey = _normalize_for_match(relkey)
+        if normalized_path == normalized_relkey or normalized_path.endswith(
+            os.sep + normalized_relkey
+        ):
             return entry
     return None
 
