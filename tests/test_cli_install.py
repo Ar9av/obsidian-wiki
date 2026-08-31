@@ -102,3 +102,32 @@ def test_install_skills_keeps_unrelated_symlink_errors(
 
     with pytest.raises(OSError, match="access denied"):
         cli.install_skills(tmp_path / "target-skills", "test")
+
+
+def test_symlink_fallback_reports_copy_mode_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    source_root = tmp_path / "bundled-skills"
+    for name in ("a-skill", "b-skill"):
+        skill = source_root / name
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text(f"---\nname: {name}\n---\n", encoding="utf-8")
+
+    monkeypatch.setattr(cli, "skills_dir", lambda: source_root)
+    monkeypatch.setattr(cli, "_SYMLINK_FALLBACK", False)
+
+    def deny_symlink(self, target, target_is_directory=False):  # noqa: ANN001
+        error = OSError(1314, "A required privilege is not held by the client")
+        error.winerror = 1314
+        raise error
+
+    monkeypatch.setattr(Path, "symlink_to", deny_symlink)
+    monkeypatch.setattr(cli, "_is_symlink_privilege_error", lambda error: True)
+
+    for target in ("agent-one", "agent-two"):
+        assert cli.install_skills(tmp_path / target, target, mode="symlink") == 2
+
+    out = capsys.readouterr().out
+    assert out.count("symbolic links are unavailable") == 1
+    assert cli._SYMLINK_FALLBACK is True
+    assert (tmp_path / "agent-two" / "a-skill" / "SKILL.md").is_file()

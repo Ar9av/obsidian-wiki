@@ -138,6 +138,11 @@ def _is_symlink_privilege_error(error: OSError) -> bool:
     return os.name == "nt" and getattr(error, "winerror", None) == 1314
 
 
+# Set when a symlink install falls back to copying, so the warning prints once
+# and the setup summary can report the mode that actually happened.
+_SYMLINK_FALLBACK = False
+
+
 def install_skills(
     target_dir: Path,
     label: str,
@@ -149,9 +154,9 @@ def install_skills(
     """Install bundled skills into *target_dir*. Returns the count installed."""
     src_root = skills_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
+    global _SYMLINK_FALLBACK
     installed = 0
-    install_mode = mode
-    warned_copy_fallback = False
+    install_mode = "copy" if _SYMLINK_FALLBACK else mode
     for skill in sorted(p for p in src_root.iterdir() if p.is_dir()):
         name = skill.name
         if subset is not None and name not in subset:
@@ -176,13 +181,13 @@ def install_skills(
                 if not _is_symlink_privilege_error(error):
                     raise
                 install_mode = "copy"
-                if not warned_copy_fallback:
+                if not _SYMLINK_FALLBACK:
                     print(
                         "Warning: symbolic links are unavailable; "
                         "copying skills instead. Use Developer Mode or "
                         "--copy to choose this explicitly."
                     )
-                    warned_copy_fallback = True
+                _SYMLINK_FALLBACK = True
                 shutil.copytree(skill, link_path)
         else:  # copy
             shutil.copytree(skill, link_path)
@@ -998,7 +1003,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
-    print(f" Skills installed: {n}  (mode: {mode})")
+    print(f" Skills installed: {n}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")
