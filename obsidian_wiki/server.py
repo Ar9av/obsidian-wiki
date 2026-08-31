@@ -53,6 +53,12 @@ def _slug(title: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-") or "untitled"
 
 
+def _category_slug(category: str) -> str:
+    """Slugify a category, preserving a reserved leading underscore."""
+    slug = _slug(category)
+    return f"_{slug}" if category.lower().startswith("_") else slug
+
+
 def search(q: str, limit: int = 8) -> dict[str, Any]:
     return graph_query(VAULT, q, top_n=limit)
 
@@ -74,7 +80,7 @@ def write_page(
     summary: str = "",
     upsert: bool = True,
 ) -> dict[str, Any]:
-    rel = f"{_slug(category)}/{_slug(title)}.md"
+    rel = f"{_category_slug(category)}/{_slug(title)}.md"
     target = _resolve(rel)
     if target.exists() and not upsert:
         raise HTTPException(409, f"page already exists: {rel}")
@@ -88,7 +94,7 @@ def write_page(
         [
             "---",
             f"title: {title}",
-            f"category: {_slug(category)}",
+            f"category: {_category_slug(category)}",
             "tags: [" + ", ".join(tags or []) + "]",
             "sources: [" + ", ".join(sources or []) + "]",
             f"summary: {summary}" if summary else "summary:",
