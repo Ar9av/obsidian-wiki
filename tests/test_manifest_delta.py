@@ -14,6 +14,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import manifest  # noqa: E402
 
 
+class ManifestRelativePathMatchingTest(unittest.TestCase):
+    def test_windows_path_matches_posix_manifest_key(self) -> None:
+        entry = {"ingested_at": "2026-08-31T00:00:00Z"}
+        index = manifest._relative_key_index(
+            {"projects/demo/session.jsonl": entry}
+        )
+
+        matched = manifest._match_relative(
+            r"C:\Users\米格\projects\demo\session.jsonl", index
+        )
+
+        self.assertIs(matched, entry)
+
+    def test_posix_path_matches_windows_manifest_key(self) -> None:
+        entry = {"ingested_at": "2026-08-31T00:00:00Z"}
+        index = manifest._relative_key_index(
+            {r"projects\demo\session.jsonl": entry}
+        )
+
+        matched = manifest._match_relative(
+            "/home/user/projects/demo/session.jsonl", index
+        )
+
+        self.assertIs(matched, entry)
+
+
 class ManifestDeltaRelativeKeyTest(unittest.TestCase):
     """cmd_delta must recognize sources stored under relative keys.
 
