@@ -154,16 +154,25 @@ def _normalise_node_id(raw: str) -> str:
     return "/".join(_slug(part) for part in target.strip("/").split("/") if part)
 
 
+# Extensions Obsidian embeds as attachments. Anything else after a dot is part
+# of the page name ("Node.js", "v1.2 release notes"), not a file extension.
+_ATTACHMENT_SUFFIXES = frozenset({
+    ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg", ".webp", ".avif",
+    ".mp3", ".wav", ".m4a", ".ogg", ".flac", ".mp4", ".webm", ".mov", ".ogv",
+    ".pdf", ".canvas", ".base",
+})
+
+
 def _wikilink_page_target(raw: str) -> str | None:
-    """Normalise a `_WIKILINK_RE` capture to a page name, or None for a target
-    `by_slug` (`.md`-only) can never hold: an embed's non-`.md` extension, or
-    a table-escaped pipe's trailing backslash.
+    """Normalise a `_WIKILINK_RE` capture to a page name, or None for an
+    attachment embed `by_slug` (`.md`-only) can never hold. Also strips an
+    explicit `.md` suffix and a table-escaped pipe's trailing backslash.
     """
     name = raw.rstrip("\\").split("/")[-1]
     suffix = Path(name).suffix.lower()
     if suffix == ".md":
         return name[: -len(suffix)]
-    if suffix:
+    if suffix in _ATTACHMENT_SUFFIXES:
         return None
     return name
 
