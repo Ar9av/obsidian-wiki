@@ -114,6 +114,43 @@ def test_lint_vault_fails_on_broken_links_and_missing_frontmatter(tmp_path: Path
     assert any(item["page"] == "concepts/beta.md" for item in report["findings"]["missing_frontmatter"])
 
 
+def test_lint_vault_broken_links_ignores_embeds_and_normalises_md_and_escaped_pipe(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    _page(vault, "concepts/beta.md")
+    (vault / "diagram.png").write_text("not a real png\n", encoding="utf-8")
+    _page(
+        vault,
+        "concepts/index.md",
+        links=["alpha.md", "diagram.png", "ghost"],
+    )
+    # A Markdown-table cell escapes a literal pipe, which _WIKILINK_RE's own
+    # alternation consumes into the alias group it does not capture.
+    index = vault / "concepts" / "index.md"
+    index.write_text(index.read_text(encoding="utf-8") + "| [[beta\\|B]] | note |\n", encoding="utf-8")
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["broken_links"] == [{"page": "concepts/index.md", "target": "ghost"}]
+
+
+def test_lint_vault_keeps_links_to_pages_whose_name_contains_a_dot(tmp_path: Path) -> None:
+    """A dot in a page name ("Node.js", "v1.2 notes") is not a file extension —
+    dropping those links would report the target as an orphan."""
+    vault = tmp_path / "vault"
+    for name in ("Node.js", "v1.2 release notes"):
+        _page(vault, f"entities/{name}.md")
+    _page(vault, "concepts/index.md", links=["Node.js", "v1.2 release notes"])
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["broken_links"] == []
+    assert report["findings"]["orphan_pages"] == []
+    assert report["stats"]["link_count"] == 2
+
+
 def test_lint_vault_warns_on_duplicates_missing_summaries_and_orphans(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", title="Same Title", summary=None)
