@@ -11,6 +11,7 @@ Run it with ``python -m obsidian_wiki.server``.
 from __future__ import annotations
 
 import hmac
+import json
 import os
 import re
 from contextlib import asynccontextmanager
@@ -93,11 +94,14 @@ def write_page(
     front = "\n".join(
         [
             "---",
-            f"title: {title}",
+            # json.dumps yields a double-quoted scalar YAML can always parse
+            # (YAML 1.2 is a superset of JSON), so a title/summary containing
+            # ": ", "#", or quotes cannot break the page's frontmatter.
+            f"title: {json.dumps(title)}",
             f"category: {_category_slug(category)}",
             "tags: [" + ", ".join(tags or []) + "]",
             "sources: [" + ", ".join(sources or []) + "]",
-            f"summary: {summary}" if summary else "summary:",
+            f"summary: {json.dumps(summary)}" if summary else "summary:",
             f"created: {created}",
             f"updated: {today}",
             "---",

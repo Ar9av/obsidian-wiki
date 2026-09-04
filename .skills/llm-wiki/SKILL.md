@@ -88,7 +88,8 @@ Each project directory has an overview page structured like this:
 
 ```markdown
 ---
-title: My Project
+title: >-
+    My Project
 category: project
 tags: [ai, web, backend]
 source_path: ~/.claude/projects/-Users-name-Documents-projects-my-project
@@ -161,7 +162,8 @@ When creating a new wiki page, use this structure:
 
 ```markdown
 ---
-title: Page Title
+title: >-
+    Page Title
 category: concepts
 tags: [ml, architecture]
 aliases: [alternate name]
@@ -169,7 +171,8 @@ relationships:
   - target: "[[concepts/related-concept]]"
     type: extends
 sources: [papers/attention.pdf]
-summary: One or two sentences, ≤200 chars, so a reader (or another skill) can preview this page without opening it.
+summary: >-
+    One or two sentences, ≤200 chars, so a reader (or another skill) can preview this page without opening it.
 provenance:
   extracted: 0.72
   inferred: 0.25
@@ -202,6 +205,8 @@ Things that are unresolved or need more sources.
 
 - [[references/attention-is-all-you-need]] — Original paper
 ```
+
+**Parser-safe scalars.** Write free-text frontmatter values — at minimum `title` and `summary` — with folded scalar syntax (`>-`) as shown above: a bare scalar containing `: ` (colon + space), `#`, or quotes breaks YAML parsing, and Obsidian then reports "Invalid properties" and hides the frontmatter. Keep the value indented on the line(s) following `title: >-` / `summary: >-`.
 
 ## Paper Deep-Dive Template
 

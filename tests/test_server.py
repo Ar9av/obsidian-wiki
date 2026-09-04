@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import json
+import re
 import sys
 
 import pytest
@@ -48,7 +50,7 @@ def test_write_then_search_and_read_round_trips(client, tmp_path):
     }).json()
     assert written["path"] == "concepts/vector-clocks.md"
     on_disk = (tmp_path / written["path"]).read_text()
-    assert "title: Vector Clocks" in on_disk and "updated:" in on_disk
+    assert 'title: "Vector Clocks"' in on_disk and "updated:" in on_disk
     assert "vector-clocks.md" in (tmp_path / "log.md").read_text()
 
     hits = client.get("/v1/search", params={"q": "vector clocks"}).json()
@@ -93,3 +95,21 @@ def test_reserved_raw_category_keeps_its_underscore(client):
         "title": "Clipped Note", "category": "_raw", "content": "x",
     }).json()
     assert written["path"] == "_raw/clipped-note.md"
+
+
+def test_frontmatter_scalars_round_trip_through_yaml(client, tmp_path):
+    # A bare scalar containing ": " or "#" breaks YAML parsing — Obsidian then
+    # reports "Invalid properties" and hides the frontmatter. write_page emits
+    # title/summary as double-quoted scalars, so every value round-trips.
+    title = 'Kafka: "Rebalance" #notes — offsets: 42'
+    summary = "Brokers use # hashes; offsets: 42."
+    written = client.post("/v1/pages", json={
+        "title": title, "category": "concepts", "summary": summary, "content": "x",
+    }).json()
+    on_disk = (tmp_path / written["path"]).read_text()
+    for key, expected in (("title", title), ("summary", summary)):
+        m = re.search(rf"^{key}: (\".*\")$", on_disk, re.MULTILINE)
+        assert m, f"{key} not emitted as a double-quoted scalar:\n{on_disk}"
+        # YAML 1.2 is a superset of JSON, so a JSON parse of the emitted
+        # scalar proves the escaping is valid YAML and the value survives.
+        assert json.loads(m.group(1)) == expected
