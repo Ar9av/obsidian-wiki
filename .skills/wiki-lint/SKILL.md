@@ -57,7 +57,8 @@ Find `[[wikilinks]]` that point to pages that don't exist.
 **How to check:**
 - Grep for `\[\[.*?\]\]` across all pages
 - Extract the link target: drop everything from the first `|` (alias) or `#` (heading/block anchor), and strip a trailing backslash left by an escaped `\|` inside a table cell
-- Skip a target whose extension isn't `.md` (images, PDFs, `.canvas`, `.base`, and other attachment types): it's an embed, not a page link, and has no entry in the `.md` inventory this check compares against
+- Skip a target whose extension is an attachment type (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.pdf`, `.canvas`, `.base`, audio and video): it's an embed, not a page link, and has no entry in the `.md` inventory this check compares against
+- Do **not** treat every dot as an extension — `[[Node.js]]`, `[[Next.js]]`, and `[[v1.2 release notes]]` are page links whose names happen to contain a dot, and dropping them would both miss real broken links and make the target page look like an orphan
 - Strip an explicit `.md` suffix from what remains, then check if a corresponding `.md` file exists
 
 **How to fix:**
