@@ -11,7 +11,6 @@ Run it with ``python -m obsidian_wiki.server``.
 from __future__ import annotations
 
 import hmac
-import json
 import os
 import re
 from contextlib import asynccontextmanager
@@ -71,6 +70,17 @@ def read_page(path: str) -> dict[str, Any]:
     return {"path": path, "markdown": target.read_text(encoding="utf-8")}
 
 
+def _folded(key: str, value: str) -> str:
+    """Emit a free-text scalar as a YAML folded block (`key: >-`).
+
+    A bare scalar containing ": ", "#", or a quote breaks YAML parsing, and
+    Obsidian then reports "Invalid properties". A folded block needs no
+    escaping, so it stays readable on disk for any value — including
+    non-ASCII — and the vault's own frontmatter readers already understand it.
+    """
+    return f"{key}: >-\n  " + " ".join(str(value).split())
+
+
 def write_page(
     title: str,
     category: str,
@@ -94,14 +104,11 @@ def write_page(
     front = "\n".join(
         [
             "---",
-            # json.dumps yields a double-quoted scalar YAML can always parse
-            # (YAML 1.2 is a superset of JSON), so a title/summary containing
-            # ": ", "#", or quotes cannot break the page's frontmatter.
-            f"title: {json.dumps(title)}",
+            _folded("title", title),
             f"category: {_category_slug(category)}",
             "tags: [" + ", ".join(tags or []) + "]",
             "sources: [" + ", ".join(sources or []) + "]",
-            f"summary: {json.dumps(summary)}" if summary else "summary:",
+            _folded("summary", summary) if summary else "summary:",
             f"created: {created}",
             f"updated: {today}",
             "---",
