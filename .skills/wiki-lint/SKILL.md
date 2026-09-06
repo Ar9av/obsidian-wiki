@@ -56,8 +56,10 @@ Find `[[wikilinks]]` that point to pages that don't exist.
 
 **How to check:**
 - Grep for `\[\[.*?\]\]` across all pages
-- Extract the link targets
-- Check if a corresponding `.md` file exists
+- Extract the link target: drop everything from the first `|` (alias) or `#` (heading/block anchor), and strip a trailing backslash left by an escaped `\|` inside a table cell
+- Skip a target whose extension is an attachment type (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.pdf`, `.canvas`, `.base`, audio and video): it's an embed, not a page link, and has no entry in the `.md` inventory this check compares against
+- Do **not** treat every dot as an extension — `[[Node.js]]`, `[[Next.js]]`, and `[[v1.2 release notes]]` are page links whose names happen to contain a dot, and dropping them would both miss real broken links and make the target page look like an orphan
+- Strip an explicit `.md` suffix from what remains, then check if a corresponding `.md` file exists
 
 **How to fix:**
 - If the target was renamed, update the link
@@ -330,6 +332,7 @@ Validate `relationships:` frontmatter blocks. Skip pages that have no `relations
 - For each entry in the block:
   1. **Type validation** — flag any `type:` value not in the allowed set above
   2. **Broken target** — strip `[[` and `]]` from the `target:` string, normalize (lowercase, spaces→hyphens, strip `.md`), and check whether a `.md` file at that path exists in the vault. Flag unresolved targets.
+     Before normalizing, drop everything from the first `|` (alias) or `#` (heading/block anchor): a pipe-aliased or heading-anchored target is not broken just because the literal bracket contents don't match a filename.
   3. **Self-reference** — flag any entry where the resolved target equals the page's own node id
 
 **How to fix:**
