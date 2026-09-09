@@ -156,6 +156,30 @@ def test_status_derives_counts_from_the_vault(client, tmp_path):
     assert body["git"]["repo"] is False
 
 
+def test_status_reads_every_manifest_container_shape(client, tmp_path):
+    """Real vaults mix the shapes different skills write; none may be dropped."""
+    _page(tmp_path, "concepts/a.md")
+    (tmp_path / ".manifest.json").write_text(
+        """{
+          "sources": [{"source_id": "ingested", "type": "repository",
+                       "ingested_at": "2026-01-01", "pages_produced": ["concepts/a.md"]}],
+          "projects": {"tractorex": {"last_synced": "2026-02-02",
+                       "pages_in_vault": ["concepts/a.md", "concepts/gone.md"]}},
+          "research_sessions": [{"session_id": "r1", "skill": "wiki-research",
+                       "completed": "2026-03-03", "pages_created": ["concepts/a.md"],
+                       "pages_updated": ["index.md"]}]
+        }""",
+        encoding="utf-8",
+    )
+
+    by_id = {s["source_id"]: s for s in client.get("/v1/status").json()["sources"]}
+    assert set(by_id) == {"ingested", "tractorex", "r1"}
+    # A dict container keys entries by name; a list container carries its own id.
+    assert by_id["tractorex"]["ingested_at"] == "2026-02-02"
+    assert by_id["tractorex"]["missing_pages"] == ["concepts/gone.md"]
+    assert by_id["r1"]["type"] == "wiki-research"
+
+
 def test_staging_diffs_new_and_updated_pages(client, tmp_path):
     _page(tmp_path, "concepts/live.md", "old\n")
     _page(tmp_path, "_staging/concepts/live.md", "new\n")

@@ -25,6 +25,7 @@ from fastapi.responses import HTMLResponse
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
+from obsidian_wiki.cache import _iter_entries
 from obsidian_wiki.context_pack import ContextError, build_context_pack
 from obsidian_wiki.graphrag import query as graph_query
 from obsidian_wiki.lint import lint_vault
@@ -236,6 +237,14 @@ def http_pack(body: PackRequest) -> dict[str, Any]:
 # from the files on disk, from `.manifest.json`, or from git — no state of our
 # own. Reuses lint_vault / run_doctor rather than shelling out to the CLI.
 
+# `.manifest.json` is written by several skills and is not one shape: wiki-ingest
+# keys sources under "sources", wiki-update under "projects", wiki-research under
+# "research_sessions", and each names its page list differently. Read every known
+# shape — a real vault usually holds more than one.
+_MANIFEST_CONTAINERS = ("sources", "projects", "research_sessions")
+_MANIFEST_PAGE_KEYS = ("pages_produced", "pages_created", "pages_in_vault")
+
+
 def _count_md(rel: str) -> int:
     directory = VAULT / rel
     return len(list(directory.rglob("*.md"))) if directory.is_dir() else 0
@@ -280,16 +289,25 @@ def status() -> dict[str, Any]:
         except json.JSONDecodeError as exc:
             raise HTTPException(500, f"unreadable .manifest.json: {exc}") from exc
         last_ingest = manifest.get("last_ingest")
-        for source in manifest.get("sources", []):
-            produced = source.get("pages_produced", [])
-            sources.append({
-                "source_id": source.get("source_id", ""),
-                "type": source.get("type", ""),
-                "ingested_at": source.get("ingested_at", ""),
-                "pages_produced": len(produced),
-                # A produced page that no longer exists means the source needs re-ingesting.
-                "missing_pages": [rel for rel in produced if not (VAULT / rel).is_file()],
-            })
+        for container in _MANIFEST_CONTAINERS:
+            for key, entry in _iter_entries(manifest.get(container)):
+                produced = [
+                    rel for field in _MANIFEST_PAGE_KEYS for rel in entry.get(field, [])
+                ]
+                sources.append({
+                    "source_id": entry.get("source_id") or entry.get("session_id") or key or "",
+                    "container": container,
+                    "type": entry.get("type") or entry.get("skill") or "",
+                    "ingested_at": (
+                        entry.get("ingested_at")
+                        or entry.get("last_synced")
+                        or entry.get("completed")
+                        or ""
+                    ),
+                    "pages_produced": len(produced),
+                    # A produced page that no longer exists means the source needs re-ingesting.
+                    "missing_pages": [rel for rel in produced if not (VAULT / rel).is_file()],
+                })
 
     return {
         "vault": str(VAULT),
