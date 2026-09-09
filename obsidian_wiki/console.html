@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>obsidian-wiki console</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 15%, transparent); }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 auto; padding: 2rem 1.5rem; max-width: 60rem; }
+  h1 { font-size: 1.1rem; margin: 0 0 .25rem; }
+  h2 { font-size: .95rem; margin: 2rem 0 .5rem; padding-bottom: .25rem; border-bottom: 1px solid var(--line); }
+  .sub { opacity: .6; margin: 0 0 1.5rem; }
+  .tiles { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+  .tile b { display: block; font-size: 1.6rem; font-weight: 600; }
+  .tile span { opacity: .6; font-size: .8rem; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: .25rem .75rem .25rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { opacity: .6; font-weight: 400; }
+  pre { overflow-x: auto; padding: .75rem; background: color-mix(in srgb, currentColor 6%, transparent); border-radius: 4px; white-space: pre; }
+  .pass { color: #2a8; } .warn { color: #c81; } .fail { color: #d44; } .info { opacity: .6; }
+  button { font: inherit; padding: .3rem .8rem; }
+  #err { color: #d44; }
+</style>
+
+<h1>obsidian-wiki console</h1>
+<p class="sub" id="vault">connecting…</p>
+<p id="err"></p>
+<div id="app" hidden>
+  <div class="tiles" id="tiles"></div>
+  <h2>Health</h2><div id="health">loading…</div>
+  <h2>Staging</h2><div id="staging">loading…</div>
+  <h2>Sources</h2><div id="sources"></div>
+  <h2>Recently changed</h2><div id="recent"></div>
+  <h2>Git</h2><div id="git"></div>
+</div>
+
+<script type="module">
+// The API key never ships in this file: it is asked for once and kept in
+// sessionStorage, then sent as a bearer header — the same auth API clients use.
+const KEY = 'obsidian-wiki-key';
+const get = async (path) => {
+  const res = await fetch(path, { headers: { authorization: `Bearer ${sessionStorage.getItem(KEY) ?? ''}` } });
+  if (res.status === 401) { sessionStorage.removeItem(KEY); throw new Error('bad or missing API key — reload to re-enter'); }
+  if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`);
+  return res.json();
+};
+
+// el() only ever sets textContent, so vault markdown and diffs cannot become HTML.
+const el = (tag, text, cls) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; };
+const table = (head, rows) => {
+  const t = el('table'), thead = t.createTHead().insertRow();
+  head.forEach(h => thead.appendChild(el('th', h)));
+  const body = t.createTBody();
+  rows.forEach(r => { const tr = body.insertRow(); r.forEach(c => tr.appendChild(el('td', c))); });
+  return t;
+};
+const put = (id, node) => { const host = document.getElementById(id); host.replaceChildren(node); };
+
+try {
+  if (!sessionStorage.getItem(KEY)) {
+    // Anonymous mode needs no key; only prompt if the server actually rejects us.
+    const probe = await fetch('/v1/status');
+    if (probe.status === 401) sessionStorage.setItem(KEY, prompt('WIKI_API_KEY') ?? '');
+  }
+
+  const s = await get('/v1/status');
+  document.getElementById('vault').textContent = `${s.vault} — last ingest ${s.last_ingest ?? 'never'}`;
+  document.getElementById('app').hidden = false;
+
+  const tile = (n, label) => { const d = el('div', null, 'tile'); d.append(el('b', String(n)), el('span', label)); return d; };
+  put('tiles', Object.assign(document.createElement('div'), { className: 'tiles' }));
+  document.getElementById('tiles').append(
+    tile(s.pages, 'pages'), tile(Object.keys(s.categories).length, 'categories'),
+    tile(s.raw_count, '_raw'), tile(s.staging_count, '_staging'),
+    tile(s.sources.length, 'sources'), tile(s.git.repo ? s.git.dirty_count : '—', 'uncommitted'),
+  );
+
+  put('sources', table(['source', 'type', 'ingested', 'pages', 'missing'],
+    s.sources.map(x => [x.source_id, x.type, x.ingested_at, x.pages_produced, x.missing_pages.join(', ') || '—'])));
+  put('recent', table(['page', 'modified'], s.recent_pages.map(p => [p.path, p.modified.slice(0, 16).replace('T', ' ')])));
+
+  const g = el('div');
+  if (!s.git.repo) g.append(el('p', 'vault is not a git repository', 'info'));
+  else {
+    g.append(el('p', `branch ${s.git.branch} — ${s.git.dirty_count} uncommitted`));
+    if (s.git.dirty.length) g.append(el('pre', s.git.dirty.join('\n')));
+    g.append(el('pre', s.git.recent.join('\n')));
+  }
+  put('git', g);
+
+  // Health and staging are slower (lint walks the vault), so they land after the dashboard.
+  get('/v1/health').then(h => {
+    const box = el('div');
+    box.append(el('p', `doctor: ${h.doctor.status}`, h.doctor.status));
+    box.append(table(['check', 'status', 'detail'],
+      h.doctor.checks.filter(c => c.status !== 'pass').map(c => [c.name, c.status, c.detail])));
+    box.append(el('p', `lint: ${h.lint.status} — ${h.lint.stats.pages} pages, ${h.lint.stats.link_count} links`, h.lint.status));
+    box.append(table(['finding', 'count'],
+      Object.entries(h.lint.stats.findings).filter(([, n]) => n).map(([k, n]) => [k, n])));
+    put('health', box);
+  }).catch(e => put('health', el('p', e.message, 'fail')));
+
+  get('/v1/staging').then(st => {
+    if (!st.count) return put('staging', el('p', 'nothing staged', 'info'));
+    const box = el('div');
+    for (const item of st.items) {
+      const d = el('details');
+      d.append(el('summary', `${item.kind}: ${item.live_path}`), el('pre', item.diff || '(identical)'));
+      box.append(d);
+    }
+    box.append(el('p', 'Promote or discard with /wiki-stage-commit, or open the file in Obsidian.', 'info'));
+    put('staging', box);
+  }).catch(e => put('staging', el('p', e.message, 'fail')));
+} catch (e) {
+  document.getElementById('err').textContent = e.message;
+  document.getElementById('vault').textContent = '';
+}
+</script>

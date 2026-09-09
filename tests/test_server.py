@@ -114,3 +114,71 @@ def test_frontmatter_scalars_round_trip_through_yaml(client, tmp_path):
     front = on_disk.split("---")[1]
     assert _parse_frontmatter_values(front)["title"] == title
     assert _parse_frontmatter_values(front)["summary"] == summary
+
+
+# --- operations console -----------------------------------------------------
+
+def _page(vault, rel, body="# hi\n"):
+    path = vault / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+def test_console_endpoints_need_a_key(client):
+    client.headers.pop("authorization")
+    for route in ("/v1/status", "/v1/health", "/v1/staging"):
+        assert client.get(route).status_code == 401
+
+
+def test_status_derives_counts_from_the_vault(client, tmp_path):
+    _page(tmp_path, "concepts/a.md")
+    _page(tmp_path, "concepts/b.md")
+    _page(tmp_path, "entities/c.md")
+    _page(tmp_path, "_raw/note.md")
+    _page(tmp_path, "_staging/concepts/a.md")
+    _page(tmp_path, "index.md")
+    (tmp_path / ".manifest.json").write_text(
+        '{"last_ingest": "2026-01-01T00:00:00Z", "sources": [{"source_id": "s1",'
+        ' "type": "repository", "ingested_at": "2026-01-01T00:00:00Z",'
+        ' "pages_produced": ["concepts/a.md", "concepts/gone.md"]}]}',
+        encoding="utf-8",
+    )
+
+    body = client.get("/v1/status").json()
+    # Underscore folders are staging areas, not pages, so they stay out of the count.
+    assert body["pages"] == 4
+    # Root files like index.md are pages but belong to no category folder.
+    assert body["categories"] == {"(root)": 1, "concepts": 2, "entities": 1}
+    assert body["raw_count"] == 1 and body["staging_count"] == 1
+    assert body["last_ingest"] == "2026-01-01T00:00:00Z"
+    assert body["sources"][0]["missing_pages"] == ["concepts/gone.md"]
+    assert body["git"]["repo"] is False
+
+
+def test_staging_diffs_new_and_updated_pages(client, tmp_path):
+    _page(tmp_path, "concepts/live.md", "old\n")
+    _page(tmp_path, "_staging/concepts/live.md", "new\n")
+    _page(tmp_path, "_staging/concepts/fresh.md", "brand new\n")
+
+    items = {i["live_path"]: i for i in client.get("/v1/staging").json()["items"]}
+    assert items["concepts/fresh.md"]["kind"] == "new"
+    update = items["concepts/live.md"]
+    assert update["kind"] == "update"
+    assert "-old" in update["diff"] and "+new" in update["diff"]
+
+
+def test_health_reports_doctor_and_lint(client, tmp_path):
+    _page(tmp_path, "concepts/a.md")
+    body = client.get("/v1/health").json()
+    assert body["doctor"]["status"] in {"pass", "info", "warn", "fail"}
+    assert body["lint"]["stats"]["pages"] == 1
+
+
+def test_ui_shell_carries_no_vault_data(client, tmp_path):
+    _page(tmp_path, "concepts/secret-page.md", "sensitive\n")
+    client.headers.pop("authorization")
+    page = client.get("/ui")
+    # The shell is static: it must be fetch-driven, never server-rendered with vault content.
+    assert page.status_code == 200
+    assert "secret-page" not in page.text and "sensitive" not in page.text
