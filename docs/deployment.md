@@ -38,6 +38,7 @@ WIKI_API_KEY=dev OBSIDIAN_VAULT_PATH=~/vault python -m obsidian_wiki.server
 | `WIKI_API_KEY` | Bearer token for every `/v1/*` and `/mcp` request | *(none — required)* |
 | `WIKI_ALLOW_ANONYMOUS` | `1` disables auth entirely. Local development only | *(unset)* |
 | `WIKI_PORT` | Port to listen on | `8080` |
+| `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |
 
 The process **refuses to start** without `WIKI_API_KEY` unless `WIKI_ALLOW_ANONYMOUS=1`. There is no
 default key.

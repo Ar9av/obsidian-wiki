@@ -388,7 +388,12 @@ def http_staging() -> dict[str, Any]:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("WIKI_PORT", "8080")))
+    # Loopback by default: /ui is a browser console over the whole vault, and the
+    # bare `python -m obsidian_wiki.server` case is a laptop or a dev box, not a
+    # deliberate exposure. Containers need every interface, so the Dockerfile sets
+    # WIKI_HOST=0.0.0.0 explicitly.
+    host = os.environ.get("WIKI_HOST", "127.0.0.1")
+    uvicorn.run(app, host=host, port=int(os.environ.get("WIKI_PORT", "8080")))
 
 
 if __name__ == "__main__":

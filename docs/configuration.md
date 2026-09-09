@@ -288,3 +288,4 @@ skill use. Full guide: [Deployment](deployment.md).
 | `WIKI_API_KEY` | Bearer token required on every `/v1/*` and `/mcp` request | *(none — the server refuses to start without it)* |
 | `WIKI_ALLOW_ANONYMOUS` | `1` disables auth entirely. Local development only | *(unset)* |
 | `WIKI_PORT` | Port the server listens on | `8080` |
+| `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |

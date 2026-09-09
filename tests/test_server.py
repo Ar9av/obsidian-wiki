@@ -206,3 +206,18 @@ def test_ui_shell_carries_no_vault_data(client, tmp_path):
     # The shell is static: it must be fetch-driven, never server-rendered with vault content.
     assert page.status_code == 200
     assert "secret-page" not in page.text and "sensitive" not in page.text
+
+
+@pytest.mark.parametrize("wiki_host, expected", [(None, "127.0.0.1"), ("0.0.0.0", "0.0.0.0")])
+def test_bind_host_is_loopback_unless_asked(client, monkeypatch, wiki_host, expected):
+    """A browser console over the whole vault must not reach every interface by default."""
+    import uvicorn
+
+    monkeypatch.delenv("WIKI_HOST", raising=False)
+    if wiki_host:
+        monkeypatch.setenv("WIKI_HOST", wiki_host)
+
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
+    sys.modules["obsidian_wiki.server"].main()
+    assert seen["host"] == expected
