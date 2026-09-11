@@ -123,7 +123,9 @@ class TestCheckSources:
 
     def test_empty_source_list(self, vault):
         result = check_sources(vault, [])
-        assert result == {"new": [], "modified": [], "unchanged": [], "missing": []}
+        assert result == {
+            "new": [], "modified": [], "unchanged": [], "missing": [], "unavailable": []
+        }
 
     def test_multiple_sources(self, vault, src_file, src_dir):
         update_source(vault, src_file)
@@ -177,10 +179,21 @@ class TestCheckSources:
         assert str(src) in result["modified"]
 
     def test_relative_manifest_key_genuinely_missing(self, vault):
-        # A relative key with no file on disk is still reported missing.
+        # A relative key whose top-level directory really is part of this vault
+        # is a vault-local loss when the file is gone.
+        (vault / "_raw" / "articles").mkdir(parents=True)
         self._write_relative_manifest(vault, "_raw/articles/gone.md", "abc")
         result = check_sources(vault, [])
         assert "_raw/articles/gone.md" in result["missing"]
+
+    def test_relative_key_under_an_unknown_top_dir_is_unavailable(self, vault):
+        # A relative key whose first segment is not a vault entry is relative to
+        # some other root (a legacy ingest root, or an out-of-vault namespace), so
+        # it is unavailable here rather than a missing vault source.
+        self._write_relative_manifest(vault, "-Users-x/abc.jsonl", "abc")
+        result = check_sources(vault, [])
+        assert result["missing"] == []
+        assert "-Users-x/abc.jsonl" in result["unavailable"]
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +280,19 @@ class TestCacheCLI:
         assert proc.returncode == 0
         sources = _load_manifest(vault)
         assert sources[str(src_file)]["pages_produced"] == ["concepts/foo.md", "entities/bar.md"]
+
+    def test_cache_update_non_portable_source_warns_on_stderr(self, vault, src_file):
+        # src_file lives outside the vault and $HOME, so the fallback absolute
+        # key is stored — but the CLI must say so rather than stay silent.
+        proc = self._run("cache-update", str(vault), str(src_file))
+        assert proc.returncode == 0
+        assert "no portable key" in proc.stderr
+
+    def test_cache_update_explicit_key_warns_nothing(self, vault, src_file):
+        proc = self._run("cache-update", str(vault), str(src_file), "--key", "repo:o/n")
+        assert proc.returncode == 0
+        assert "no portable key" not in proc.stderr
+        assert "repo:o/n" in _load_manifest(vault)
 
 
 class TestManifestLock:

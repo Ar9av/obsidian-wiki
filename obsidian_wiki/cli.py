@@ -1288,12 +1288,16 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
 
 
 def cmd_cache_update(args: argparse.Namespace) -> int:
-    from obsidian_wiki.cache import update_source
+    from obsidian_wiki.cache import stored_key, update_source
     vault = Path(args.vault).expanduser().resolve()
     source = Path(args.source).expanduser().resolve()
     pages = args.pages or []
-    h = update_source(vault, source, pages_produced=pages)
-    print(json.dumps({"path": str(source), "content_hash": h}))
+    h = update_source(vault, source, pages_produced=pages, key=args.key)
+    print(json.dumps({
+        "path": str(source),
+        "key": args.key or stored_key(source, vault) or str(source),
+        "content_hash": h,
+    }))
     return 0
 
 
@@ -2171,6 +2175,11 @@ def build_parser() -> argparse.ArgumentParser:
     cu.add_argument("vault", help="path to the Obsidian vault")
     cu.add_argument("source", help="source file or directory that was just ingested")
     cu.add_argument("--pages", nargs="*", metavar="PAGE", help="vault-relative paths of pages produced")
+    cu.add_argument(
+        "--key",
+        default=None,
+        help="explicit portable key (repo:/url:/agent:) for sources outside the vault and $HOME",
+    )
     cu.set_defaults(func=cmd_cache_update)
 
     ch = sub.add_parser(

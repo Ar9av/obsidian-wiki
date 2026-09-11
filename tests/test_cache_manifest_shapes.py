@@ -124,7 +124,9 @@ def test_update_appends_new_list_entry(vault, raw_file):
     update_source(vault, raw_file)
     sources = _load_raw(vault)["sources"]
     assert isinstance(sources, list)
-    assert {e["path"] for e in sources} == {"_raw/other.md", str(raw_file)}
+    # A new in-vault source is keyed vault-relative (source key contract v2),
+    # not by the machine absolute path, so the vault stays portable.
+    assert {e["path"] for e in sources} == {"_raw/other.md", "_raw/foo.md"}
 
 
 def test_top_level_keys_preserved(vault, raw_file):
