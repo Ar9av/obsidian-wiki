@@ -50,6 +50,61 @@ _RELATIONSHIP_LIST_FIELD_RE = re.compile(
 )
 _RELATIONSHIP_ITEM_START_RE = re.compile(r"^\s*-\s*(?:#.*)?$")
 _RELATIONSHIP_FIELD_RE = re.compile(r"^\s+(type|target):\s*(.*?)\s*$")
+_WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+
+
+def _frontmatter_field_block(frontmatter: str, field: str) -> str:
+    """The raw value of a frontmatter *field*, including a following block list.
+
+    Returns the inline value plus any subsequent ``- item`` lines indented under
+    it; an empty string when the field is absent.
+    """
+    lines = frontmatter.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(rf"^{re.escape(field)}\s*:(.*)$", line)
+        if not match:
+            continue
+        block = [match.group(1)]
+        for following in lines[index + 1:]:
+            if re.match(r"^\s+-\s", following) or not following.strip():
+                block.append(following)
+                continue
+            break
+        return "\n".join(block)
+    return ""
+
+
+def _absolute_source_entries(frontmatter: str) -> list[str]:
+    """`sources:` entries that are machine absolute paths (contract violation).
+
+    The source key contract bans a stored absolute path in page frontmatter just
+    as it does in the manifest; ``~``-relative and vault-relative entries are
+    fine. Only the ``sources:`` field is inspected — a path in prose may be a
+    legitimate citation.
+    """
+    raw = _frontmatter_field_block(frontmatter, "sources")
+    if not raw.strip():
+        return []
+    lines = raw.splitlines()
+    inline = lines[0].strip()
+    entries: list[str] = []
+    if inline.startswith("["):
+        entries.extend(inline.strip("[]").split(","))
+    elif inline:
+        # A scalar `sources: <value>` is a single entry — not a block list, and
+        # not a flow list, but still a stored source key.
+        entries.append(inline)
+    entries.extend(
+        line.strip()[1:] for line in lines[1:] if line.strip().startswith("-")
+    )
+    bad: list[str] = []
+    for entry in entries:
+        value = entry.strip().strip("'\"").strip()
+        if not value:
+            continue
+        if value.startswith("/") or _WINDOWS_ABS_RE.match(value):
+            bad.append(value)
+    return bad
 
 
 def _slug(text: str) -> str:
@@ -205,6 +260,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "fields": fields,
         "links": links,
         "relationships": _parse_relationships(frontmatter),
+        "absolute_sources": _absolute_source_entries(frontmatter),
     }
 
 
@@ -305,6 +361,16 @@ def lint_vault(
         and ("summary" not in page["fields"] or not page["summary"])
     ]
 
+    # Legacy provenance: a `sources:` entry holding a machine absolute path cannot
+    # resolve on another machine, so a synced vault loses the trail. Read-only —
+    # migration of page frontmatter is a separate, deliberate pass (see
+    # docs/cli.md → Source keys and legacy migration).
+    machine_path_sources = [
+        {"page": page["path"], "sources": page["absolute_sources"]}
+        for page in pages
+        if page["slug"] not in RESERVED_PAGE_STEMS and page["absolute_sources"]
+    ]
+
     orphan_pages = []
     for page in pages:
         if page["slug"] in RESERVED_PAGE_STEMS:
@@ -398,6 +464,7 @@ def lint_vault(
         "duplicate_titles": duplicate_titles,
         "duplicate_stems": duplicate_stems,
         "missing_summaries": sorted(missing_summaries),
+        "machine_path_sources": machine_path_sources,
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
         "confidence_missing_fields": confidence_missing_fields,
@@ -449,6 +516,7 @@ def lint_vault(
                 "duplicate_titles",
                 "duplicate_stems",
                 "missing_summaries",
+                "machine_path_sources",
                 "orphan_pages",
                 "typed_relationship_issues",
             )

@@ -872,3 +872,61 @@ def test_duplicate_stems_reports_a_collision_inside_one_folder(tmp_path: Path) -
             "pages": ["concepts/Vector Search.md", "concepts/vector-search.md"],
         }
     ]
+
+
+def test_machine_path_in_sources_is_reported(tmp_path: Path) -> None:
+    """A `sources:` entry holding a machine absolute path cannot resolve on
+    another machine — read-only report, the page is not modified."""
+    vault = tmp_path / "vault"
+    _page(
+        vault, "references/alpha.md",
+        sources='["/DATA/disk1/me/wiki/Raw/a.pdf"]', links=["beta"],
+    )
+    _page(vault, "references/beta.md", sources='["~/docs/b.pdf"]', links=["alpha"])
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/DATA/disk1/me/wiki/Raw/a.pdf"]}
+    ]
+    # The only thing wrong with this vault is the machine path, and it warns.
+    assert report["findings"]["orphan_pages"] == []
+    assert report["findings"]["missing_summaries"] == []
+    assert report["status"] == "warn"
+
+
+def test_machine_path_in_block_style_sources_is_reported(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    path = vault / "references" / "alpha.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "---\n"
+        "title: alpha\n"
+        "category: references\n"
+        "tags: [test]\n"
+        "sources:\n"
+        "  - /home/other/notes/wiki/Raw/a.pdf\n"
+        "  - Raw/local.pdf\n"
+        "created: 2026-07-01\n"
+        "updated: 2026-07-01\n"
+        "---\n# alpha\n",
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/home/other/notes/wiki/Raw/a.pdf"]}
+    ]
+
+
+def test_machine_path_in_scalar_sources_is_reported(tmp_path: Path) -> None:
+    """`sources:` may be written as a scalar; that is still a stored source key."""
+    vault = tmp_path / "vault"
+    _page(vault, "references/alpha.md", sources="/abs/only.md")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/abs/only.md"]}
+    ]
