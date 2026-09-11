@@ -334,7 +334,7 @@ def install_project(project_dir: Path, mode: str) -> None:
 def _read_config_value(key: str) -> str:
     if not GLOBAL_CONFIG.is_file():
         return ""
-    for line in GLOBAL_CONFIG.read_text().splitlines():
+    for line in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip().strip('"')
     return ""
@@ -344,7 +344,7 @@ def _read_config() -> dict[str, str]:
     if not GLOBAL_CONFIG.is_file():
         return {}
     values: dict[str, str] = {}
-    for raw in GLOBAL_CONFIG.read_text().splitlines():
+    for raw in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -390,7 +390,7 @@ def write_config(vault_path: str) -> None:
 
     existing: list[str] = []
     if GLOBAL_CONFIG.is_file():
-        existing = GLOBAL_CONFIG.read_text().splitlines()
+        existing = GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines()
 
     out: list[str] = []
     seen: set[str] = set()
@@ -408,7 +408,7 @@ def write_config(vault_path: str) -> None:
         if key not in seen:
             out.append(f'{key}="{value}"')
 
-    GLOBAL_CONFIG.write_text("\n".join(out) + "\n")
+    GLOBAL_CONFIG.write_text("\n".join(out) + "\n", encoding="utf-8")
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 
@@ -462,7 +462,8 @@ def scaffold_vault(vault_path: Path) -> bool:
             "## Skills\n\n"
             "## References\n\n"
             "## Synthesis\n\n"
-            "## Journal\n"
+            "## Journal\n",
+            encoding="utf-8",
         )
 
     log_md = vault_path / "log.md"
@@ -473,7 +474,8 @@ def scaffold_vault(vault_path: Path) -> bool:
             "---\n\n"
             "# Wiki Log\n\n"
             f'- [{timestamp}] INIT vault_path="{vault_path}" '
-            "categories=concepts,entities,skills,references,synthesis,journal\n"
+            "categories=concepts,entities,skills,references,synthesis,journal\n",
+            encoding="utf-8",
         )
 
     hot_md = vault_path / "hot.md"
@@ -492,12 +494,13 @@ def scaffold_vault(vault_path: Path) -> bool:
             "## Key Takeaways\n\n"
             "*None yet.*\n\n"
             "## Flagged Contradictions\n\n"
-            "*None yet.*\n"
+            "*None yet.*\n",
+            encoding="utf-8",
         )
 
     manifest_json = vault_path / ".manifest.json"
     if not manifest_json.exists():
-        manifest_json.write_text("{}\n")
+        manifest_json.write_text("{}\n", encoding="utf-8")
 
     app_json = vault_path / ".obsidian" / "app.json"
     if not app_json.exists():
@@ -511,12 +514,15 @@ def scaffold_vault(vault_path: Path) -> bool:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
 
     appearance_json = vault_path / ".obsidian" / "appearance.json"
     if not appearance_json.exists():
-        appearance_json.write_text(json.dumps({"baseFontSize": 16}, indent=2) + "\n")
+        appearance_json.write_text(
+            json.dumps({"baseFontSize": 16}, indent=2) + "\n", encoding="utf-8"
+        )
 
     return created
 

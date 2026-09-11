@@ -70,7 +70,7 @@ def configure_sync(vault_path: Path, remote: str) -> list[str]:
 
     gitignore = vault_path / ".gitignore"
     if not gitignore.is_file():
-        gitignore.write_text(GITIGNORE_CONTENT)
+        gitignore.write_text(GITIGNORE_CONTENT, encoding="utf-8")
         messages.append("Created .gitignore in vault")
     else:
         # An existing .gitignore is the user's file — never edit it. Just point

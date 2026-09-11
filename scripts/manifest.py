@@ -40,7 +40,7 @@ def load_manifest(vault: str) -> dict:
     mp = manifest_path(vault)
     if not os.path.exists(mp):
         return {"version": 1, "sources": {}, "projects": {}, "stats": {}}
-    with open(mp) as f:
+    with open(mp, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -97,7 +97,7 @@ def cmd_normalize(args: argparse.Namespace) -> int:
         return 0
     m["sources"] = new_sources
     mp = manifest_path(args.vault)
-    with open(mp, "w") as f:
+    with open(mp, "w", encoding="utf-8") as f:
         json.dump(m, f, indent=2)
         f.write("\n")
     print(f"wrote {mp}")
