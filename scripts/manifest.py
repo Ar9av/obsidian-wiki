@@ -100,12 +100,22 @@ def load_manifest(vault: str) -> dict:
         return json.load(f)
 
 
+def _ingested_at(entry: dict) -> str:
+    """The entry's ingest timestamp under either field name.
+
+    `cache.py` writes `last_ingested`; older skill-written manifests use
+    `ingested_at`. Reading only one name silently yields "" for the other shape,
+    which makes every comparison against it fall through.
+    """
+    return str(entry.get("ingested_at") or entry.get("last_ingested") or "")
+
+
 def _newest(a: dict, b: dict) -> dict:
     """Merge two entries for the same file, preferring the newer ingested_at and
     unioning the pages_created / pages_updated / pages_produced lists."""
     keep = a
     other = b
-    if str(b.get("ingested_at", "")) > str(a.get("ingested_at", "")):
+    if _ingested_at(b) > _ingested_at(a):
         keep, other = b, a
     merged = dict(keep)
     for field in ("pages_created", "pages_updated", "pages_produced"):
@@ -304,7 +314,7 @@ def cmd_delta(args: argparse.Namespace) -> int:
             new.append(ckey)
         else:
             mtime = os.path.getmtime(path)
-            ingested = str(entry.get("ingested_at", ""))
+            ingested = _ingested_at(entry)
             # modified if file changed after it was last ingested
             from datetime import datetime, timezone
 

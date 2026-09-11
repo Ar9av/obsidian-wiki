@@ -156,6 +156,24 @@ class MigrateTest(unittest.TestCase):
         self.assertEqual(entry["ingested_at"], "2026-02-01")
         self.assertEqual(sorted(entry["pages_produced"]), ["a.md", "b.md"])
 
+    def test_collision_merges_keeping_newest_last_ingested(self) -> None:
+        # cache.py writes `last_ingested`, not `ingested_at`. Reading only the
+        # latter made every real-manifest collision fall through to first-seen
+        # order, so a stale entry could win over the newer one.
+        (self.vault / "Raw").mkdir()
+        src = self.vault / "Raw" / "x.pdf"
+        messy = str(self.vault / "Raw" / "sub" / ".." / "x.pdf")
+        self._write(
+            {
+                str(src): {"last_ingested": "2026-01-01", "content_hash": "old"},
+                messy: {"last_ingested": "2026-02-01", "content_hash": "new"},
+            }
+        )
+        self._run()
+        entry = json.loads(self.manifest.read_text())["sources"]["Raw/x.pdf"]
+        self.assertEqual(entry["last_ingested"], "2026-02-01")
+        self.assertEqual(entry["content_hash"], "new")
+
     def test_non_portable_unnormalized_key_is_rewritten(self) -> None:
         # A non-portable absolute key with ".." is still normalized in spelling;
         # the write gate must not skip it while claiming "already portable".
