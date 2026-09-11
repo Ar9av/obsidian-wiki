@@ -141,6 +141,35 @@ obsidian-wiki sessions-name --from names.json      # or - for stdin
 
 `sessions-name` takes a JSON array of `{"id": N, "name": "...", "summary": "..."}`. The `/session-brain` skill generates this for you.
 
+## Staged writes
+
+With `WIKI_STAGED_WRITES=true`, skills write pages into `_staging/` for review instead of straight into the vault. These commands are the mechanical half of that workflow — `/wiki-stage-commit` calls them.
+
+| Command | What it does |
+|---|---|
+| `staging list` | Inventory `_staging/`, with each file's kind and content revisions |
+| `staging promote <path>` | Move a staged page to its live path |
+| `staging discard <path>` | Move a staged file back to `_raw/rejected-…` |
+
+```bash
+obsidian-wiki staging list --json
+
+# Promote a reviewed page, refusing if either side changed since you looked.
+obsidian-wiki staging promote concepts/attention.md \
+  --expect-staged 9f2c… --expect-live 41ab…
+
+# A page that did not exist live when you reviewed it.
+obsidian-wiki staging promote concepts/new-idea.md --expect-new
+
+obsidian-wiki staging discard concepts/rejected-draft.md
+```
+
+Promotion is a rename, so the page that lands is byte-for-byte the one that was reviewed — arbitrary frontmatter, prose and wikilinks all survive untouched.
+
+The revision flags are optional but are the point of the command: an agent can write to `_staging/` or to the live page while a human is mid-review. When a pin no longer matches, nothing moves and the command exits **9** with `conflict:` on stderr — distinct from exit 1 for bad input, so a caller can tell "re-read and ask again" from "you passed something wrong".
+
+`.patch.md` files are listed with `kind: patch` and refused by `promote`: merging a human-readable diff into a page whose surrounding text may have moved is judgment, and belongs to the skill.
+
 ## Vault syncing
 
 | Command | What it does |

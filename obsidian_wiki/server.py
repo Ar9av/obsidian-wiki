@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from obsidian_wiki.cache import _iter_entries
 from obsidian_wiki.context_pack import ContextError, build_context_pack
 from obsidian_wiki.graphrag import query as graph_query
+from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.sync import _git
 
@@ -48,11 +49,10 @@ if not API_KEY and not ANONYMOUS:
 
 def _resolve(rel: str) -> Path:
     """Resolve a caller-supplied path inside the vault, or refuse."""
-    root = VAULT.resolve()
-    target = (root / rel).resolve()
-    if target != root and root not in target.parents:
-        raise HTTPException(400, f"path escapes the vault: {rel}")
-    return target
+    try:
+        return resolve_in_vault(VAULT, rel)
+    except StagingError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _slug(title: str) -> str:
@@ -342,22 +342,23 @@ def staging() -> dict[str, Any]:
     difflib emits plain text and the UI inserts it as textContent, so
     agent-authored markdown never reaches the browser as HTML.
     """
-    root = VAULT / "_staging"
+    def lines(path: Path) -> list[str]:
+        if not path.is_file():
+            return []
+        return path.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+
     items = []
-    for staged in (sorted(root.rglob("*.md")) if root.is_dir() else []):
-        rel = staged.relative_to(root)
-        live = VAULT / rel
-        new = staged.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-        old = (
-            live.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
-            if live.is_file() else []
+    for entry in list_staged(VAULT):
+        item = entry.as_dict()
+        item["diff"] = "".join(
+            difflib.unified_diff(
+                lines(VAULT / entry.live_path),
+                lines(VAULT / entry.staged_path),
+                "live",
+                "staged",
+            )
         )
-        items.append({
-            "staged_path": str(staged.relative_to(VAULT)),
-            "live_path": str(rel),
-            "kind": "update" if live.is_file() else "new",
-            "diff": "".join(difflib.unified_diff(old, new, "live", "staged")),
-        })
+        items.append(item)
     return {"count": len(items), "items": items}
 
 

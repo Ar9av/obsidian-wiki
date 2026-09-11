@@ -1561,6 +1561,72 @@ def _schema_options(
     }
 
 
+def cmd_staging(args: argparse.Namespace) -> int:
+    """List, promote, or discard staged pages.
+
+    Mirrors `/wiki-stage-commit`, which now calls this instead of restating the
+    steps. Revision pins are opt-in: pass them for a reviewed decision, omit them
+    for an unattended `--all`.
+    """
+    from obsidian_wiki.staging import (
+        StagingConflict,
+        StagingError,
+        discard,
+        list_staged,
+        log_decisions,
+        promote,
+    )
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+
+    if args.staging_action == "list":
+        entries = [entry.as_dict() for entry in list_staged(vault)]
+        if args.json:
+            print(json.dumps(entries, indent=2) if args.pretty else json.dumps(entries))
+        elif not entries:
+            print("Nothing staged.")
+        else:
+            for entry in entries:
+                print(f"{entry['kind']:>6}  {entry['live_path']}  ({entry['staged_path']})")
+            print(f"\n{len(entries)} staged file(s)")
+        return 0
+
+    if not args.path:
+        print(f"error: `staging {args.staging_action}` needs a path", file=sys.stderr)
+        return 1
+
+    try:
+        if args.staging_action == "promote":
+            result = promote(
+                vault,
+                args.path,
+                expected_staged_revision=args.expect_staged,
+                expected_live_revision=args.expect_live,
+                pin_live_absent=args.expect_new,
+            )
+        else:
+            result = discard(vault, args.path)
+    except StagingConflict as exc:
+        # Distinct exit code: a conflict is "re-read and retry", not "bad input".
+        print(f"conflict: {exc}", file=sys.stderr)
+        return 9
+    except StagingError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    log_decisions(vault, [result])
+    if args.json:
+        print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    elif result["action"] == "promote":
+        print(f"promoted {result['staged_path']} -> {result['live_path']} ({result['kind']})")
+    else:
+        print(f"discarded {result['staged_path']} -> {result['raw_path']}")
+    return 0
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from obsidian_wiki.lint import lint_vault
 
@@ -2154,6 +2220,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cdu.add_argument("--pretty", action="store_true", help="print a human-readable summary instead of JSON")
     cdu.set_defaults(func=cmd_code_understand)
+
+    st = sub.add_parser(
+        "staging",
+        help="list, promote, or discard pages waiting in _staging/ (WIKI_STAGED_WRITES)",
+    )
+    st.add_argument("staging_action", choices=["list", "promote", "discard"], help="what to do")
+    st.add_argument("path", nargs="?", help="staged path, as printed by `staging list`")
+    st.add_argument("--vault", dest="vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    st.add_argument("--expect-staged", metavar="SHA", help="refuse if the staged file no longer matches this revision")
+    st.add_argument("--expect-live", metavar="SHA", help="refuse if the live page no longer matches this revision")
+    st.add_argument(
+        "--expect-new",
+        action="store_true",
+        help="refuse if a live page has appeared since review (pairs with kind=new)",
+    )
+    st.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    st.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    st.set_defaults(func=cmd_staging)
 
     dr = sub.add_parser(
         "doctor",
