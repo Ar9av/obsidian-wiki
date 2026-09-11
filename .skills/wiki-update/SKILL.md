@@ -193,13 +193,14 @@ After creating/updating pages:
 
 ### Update `.manifest.json`
 
-Add or update this project's entry:
+Add or update this project's entry. The project identity must be portable across machines: record the repository URL in `source_repo` (from `git remote get-url origin`, normalised to `host/owner/name`), and only an optional `source_cwd_hint` for where this machine happens to have it checked out. Never write a machine absolute path — see `llm-wiki/SKILL.md` → `.manifest.json` (Source key contract v2).
 
 ```json
 {
   "projects": {
     "<project-name>": {
-      "source_cwd": "/absolute/path/to/project",
+      "source_repo": "github.com/owner/<project-name>",
+      "source_cwd_hint": "~/code/<project-name>",
       "last_synced": "TIMESTAMP",
       "last_commit_synced": "abc123f",
       "pages_in_vault": ["projects/<project-name>/<project-name>.md", "..."]
@@ -207,6 +208,8 @@ Add or update this project's entry:
   }
 }
 ```
+
+If the project is not a git repository, use a `repo:<stable-name>` pseudo-key for `source_repo` and keep `source_cwd_hint` as the only location field.
 
 ### Update `index.md`
 
@@ -216,7 +219,7 @@ Add entries for any new pages created.
 
 Append:
 ```
-- [TIMESTAMP] WIKI_UPDATE project=<project-name> pages_updated=X pages_created=Y source_cwd=/path/to/project
+- [TIMESTAMP] WIKI_UPDATE project=<project-name> pages_updated=X pages_created=Y source_repo=github.com/owner/<project-name>
 ```
 
 ### Update `hot.md`

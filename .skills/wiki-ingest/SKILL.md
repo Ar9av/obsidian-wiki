@@ -54,12 +54,13 @@ Only ingest sources that are **new or modified** since last ingest. Use the buil
 obsidian-wiki cache-check "$OBSIDIAN_VAULT_PATH" <source1> [source2 ...]
 ```
 
-Output: `{"new": [...], "modified": [...], "unchanged": [...], "missing": [...]}`.
+Output: `{"new": [...], "modified": [...], "unchanged": [...], "missing": [...], "unavailable": [...]}`.
 
 - `new` → ingest these
 - `modified` → re-ingest these (content changed since last run)
 - `unchanged` → skip entirely — hash matches, content is identical
-- `missing` → in manifest but no longer on disk; skip and optionally clean up
+- `missing` → vault-local source in the manifest that is no longer on disk; skip and optionally clean up
+- `unavailable` → machine-local source (home-relative or absolute key) that is absent on this machine, e.g. a synced entry from another host; skip it, do **not** treat it as missing or clean it up
 
 After ingesting each source, record its hash:
 
@@ -459,7 +460,7 @@ After writing pages, check that wikilinks work in both directions. If page A lin
 
 ### Step 7: Update Manifest and Special Files
 
-**`.manifest.json`** — For each source file ingested, add or update its entry:
+**`.manifest.json`** — For each source file ingested, add or update its entry. The **key** must be a portable source key (contract v2 in `llm-wiki/SKILL.md` → `.manifest.json`): vault-relative when the source is inside the vault (`Raw/articles/foo.pdf`), `~`-relative when under `$HOME` (`~/.claude/...`), or a pseudo-key (`repo:`/`url:`/`agent:`) when neither applies. **Never key an entry by a machine absolute path.** The value is:
 ```json
 {
   "content_hash": "sha256:<64-char-hex>",
@@ -469,11 +470,12 @@ After writing pages, check that wikilinks work in both directions. If page A lin
   "project": "project-name-or-null"
 }
 ```
+The page's `sources:` frontmatter uses the same key form as the manifest entry, so provenance stays portable too.
 `content_hash`, `last_ingested`, and `pages_produced` are the three fields `cache.py` reads and writes (`cache-check` / `cache-update`) — the field names must match exactly or incremental-skip detection breaks. `content_hash` is the SHA-256 of the file contents at ingest time; it's the primary skip signal on subsequent runs, so always write it. `source_type` and `project` are advisory metadata for your own bookkeeping — the cache layer doesn't read them.
 
 Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
-**In parallel runs** (batch fan-out, or while the Docker server is writing the same vault), record sources with `obsidian-wiki cache-update` rather than hand-editing `.manifest.json`. That command takes an advisory lock and writes atomically; concurrent hand edits are a plain read-modify-write and silently drop whichever entry lands second.
+**In parallel runs** (batch fan-out, or while the Docker server is writing the same vault), record sources with `obsidian-wiki cache-update` rather than hand-editing `.manifest.json`. That command takes an advisory lock, writes atomically, and normalises the key to the portable form; concurrent hand edits are a plain read-modify-write and silently drop whichever entry lands second. For a source with no portable path form, pass its pseudo-key explicitly: `obsidian-wiki cache-update <vault> <path> --key repo:github.com/owner/name`.
 
 If the manifest doesn't exist yet, create it with `version: 1`.
 

@@ -136,6 +136,8 @@ Every page carries required frontmatter: `title`, `category`, `tags`, `sources`,
 
 `.manifest.json` is the one file several writers touch at once — parallel ingest subagents from `batch-plan`, and the Dockerized server writing a vault a local skill is also using. Updates to it go through `obsidian-wiki cache-update`, which takes an advisory lock (`.manifest.lock`) and replaces the file atomically. Hand-editing the manifest in a parallel run bypasses that and drops whichever write lands second. The prose files take no lock: `log.md` is append-only, and `index.md`/`hot.md` are rewritten wholesale by whichever skill last ran.
 
+Manifest `sources` keys (and page `sources:` frontmatter) are portable: vault-relative for in-vault sources, `~`-relative under `$HOME`, or a `repo:`/`url:`/`agent:` pseudo-key — never a machine absolute path, because the vault is synced across machines. Legacy absolute keys keep working, and `scripts/manifest.py migrate <vault>` rewrites them. See [CLI Reference → Source keys and legacy migration](cli.md#source-keys-and-legacy-migration).
+
 ## Core principles
 
 - **Compile, don't retrieve.** The wiki is pre-compiled knowledge. Update existing pages — don't append or duplicate.

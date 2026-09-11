@@ -38,7 +38,7 @@ Commands other than `setup`, `info`, and `doctor` warn you when the install has 
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, and orphans |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten) |
 
 ```bash
 obsidian-wiki query "what do I know about MCP security?"
@@ -213,8 +213,8 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `graph-analyse <vault> [--top N] [--snapshot] [--diff-against FILE]` | Graph analysis in pure Python (the graphify algorithm family): god nodes (degree), bridge pages (Brandes betweenness centrality), communities with cohesion scores, cross-community surprising connections, suggested questions, and — with `--diff-against` a previous `_insights.md` — a graph diff. Vault bookkeeping files (`index`, `log`, `hot`, `_insights`) are excluded. |
 | `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
-| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json` |
-| `cache-update <vault> <source>` | Record a source's SHA-256 in `.manifest.json` after ingest |
+| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable` |
+| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME` |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
 | `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. `--backend` beats the resolved `CODE_UNDERSTANDING_*` config (env → project `.env` → global config). Used by wiki-update Step 3b. |
@@ -231,6 +231,7 @@ obsidian-wiki graph-analyse /path/to/vault --around attention --depth 2 --direct
 obsidian-wiki batch-plan /path/to/vault ~/research --max-mb 4 --max-files 30
 obsidian-wiki cache-check /path/to/vault ~/research/*.pdf
 obsidian-wiki cache-update /path/to/vault ~/research/paper.pdf --pages concepts/attention.md
+obsidian-wiki cache-update /path/to/vault /srv/data/report.pdf --key repo:github.com/acme/reports
 obsidian-wiki ast-extract ./src --pretty
 obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
@@ -244,6 +245,40 @@ Most commands accept `--json` and/or `--pretty` for machine-readable output.
 `cache-update` therefore takes an advisory lock (`.manifest.lock` in the vault root, `O_CREAT|O_EXCL`, stdlib only so it works on Windows) and writes the manifest atomically via a temp file plus `os.replace`. A reader never sees a partial file, and a crashed writer's lock is stolen after 60 seconds.
 
 In parallel runs, always update the manifest through `obsidian-wiki cache-update` rather than hand-editing `.manifest.json` — hand edits bypass the lock.
+
+### Source keys and legacy migration
+
+Manifest `sources` keys — and the `sources:` frontmatter on pages — are **portable**. A vault is synced across machines, so a stored key is one of:
+
+| Source location | Key form | Example |
+|---|---|---|
+| Inside the vault | vault-relative | `Raw/papers/attention.pdf` |
+| Under `$HOME` | `~`-relative | `~/.claude/projects/.../abc123.jsonl` |
+| Not a file at all | pseudo-key | `url:https://example.com/article`, `repo:github.com/o/n`, `agent:claude/<id>` |
+
+A pseudo-key is any `scheme:`/`://` identifier — the shape is what matters (it can never be mistaken for a file path), not a fixed list of names. Recommended names are `repo:` for a git remote, `url:` for a canonical URL, and `agent:` for a session log.
+
+`cache-update` normalises the key automatically. Pass `--key` for a source with no portable path form — the explicit key is authoritative, and re-keys an entry the manifest previously tracked by path. If a source is outside the vault and `$HOME` and no `--key` is given, the absolute path is stored for backward compatibility but a `no portable key` warning goes to stderr.
+
+To convert a manifest that already holds legacy absolute keys:
+
+```bash
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault --dry-run
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault
+```
+
+`migrate` rewrites in-vault keys to vault-relative and `$HOME` keys to `~`-relative, merges collisions, and leaves pseudo-keys and unclassifiable paths untouched (warning on the latter). `normalize` is kept as an alias for older instructions.
+
+**After moving a vault between machines**, its absolute keys are rooted at the *old* vault path, so neither the new vault root nor `$HOME` matches them and a plain `migrate` cannot strip anything. When that happens the summary says `nothing portable to write — N key(s) kept non-portable` (it never claims `already portable` while absolute keys remain) and tells you to pass the old root explicitly. Repeat the flag if the vault lived at more than one location:
+
+```bash
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault \
+  --from-root /old/machine/path/to/vault --dry-run
+```
+
+`--from-root` takes precedence over the current-vault/`$HOME` rules for keys under it. It does not help with keys from *outside* any vault (e.g. another host's `~/.claude` or `~/.hermes` cache): those have no portable path form, so record them with an explicit key (`agent:` or your own scheme) instead.
+
+`python3 scripts/manifest.py delta <vault> --scan '<glob>'` lists new/modified sources, honouring `WIKI_SKIP_PROJECTS`.
 
 ### Graph cache
 
