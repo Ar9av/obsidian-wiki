@@ -73,6 +73,7 @@ Output fields:
 - **`path`**: for multi-hop queries, the shortest wikilink path between the two concepts
 - **`god_nodes_relevant`**: hub pages related to your query terms — always useful context
 - **`index_only`**: if `true`, the top candidate's summary already answers the question — skip page reads
+- **`temporal`**: `as_of`, `retrievable`, `excluded_historical` — how many pages the event-time filter held back (see below)
 
 **Structural intents** — these are answered entirely from the graph. The user's phrasing routes automatically:
 
@@ -94,6 +95,29 @@ Report the `graph` payload directly — do **not** re-derive it by reading pages
 4. Otherwise → open only `should_read` pages (not all candidates). This replaces the speculative 5–10 page reads the old flow required.
 
 > The graph used here excludes vault bookkeeping files (`index.md`, `log.md`, `hot.md`, `_insights.md`). They link to nearly every page, so including them made any two pages look ~2 hops apart and produced meaningless `A → index → B` paths.
+
+**Event time.** Pages may carry `valid_from` / `valid_until` / `superseded_by`
+frontmatter. A page whose `valid_until` has passed is **historical**: it stays in
+the vault and in the graph, but drops out of `candidates` by default, so "which X
+do we use?" answers with what is true *now* rather than whatever was written first.
+
+- When `temporal.excluded_historical` is non-zero, say so if it is material to the
+  answer — the user may be asking about the superseded state.
+- If the question is about the past ("what did we use in 2025", "before the
+  migration"), re-run with `--as-of YYYY-MM-DD` to retrieve what held then.
+- Use `--include-historical` when the user explicitly wants the whole history, or
+  when you are tracing how a decision changed.
+- A returned candidate carrying `superseded_by` names its replacement — follow it
+  rather than reporting the stale claim as current.
+
+```bash
+obsidian-wiki graph-query "$OBSIDIAN_VAULT_PATH" "<question>" --as-of 2025-06-01 --pretty
+obsidian-wiki graph-query "$OBSIDIAN_VAULT_PATH" "<question>" --include-historical --pretty
+```
+
+The structural intents ignore this filter on purpose: deleting a page still breaks
+the historical pages that link to it, so a blast radius must not shrink just
+because a dependent is no longer current.
 
 **Fallback** (if `obsidian-wiki` is not installed): proceed with Step 1 as normal using grep and index.md.
 

@@ -246,8 +246,17 @@ class TestClassifyQuery:
     def test_gap_query_strips_trailing_punctuation(self):
         # A trailing "?" used to survive on the gap path, leaving a term like
         # "mise?" that can never match a title, tag or summary.
-        _, terms = classify_query("What do I know about mise?")
+        _, terms = classify_query("What don't I know about mise?")
         assert terms == ["mise"]
+
+    def test_only_the_negated_form_is_a_gap_question(self):
+        # "what do I know about X" is the plain lookup the wiki-query skill
+        # documents; it used to fall down the gap branch.
+        for q in ("What don't I know about mise?", "What do I not know about mise?",
+                  "what gaps are there?", "what's missing?"):
+            assert classify_query(q)[0] == "gap", q
+        for q in ("What do I know about mise?", "what do I know about attention"):
+            assert classify_query(q)[0] == "direct", q
 
     def test_list_query_strips_trailing_punctuation(self):
         _, terms = classify_query("List all pages about transformers?")
@@ -404,7 +413,8 @@ class TestStructuralClassification:
         ("how is transformer connected to embedding", "path"),
         ("what connects transformer and embedding", "path"),
         ("list all pages about nlp", "list"),
-        ("what do I know about attention", "gap"),      # pre-existing gap pattern
+        ("what don't I know about attention", "gap"),
+        ("what do I know about attention", "direct"),   # plain lookup, not a gap
         ("attention mechanism", "direct"),
     ])
     def test_existing_intents_unchanged(self, q, expected):
@@ -446,7 +456,7 @@ class TestStructuralAnswers:
 
     def test_non_structural_query_has_no_graph_payload(self, simple_vault):
         assert query(simple_vault, "attention mechanism")["graph"] is None
-        assert query(simple_vault, "what do I know about attention")["graph"] is None
+        assert query(simple_vault, "what don't I know about attention")["graph"] is None
 
     def test_structural_queries_need_no_page_reads(self, simple_vault):
         for q in ("what's central in my vault", "what clusters do I have",

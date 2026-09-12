@@ -54,9 +54,10 @@ from obsidian_wiki.graph_analysis import (  # noqa: E402
     iter_pages,
     shortest_path,
 )
+from obsidian_wiki.temporal import is_current, parse_date, superseded_target  # noqa: E402
 
 __all__ = ["SKIP_DIRS", "SKIP_ROOT_FILES", "build_index", "classify_query",
-           "find_path", "query", "rank_candidates"]
+           "current_pages", "find_path", "query", "rank_candidates"]
 
 
 def _extract_scalar(front: str, key: str) -> str:
@@ -147,6 +148,11 @@ def build_index(vault: Path) -> dict[str, dict]:
             "category": category,
             "tier": tier,
             "path": str(page.relative_to(vault)),
+            # Event-time validity (see obsidian_wiki.temporal). Absent on every
+            # page that doesn't opt in, which `is_current` reads as "current".
+            "valid_from": _extract_scalar(front, "valid_from"),
+            "valid_until": _extract_scalar(front, "valid_until"),
+            "superseded_by": superseded_target(_extract_scalar(front, "superseded_by")),
             "out_links": [],
             "in_links": [],
         }
@@ -214,6 +220,18 @@ def _score(slug: str, entry: dict, terms: list[str]) -> float:
     return score
 
 
+def current_pages(index: dict[str, dict], as_of: Any = None) -> dict[str, dict]:
+    """The subset of `index` whose claims held at `as_of` (default today).
+
+    Only *retrieval* is filtered. The graph itself keeps every page, because
+    the structural intents (`impact`, `bridges`, `hubs`, `clusters`) ask about
+    the shape of the vault, and that shape is not a function of what is true
+    today — deleting a page still breaks the historical pages that link to it.
+    """
+    when = parse_date(as_of) if isinstance(as_of, str) else as_of
+    return {slug: entry for slug, entry in index.items() if is_current(entry, when)}
+
+
 def rank_candidates(
     index: dict[str, dict],
     terms: list[str],
@@ -270,9 +288,19 @@ _PATH_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# Only the NEGATED forms are gap questions. "what do I know about X" is the
+# canonical plain lookup (it's the phrasing the wiki-query skill documents), and
+# an earlier `(?:do|don'?t) I (?:not )?know` matched it too, sending ordinary
+# retrieval down the gap branch.
 _GAP_PATTERNS = re.compile(
-    r"what (?:do|don'?t) I (?:not )?know about|what.?s missing|what gaps|open questions",
+    r"what don'?t I know about|what do I not know about"
+    r"|what.?s missing|what gaps|open questions",
     re.IGNORECASE,
+)
+
+#: Prefix stripped off a gap question before its terms are extracted.
+_GAP_PREFIX_RE = re.compile(
+    r"what (?:do|don'?t) I (?:not )?know about|what.?s missing", re.IGNORECASE
 )
 
 _LIST_PATTERNS = re.compile(
@@ -384,7 +412,7 @@ def classify_query(question: str) -> tuple[str, list[str]]:
 
     if _GAP_PATTERNS.search(question):
         # Extract what the gap is about
-        terms = _split_terms(re.sub(r"what (?:do|don't) I (?:not )?know about|what.?s missing", "", question, flags=re.IGNORECASE))
+        terms = _split_terms(_GAP_PREFIX_RE.sub("", question))
         return "gap", terms
 
     if _LIST_PATTERNS.search(question):
@@ -545,12 +573,28 @@ def _community_labels(index: dict[str, dict], communities: list[set[str]]) -> di
 # Main query entry point
 # ---------------------------------------------------------------------------
 
+def _temporal_fields(entry: dict) -> dict[str, str]:
+    """Event-time fields for a candidate, omitted entirely when unset.
+
+    Keeping them out of the payload when a page doesn't use them means the
+    `graph-query` JSON is byte-identical to before on a vault that hasn't
+    opted in, and an agent only ever sees a `superseded_by` that exists.
+    """
+    return {
+        key: entry[key]
+        for key in ("valid_from", "valid_until", "superseded_by")
+        if entry.get(key)
+    }
+
+
 def query(
     vault: Path,
     question: str,
     *,
     top_n: int = 8,
     max_should_read: int = 3,
+    as_of: Any = None,
+    include_historical: bool = False,
 ) -> dict[str, Any]:
     index = build_index(vault)
     if not index:
@@ -561,18 +605,39 @@ def query(
             "god_nodes_relevant": [],
             "should_read": [],
             "index_only": True,
+            "temporal": {
+                "as_of": None,
+                "include_historical": include_historical,
+                "retrievable": 0,
+                "excluded_historical": 0,
+            },
             "note": "Vault appears empty.",
         }
 
     answer_type, terms = classify_query(question)
 
-    # God nodes relevant to the query
+    # Event-time filter. Pages whose claims no longer hold drop out of
+    # retrieval but stay in the graph, so nothing is lost and `--as-of` can
+    # bring them back. `parse_date` raises on a malformed `as_of`, which is
+    # the caller's typo and should not be swallowed.
+    as_of_date = parse_date(as_of) if isinstance(as_of, str) else as_of
+    retrievable = index if include_historical else current_pages(index, as_of_date)
+    temporal = {
+        "as_of": as_of_date.isoformat() if as_of_date else None,
+        "include_historical": include_historical,
+        "retrievable": len(retrievable),
+        "excluded_historical": len(index) - len(retrievable),
+    }
+
+    # God nodes relevant to the query. Degree comes from the whole graph (a
+    # hub is a hub regardless of what is current), the emitted list does not.
     degree = {s: len(e["in_links"]) + len(e["out_links"]) for s, e in index.items()}
     god_slugs = sorted(degree, key=lambda s: -degree[s])[:10]
     term_set = {t.lower() for t in terms}
     god_relevant = [
         index[s]["path"] for s in god_slugs
-        if any(t in index[s]["title"].lower() or t in " ".join(index[s]["tags"]).lower() for t in term_set)
+        if s in retrievable
+        and any(t in index[s]["title"].lower() or t in " ".join(index[s]["tags"]).lower() for t in term_set)
     ][:5]
 
     path_result: list[str] = []
@@ -600,7 +665,7 @@ def query(
         if graph_answer is None:
             answer_type = "direct"   # couldn't resolve the subject — fall back
 
-    candidates = rank_candidates(index, terms, top_n=top_n)
+    candidates = rank_candidates(retrievable, terms, top_n=top_n)
 
     # Decide whether page reads are needed
     top_candidate = candidates[0] if candidates else None
@@ -633,6 +698,7 @@ def query(
                 "score": round(c["score"], 2),
                 "summary": c["summary"],
                 "tier": c["tier"],
+                **_temporal_fields(index[c["slug"]]),
             }
             for c in candidates
         ],
@@ -641,6 +707,7 @@ def query(
         "should_read": should_read,
         "index_only": index_only,
         "graph": graph_answer,
+        "temporal": temporal,
         "stats": {
             "indexed_pages": len(index),
             "query_terms": terms,

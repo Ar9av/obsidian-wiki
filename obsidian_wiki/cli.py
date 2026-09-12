@@ -1075,7 +1075,18 @@ def cmd_graph_query(args: argparse.Namespace) -> int:
     if not vault.is_dir():
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
-    result = query(vault, args.question, top_n=args.top, max_should_read=args.max_read)
+    try:
+        result = query(
+            vault,
+            args.question,
+            top_n=args.top,
+            max_should_read=args.max_read,
+            as_of=args.as_of,
+            include_historical=args.include_historical,
+        )
+    except ValueError as exc:
+        print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
+        return 1
     if args.pretty:
         print(json.dumps(result, indent=2))
     else:
@@ -1908,11 +1919,24 @@ def cmd_trust_check(args: argparse.Namespace) -> int:
 
 def _print_query(result: dict[str, object]) -> None:
     print(f"answer_type: {result['answer_type']}")
+    temporal = result.get("temporal") or {}
+    if temporal.get("as_of"):
+        print(f"as_of: {temporal['as_of']}")
+    if temporal.get("excluded_historical"):
+        print(
+            f"excluded {temporal['excluded_historical']} historical page(s) "
+            "— --include-historical or --as-of DATE to see them"
+        )
     candidates = result.get("candidates", [])
     if candidates:
         print("candidates:")
         for item in candidates:
             print(f"- {item['title']} ({item['page']}) score={item['score']}")
+            if item.get("valid_until"):
+                note = f"  valid until {item['valid_until']}"
+                if item.get("superseded_by"):
+                    note += f", superseded by {item['superseded_by']}"
+                print(note)
     path = result.get("path") or []
     if path:
         print("path:")
@@ -1937,7 +1961,18 @@ def cmd_query(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
 
-    result = query(vault, args.question, top_n=args.top, max_should_read=args.max_read)
+    try:
+        result = query(
+            vault,
+            args.question,
+            top_n=args.top,
+            max_should_read=args.max_read,
+            as_of=args.as_of,
+            include_historical=args.include_historical,
+        )
+    except ValueError as exc:
+        print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         if args.pretty:
             print(json.dumps(result, indent=2))
@@ -1946,6 +1981,58 @@ def cmd_query(args: argparse.Namespace) -> int:
     else:
         _print_query(result)
     return 0
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    from obsidian_wiki.evaluate import (
+        GoldError,
+        default_goldset_path,
+        load_goldset,
+        render_text,
+        run_eval,
+    )
+
+    vault_arg = args.vault or _read_config_value("OBSIDIAN_VAULT_PATH")
+    if not vault_arg:
+        print("error: vault not configured; pass --vault or run obsidian-wiki setup", file=sys.stderr)
+        return 1
+    vault = Path(vault_arg).expanduser().resolve()
+    if not vault.is_dir():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return 1
+
+    gold = Path(args.gold).expanduser() if args.gold else default_goldset_path(vault)
+    if not gold.is_file():
+        print(
+            f"error: no gold set at {gold}\n"
+            "       write one (JSONL: {\"q\": ..., \"expect\": [...]}) or pass --gold",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        cases = load_goldset(gold)
+        report = run_eval(
+            vault,
+            cases,
+            top_n=args.top,
+            max_read=args.max_read,
+            thresholds={
+                "min_recall": args.min_recall,
+                "min_mrr": args.min_mrr,
+                "min_intent": args.min_intent,
+            },
+        )
+    except GoldError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    report["gold"] = str(gold)
+
+    if args.json:
+        print(json.dumps(report, indent=2 if args.pretty else None))
+    else:
+        print(render_text(report, verbose=args.verbose), end="")
+    return 1 if report["status"] == "fail" else 0
 
 
 def cmd_context_pack(args: argparse.Namespace) -> int:
@@ -2057,6 +2144,16 @@ def build_parser() -> argparse.ArgumentParser:
     gq.add_argument("question", help="question to answer")
     gq.add_argument("--top", type=int, default=8, help="number of candidate pages to rank (default: 8)")
     gq.add_argument("--max-read", type=int, default=3, help="max pages to return in should_read (default: 3)")
+    gq.add_argument(
+        "--as-of",
+        metavar="DATE",
+        help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
+    )
+    gq.add_argument(
+        "--include-historical",
+        action="store_true",
+        help="also rank pages whose valid_until has passed",
+    )
     gq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     gq.set_defaults(func=cmd_graph_query)
 
@@ -2378,8 +2475,38 @@ def build_parser() -> argparse.ArgumentParser:
     qq.add_argument("--top", type=int, default=8, help="number of candidate pages to rank (default: 8)")
     qq.add_argument("--max-read", type=int, default=3, help="max pages to return in should_read (default: 3)")
     qq.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    qq.add_argument(
+        "--as-of",
+        metavar="DATE",
+        help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
+    )
+    qq.add_argument(
+        "--include-historical",
+        action="store_true",
+        help="also rank pages whose valid_until has passed",
+    )
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
+
+    ev = sub.add_parser(
+        "eval",
+        help="score the vault query index against a gold set (recall@k, MRR, intent accuracy)",
+    )
+    ev.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH")
+    ev.add_argument(
+        "--gold",
+        metavar="FILE",
+        help="JSONL gold set (default: <vault>/_meta/eval.jsonl)",
+    )
+    ev.add_argument("--top", type=int, default=10, help="candidates to rank per case (default: 10)")
+    ev.add_argument("--max-read", type=int, default=3, help="should_read cap per case (default: 3)")
+    ev.add_argument("--min-recall", type=float, help="fail below this recall@5 (CI gate)")
+    ev.add_argument("--min-mrr", type=float, help="fail below this MRR")
+    ev.add_argument("--min-intent", type=float, help="fail below this intent accuracy")
+    ev.add_argument("--verbose", action="store_true", help="list every missed case")
+    ev.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ev.set_defaults(func=cmd_eval)
 
     cp = sub.add_parser(
         "context-pack",

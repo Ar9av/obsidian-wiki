@@ -354,6 +354,43 @@ Append to the `LINT` log entry:
 ... relationship_issues=N
 ```
 
+### 14. Event-Time Validity
+
+Validate `valid_from` / `valid_until` / `superseded_by` frontmatter. All three are optional — skip pages that carry none of them.
+
+`created`/`updated` are ingestion time; these three are event time, when the claim itself was true. A page whose `valid_until` has passed is **historical**, not wrong: it stays in the vault and in the graph, and only drops out of default retrieval.
+
+**How to check:**
+- Grep frontmatter for `^valid_from:`, `^valid_until:`, `^superseded_by:` across all vault pages
+- For each page that has any of them:
+  1. **Date parseability** — each value must be `YYYY-MM-DD` or a full ISO 8601 timestamp. Flag anything else.
+  2. **Window order** — flag any page where `valid_until` precedes `valid_from`
+  3. **Dangling successor** — strip `[[`/`]]` from `superseded_by`, drop everything from the first `|` or `#`, strip `.md`, normalize, and check the page exists. Flag unresolved targets and self-references.
+
+`obsidian-wiki lint` reports all three as `temporal_errors` (dates, windows) and `superseded_dangling` (successors). A bracketed dangling successor also shows up in `broken_links`.
+
+**Why the dates fail rather than warn:** retrieval treats an unparseable window as current, so an unreported typo lets a stale claim answer as fact — the exact failure the fields exist to prevent.
+
+**How to fix:**
+- Unparseable date: rewrite as `YYYY-MM-DD`; if the real date is unknown, remove the field rather than guessing
+- Inverted window: confirm which date is wrong with the page's sources; never silently swap them
+- Dangling successor: create the replacement page, correct the pointer, or remove it if nothing replaced the claim
+- Never "fix" a historical page by rewriting it as current — that destroys the record the window exists to keep
+
+**Output additions:**
+
+```markdown
+### Event-Time Issues (N found)
+- `references/gateway-nginx.md` — valid_until (2026-04-01) precedes valid_from (2026-05-01)
+- `references/old-limits.md` — valid_until "soon" is not a date
+- `references/legacy-auth.md` — superseded_by "[[oauth-rollout]]" resolves to no page in vault
+```
+
+Append to the `LINT` log entry:
+```
+... temporal_issues=N
+```
+
 ### 11. Synthesis Gaps
 
 Identify high-value synthesis opportunities the wiki is missing — concept pairs that co-occur across many pages but have no `synthesis/` page connecting them.
