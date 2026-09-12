@@ -10,6 +10,11 @@ from typing import Any
 
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
+from obsidian_wiki.temporal import (
+    SUPERSEDED_FIELD,
+    superseded_target,
+    validity_window,
+)
 from obsidian_wiki.trust import (
     ALLOWED_LIFECYCLES,
     TRUST_LEDGER_RELATIVE_PATH,
@@ -261,6 +266,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "links": links,
         "relationships": _parse_relationships(frontmatter),
         "absolute_sources": _absolute_source_entries(frontmatter),
+        "values": values,
     }
 
 
@@ -435,6 +441,35 @@ def lint_vault(
                     }
                 )
 
+    # Event-time validity (obsidian_wiki.temporal). Malformed dates fail: a
+    # page whose window can't be parsed is silently treated as current by
+    # retrieval, so an unreported typo means a stale claim answers as fact.
+    # A dangling `superseded_by` only warns — the pointer is advisory, and the
+    # broken_links check already covers the wikilink if the body carries one.
+    temporal_errors: list[dict[str, str]] = []
+    superseded_dangling: list[dict[str, str]] = []
+    for page in pages:
+        try:
+            validity_window(page["values"])
+        except ValueError as exc:
+            temporal_errors.append({"page": page["path"], "issue": str(exc)})
+        raw_successor = page["values"].get(SUPERSEDED_FIELD, "")
+        if not raw_successor:
+            continue
+        successor = _slug(superseded_target(raw_successor))
+        if not successor:
+            temporal_errors.append(
+                {"page": page["path"], "issue": f"empty {SUPERSEDED_FIELD} value"}
+            )
+        elif successor == page["slug"]:
+            superseded_dangling.append(
+                {"page": page["path"], "target": successor, "issue": "self_reference"}
+            )
+        elif successor not in by_slug:
+            superseded_dangling.append(
+                {"page": page["path"], "target": successor, "issue": "missing_target"}
+            )
+
     ledger_path = vault / TRUST_LEDGER_RELATIVE_PATH
     trust_report = (
         check_trust_ledger(
@@ -467,6 +502,10 @@ def lint_vault(
         "machine_path_sources": machine_path_sources,
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
+        # Sorted by page: `_iter_pages` order is filesystem order, and these
+        # findings get diffed between CI runs.
+        "temporal_errors": sorted(temporal_errors, key=lambda item: item["page"]),
+        "superseded_dangling": sorted(superseded_dangling, key=lambda item: item["page"]),
         "confidence_missing_fields": confidence_missing_fields,
         "trust_metadata_errors": trust_metadata_errors,
         "confidence_review_stale": trust_report["stale"] if trust_report else [],
@@ -506,6 +545,7 @@ def lint_vault(
         counts["broken_links"]
         or counts["missing_frontmatter"]
         or counts["trust_metadata_errors"]
+        or counts["temporal_errors"]
         or trust_fails
     ):
         status = "fail"
@@ -519,6 +559,7 @@ def lint_vault(
                 "machine_path_sources",
                 "orphan_pages",
                 "typed_relationship_issues",
+                "superseded_dangling",
             )
         )
         or trust_findings_present

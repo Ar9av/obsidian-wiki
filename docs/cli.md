@@ -39,6 +39,7 @@ Commands other than `setup`, `info`, and `doctor` warn you when the install has 
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
 | `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten) |
+| `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash
 obsidian-wiki query "what do I know about MCP security?"
@@ -81,6 +82,118 @@ The check warns. A vault carrying a collision moves from `pass` to `warn`, which
 `draft → verified` is deliberately **not** flagged — ledger snapshots are sparse, so a legitimate intermediate `reviewed` may have happened between two reviews.
 
 The check warns by default and fails only under `--strict-trust`. Pages whose ledger entry predates the `lifecycle` field carry no baseline and are skipped silently, so existing vaults behave exactly as before until their next `trust-record`.
+
+## Event time (`valid_from` / `valid_until`)
+
+`created` and `updated` are *ingestion* time — when the vault learned something.
+Three optional frontmatter fields add *event* time, when the claim itself was true:
+
+```yaml
+valid_from: 2024-01-01
+valid_until: 2026-03-31           # inclusive: the last day the claim held
+superseded_by: "[[gateway-envoy]]"
+```
+
+A page whose `valid_until` has passed is **historical**, not wrong. It stays in the
+vault and stays in the graph — only retrieval skips it, so the same question gets
+different answers depending on when you ask:
+
+```bash
+obsidian-wiki query "which api gateway do we run?"
+# -> references/gateway-envoy.md
+
+obsidian-wiki query "which api gateway do we run?" --as-of 2025-06-01
+# -> references/gateway-nginx.md  (valid until 2026-03-31, superseded by gateway-envoy)
+
+obsidian-wiki query "which api gateway do we run?" --include-historical
+# -> both, historical ones labelled
+```
+
+| Flag | Effect |
+|---|---|
+| `--as-of DATE` | Retrieve what was true on `DATE` (`YYYY-MM-DD`) instead of today |
+| `--include-historical` | Also rank pages whose `valid_until` has passed |
+
+Both flags work on `query` and `graph-query`. The JSON response gains a `temporal`
+block (`as_of`, `retrievable`, `excluded_historical`), and any candidate that opted
+in carries its own `valid_from` / `valid_until` / `superseded_by` so an agent can
+follow the pointer to the replacement. Pages that don't use the fields are
+unaffected — they are current, always, and their JSON is byte-identical to before.
+
+**The structural intents deliberately ignore the filter.** `what breaks if I delete
+X`, `bridges`, `hubs`, and `clusters` ask about the shape of the vault, and deleting
+a page still breaks the historical pages that link to it.
+
+`lint` reads the same fields. A malformed or inverted window is a `temporal_errors`
+finding and **fails** — retrieval treats an unparseable window as current, so an
+unreported typo lets a stale claim answer as fact. A `superseded_by` pointing at a
+page that doesn't exist (or at itself) is a `superseded_dangling` finding; written
+as `"[[wikilink]]"` it is also a wikilink, so the pre-existing `broken_links` check
+fires and the vault **fails**, exactly as a typed `relationships:` target pointing
+at nothing does. Written as a plain `superseded_by: gateway-envoy` it only
+**warns**.
+
+## Retrieval evals
+
+`obsidian-wiki eval` scores what the query index returns against a gold set you
+write, so a ranking change gets compared to a number instead of eyeballed.
+
+```bash
+obsidian-wiki eval                                    # uses <vault>/_meta/eval.jsonl
+obsidian-wiki eval --gold bench/gold.jsonl --verbose
+obsidian-wiki eval --min-recall 0.9 --json            # CI gate; exit 1 below it
+```
+
+The gold set is JSONL, one case per line. Blank lines and `#` comments are skipped:
+
+```jsonl
+# plain lookups
+{"q": "what do I know about rate limiting?", "expect": ["concepts/rate-limiting.md"], "intent": "direct"}
+{"q": "how do I debug 429 responses?", "expect": ["skills/debugging-429s.md", "references/http-429.md"]}
+# structural intents — classification only
+{"q": "which pages bridge my clusters?", "intent": "bridges"}
+# event time — pin the date the page was still current
+{"q": "which api gateway did we run?", "as_of": "2025-06-01", "expect": ["references/gateway-nginx.md"]}
+```
+
+`expect` matches a page by vault-relative path, bare stem, or `[[wikilink]]`, so a
+gold set survives a page moving between category folders. A case needs `expect`,
+`intent`, or both — `expect` alone scores retrieval, `intent` alone scores
+classification, which is how the structural intents are covered.
+
+| Metric | What it measures |
+|---|---|
+| `recall@1/@3/@5` | Did an expected page come back in the top k |
+| `mrr` | Mean reciprocal rank of the first expected hit |
+| `intent_accuracy` | Did `classify_query` pick the right answer type |
+| `should_read_precision` | What fraction of pages the agent is told to open are wanted — the token-waste metric |
+
+Gate any of them in CI with `--min-recall` (recall@5), `--min-mrr`, or
+`--min-intent`. A metric with no cases to average reads `n/a` and **fails** its
+threshold rather than passing vacuously.
+
+### The bundled benchmark
+
+`tests/fixtures/bench/` holds a 15-page fixture vault and a 26-case gold set,
+gated by `tests/test_evaluate.py`. Current baseline on the pure-lexical index:
+
+| Metric | Score |
+|---|---|
+| recall@1 | 0.850 |
+| recall@3 | 0.950 |
+| recall@5 | 0.950 |
+| mrr | 0.900 |
+| intent_accuracy | 1.000 |
+| should_read_precision | 0.444 |
+
+```bash
+obsidian-wiki eval --vault tests/fixtures/bench/vault --gold tests/fixtures/bench/gold.jsonl --verbose
+```
+
+The gold set deliberately includes paraphrase cases that share no vocabulary with
+the target page ("why am I getting throttled?" for `debugging-429s`). Term matching
+returns nothing at all for those — that gap is the headroom a semantic index would
+close, and it is now measured rather than asserted.
 
 ## Context packs
 
