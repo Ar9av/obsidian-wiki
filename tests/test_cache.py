@@ -241,10 +241,10 @@ class TestUpdateSource:
 # ---------------------------------------------------------------------------
 
 class TestCacheCLI:
-    def _run(self, *args):
+    def _run(self, *args, cwd=None):
         return subprocess.run(
             [sys.executable, "-m", "obsidian_wiki.cli", *args],
-            capture_output=True, text=True,
+            capture_output=True, text=True, cwd=cwd,
         )
 
     def test_cache_hash_file(self, src_file):
@@ -293,6 +293,76 @@ class TestCacheCLI:
         assert proc.returncode == 0
         assert "no portable key" not in proc.stderr
         assert "repo:o/n" in _load_manifest(vault)
+
+
+class TestCacheCLIVaultRelativeSources:
+    """Relative source arguments must also resolve against the vault root.
+
+    The manifest stores vault-relative keys, and ``cache.resolve_key`` reads
+    them that way — so ``cache-update <vault> Raw/x.pdf`` has to work from any
+    CWD, not just when the shell happens to sit at the vault root.
+    """
+
+    @pytest.fixture
+    def vault(self, tmp_path):
+        v = tmp_path / "vault"
+        (v / "Raw" / "database").mkdir(parents=True)
+        (v / "Raw" / "database" / "x.pdf").write_bytes(b"pdf-bytes")
+        return v
+
+    def _run(self, *args, cwd=None):
+        return subprocess.run(
+            [sys.executable, "-m", "obsidian_wiki.cli", *args],
+            capture_output=True, text=True, cwd=cwd,
+        )
+
+    def test_cache_update_vault_relative_from_other_cwd(self, vault, tmp_path):
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        proc = self._run("cache-update", str(vault), "Raw/database/x.pdf",
+                         cwd=elsewhere)
+        assert proc.returncode == 0, proc.stderr
+        data = json.loads(proc.stdout)
+        assert data["key"] == "Raw/database/x.pdf"
+        assert "Raw/database/x.pdf" in json.dumps(_load_manifest(vault))
+
+    def test_cache_check_vault_relative_from_other_cwd(self, vault, tmp_path):
+        update_source(vault, vault / "Raw" / "database" / "x.pdf")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        proc = self._run("cache-check", str(vault), "Raw/database/x.pdf",
+                         cwd=elsewhere)
+        assert proc.returncode == 0, proc.stderr
+        data = json.loads(proc.stdout)
+        assert str(vault / "Raw" / "database" / "x.pdf") in data["unchanged"]
+        assert data["missing"] == []
+
+    def test_cache_update_cwd_relative_still_wins(self, vault, tmp_path):
+        # Backward compat: an out-of-vault relative path resolves against the
+        # CWD as before, even when the vault contains a same-named file.
+        workdir = tmp_path / "workdir"
+        (workdir / "Raw" / "database").mkdir(parents=True)
+        (workdir / "Raw" / "database" / "x.pdf").write_bytes(b"different-bytes")
+        proc = self._run("cache-update", str(vault), "Raw/database/x.pdf",
+                         cwd=workdir)
+        assert proc.returncode == 0, proc.stderr
+        data = json.loads(proc.stdout)
+        assert data["path"] == str(workdir / "Raw" / "database" / "x.pdf")
+
+    def test_cache_update_missing_source_clean_error(self, vault, tmp_path):
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        proc = self._run("cache-update", str(vault), "Raw/absent.md", cwd=elsewhere)
+        assert proc.returncode == 1
+        assert "Traceback" not in proc.stderr
+        assert str(elsewhere / "Raw" / "absent.md") in proc.stderr
+        assert str(vault / "Raw" / "absent.md") in proc.stderr
+
+    def test_cache_update_absolute_missing_clean_error(self, vault):
+        proc = self._run("cache-update", str(vault), str(vault / "Raw" / "gone.pdf"))
+        assert proc.returncode == 1
+        assert "Traceback" not in proc.stderr
+        assert str(vault / "Raw" / "gone.pdf") in proc.stderr
 
 
 class TestManifestLock:
