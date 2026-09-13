@@ -64,6 +64,25 @@ def test_load_pages_skips_control_and_staging_paths(tmp_path: Path) -> None:
     assert [page.path for page in load_pages(vault)] == ["AI/kept.md"]
 
 
+def test_load_pages_skips_tool_owned_directories(tmp_path: Path) -> None:
+    """A `.venv` (or any dot-dir / dependency tree) must not be packed as
+    knowledge — one `uv sync` in a project-vault would otherwise spend the
+    token budget on dependency READMEs."""
+    vault = tmp_path / "vault"
+    junk = (
+        ".venv/lib/python3.12/site-packages/somepkg/README.md",
+        ".trash/draft.md",
+        "node_modules/pkg/README.md",
+        "venv/readme.md",
+        "__pycache__/x.md",
+    )
+    for relative in junk:
+        write_note(vault, relative, "# dependency readme\n\nNo frontmatter here.\n")
+    write_note(vault, "AI/kept.md", "# Kept\n\nUseful knowledge.\n")
+
+    assert [page.path for page in load_pages(vault)] == ["AI/kept.md"]
+
+
 def test_public_only_filters_before_ranking(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     write_note(vault, "internal.md", "---\ntitle: Internal\ntags: [visibility/internal]\nsummary: Secret launch plan.\n---\n# Internal\n")

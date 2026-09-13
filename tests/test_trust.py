@@ -12,6 +12,7 @@ from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.trust import (
     build_trust_ledger,
     check_trust_ledger,
+    iter_trust_pages,
     page_fingerprint,
     update_trust_ledger,
     write_trust_ledger,
@@ -849,6 +850,29 @@ def test_lint_excludes_bootstrap_scaffolding_from_page_health(tmp_path: Path) ->
 
     serialized = json.dumps(report)
     assert "_bootstrap/README.md" not in serialized
+
+
+def test_iter_trust_pages_skips_tool_owned_directories(tmp_path: Path) -> None:
+    """A `.venv` inside a project-vault must not enter the ledger's page set —
+    the ledger would otherwise record reviews for dependency READMEs, and each
+    dependency upgrade would churn its entries."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    junk = (
+        ".venv/lib/python3.12/site-packages/somepkg/README.md",
+        ".trash/draft.md",
+        "node_modules/pkg/README.md",
+        "venv/readme.md",
+        "__pycache__/x.md",
+    )
+    for relative in junk:
+        path = vault / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# dependency readme\nno frontmatter\n", encoding="utf-8")
+
+    assert [page.relative_to(vault).as_posix() for page in iter_trust_pages(vault)] == [
+        "concepts/alpha.md"
+    ]
 
 
 def test_lint_flags_content_page_missing_trust_schema(tmp_path: Path) -> None:

@@ -166,6 +166,34 @@ def test_lint_vault_warns_on_duplicates_missing_summaries_and_orphans(tmp_path: 
     assert "references/beta.md" in report["findings"]["orphan_pages"]
 
 
+def test_lint_vault_ignores_tool_owned_directories(tmp_path: Path) -> None:
+    """A `.venv` (or any dot-dir / dependency tree) inside the vault must not
+    enter the findings — one `uv sync` in a project-vault would otherwise
+    sweep thousands of dependency READMEs into the CI baseline."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "references/beta.md")
+    junk = [
+        ".venv/lib/python3.12/site-packages/somepkg/README.md",
+        ".trash/draft.md",
+        "node_modules/pkg/README.md",
+        "venv/readme.md",
+        "__pycache__/x.md",
+    ]
+    for rel in junk:
+        path = vault / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# dependency readme\nno frontmatter\n", encoding="utf-8")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "pass"
+    assert report["stats"]["pages"] == 2
+    assert report["findings"]["missing_frontmatter"] == []
+    assert report["findings"]["orphan_pages"] == []
+    assert report["findings"]["missing_summaries"] == []
+
+
 def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
     home = tmp_path / "home"
     vault = tmp_path / "vault"
