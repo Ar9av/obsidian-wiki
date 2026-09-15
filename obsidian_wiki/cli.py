@@ -793,8 +793,7 @@ def _http_get_json(url: str, timeout: float) -> object:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _fetch_pypi_latest(timeout: float) -> str:
-    data = _http_get_json(_PYPI_JSON_URL, timeout)
+def _extract_pypi_version(data: object) -> str:
     version: object = None
     if isinstance(data, dict):
         info = data.get("info")
@@ -805,36 +804,37 @@ def _fetch_pypi_latest(timeout: float) -> str:
     return version.strip()
 
 
-def _fetch_github_latest(timeout: float) -> str:
-    errors: list[str] = []
-    try:
-        data = _http_get_json(_GITHUB_RELEASES_URL, timeout)
-        tag = data.get("tag_name") if isinstance(data, dict) else None
-        if isinstance(tag, str) and tag.strip():
-            return tag.strip()
-        errors.append("releases/latest has no tag_name")
-    except Exception as exc:
-        errors.append(f"releases/latest: {exc}")
-    data = _http_get_json(_GITHUB_TAGS_URL, timeout)
-    if isinstance(data, list) and data:
-        first = data[0]
-        name = first.get("name") if isinstance(first, dict) else None
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-    errors.append("tags have no name")
-    raise ValueError("malformed GitHub response (" + "; ".join(errors) + ")")
+def _extract_github_release(data: object) -> str:
+    tag = data.get("tag_name") if isinstance(data, dict) else None
+    if not isinstance(tag, str) or not tag.strip():
+        raise ValueError("releases/latest has no tag_name")
+    return tag.strip()
+
+
+def _extract_github_tag(data: object) -> str:
+    first = data[0] if isinstance(data, list) and data else None
+    name = first.get("name") if isinstance(first, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("tags have no name")
+    return name.strip()
+
+
+_LATEST_SOURCES: tuple[tuple[str, str, Callable[[object], str]], ...] = (
+    (_PYPI_JSON_URL, "pypi", _extract_pypi_version),
+    (_GITHUB_RELEASES_URL, "github", _extract_github_release),
+    (_GITHUB_TAGS_URL, "github", _extract_github_tag),
+)
 
 
 def _fetch_latest_from_network(timeout: float) -> tuple[str, str]:
     """Return (version, source). PyPI primary, GitHub fallback."""
-    try:
-        return _fetch_pypi_latest(timeout), "pypi"
-    except Exception as exc:
-        pypi_error = exc
-    try:
-        return _fetch_github_latest(timeout), "github"
-    except Exception as exc:
-        raise RuntimeError(f"PyPI check failed ({pypi_error}); GitHub fallback failed ({exc})")
+    errors: list[str] = []
+    for url, source, extract in _LATEST_SOURCES:
+        try:
+            return extract(_http_get_json(url, timeout)), source
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+    raise RuntimeError("version check failed (" + "; ".join(errors) + ")")
 
 
 def _version_cache_path() -> Path:

@@ -283,11 +283,12 @@ def test_github_fallback_source(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     monkeypatch.setattr(cli, "__version__", "2026.9.1")
 
-    def _pypi_down(_timeout: float) -> str:
-        raise urllib.error.URLError("connection refused")
+    def _fake_get(url: str, _timeout: float) -> object:
+        if "pypi.org" in url:
+            raise urllib.error.URLError("connection refused")
+        return {"tag_name": "v2026.10.5"}
 
-    monkeypatch.setattr(cli, "_fetch_pypi_latest", _pypi_down)
-    monkeypatch.setattr(cli, "_fetch_github_latest", lambda _timeout: "v2026.10.5")
+    monkeypatch.setattr(cli, "_http_get_json", _fake_get)
 
     report = run_doctor(
         check_updates=True,
