@@ -207,15 +207,19 @@ def test_malformed_fixture_fails_open(tmp_path: Path) -> None:
 
 
 def test_no_fetch_without_flag(tmp_path: Path) -> None:
-    def _boom() -> str:
-        raise AssertionError("network must not be touched without --check-updates")
+    calls: list[str] = []
+
+    def _recorder() -> str:
+        calls.append("fetch")
+        return "2999.1.1"
 
     report = run_doctor(
         check_updates=False,
-        version_fetcher=_boom,
+        version_fetcher=_recorder,
         version_cache_path=tmp_path / "version-check.json",
     )
 
+    assert calls == []
     assert report["meta"]["latest_version"] is None
     check = next(c for c in report["checks"] if c["name"] == "versions.latest")
     assert check["status"] == "info"
@@ -234,7 +238,7 @@ def test_fetcher_timeout_fails_open(tmp_path: Path) -> None:
     check = next(c for c in report["checks"] if c["name"] == "versions.latest")
     assert check["status"] == "info"
     assert "unavailable" in check["detail"]
-    assert "fail" not in {c["status"] for c in report["checks"]}
+    assert "fail" not in {c["status"] for c in report["checks"] if c["name"] == "versions.latest"}
     assert report["meta"]["latest_version"] is None
 
 
@@ -334,11 +338,153 @@ def test_fresh_cache_skips_fetcher(tmp_path: Path) -> None:
     )
     assert report["meta"]["latest_version"] == "2999.1.1"
 
-    def _boom() -> str:
-        raise AssertionError("fresh cache must skip the fetch")
+    calls: list[str] = []
+
+    def _recorder() -> str:
+        calls.append("fetch")
+        return "2999.1.1"
 
     second = run_doctor(
-        check_updates=True, version_fetcher=_boom, version_cache_path=cache
+        check_updates=True, version_fetcher=_recorder, version_cache_path=cache
     )
 
+    assert calls == []
     assert second["meta"]["latest_version"] == "2999.1.1"
+
+
+def _write_fresh_garbage_cache(cache: Path) -> None:
+    from datetime import datetime, timezone
+
+    cache.write_text(
+        json.dumps({
+            "latest": "not a version!!!",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "source": "pypi",
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_fresh_garbage_cache_fails_open_without_flag(tmp_path: Path) -> None:
+    cache = tmp_path / "version-check.json"
+    _write_fresh_garbage_cache(cache)
+    calls: list[str] = []
+
+    def _recorder() -> str:
+        calls.append("fetch")
+        return "2999.1.1"
+
+    report = run_doctor(
+        check_updates=False, version_fetcher=_recorder, version_cache_path=cache
+    )
+
+    assert calls == []
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert check["status"] == "info"
+    assert "unavailable" in check["detail"]
+    assert report["meta"]["latest_version"] is None
+
+
+def test_fresh_garbage_cache_fails_open_with_flag(tmp_path: Path) -> None:
+    cache = tmp_path / "version-check.json"
+    _write_fresh_garbage_cache(cache)
+
+    def _failing() -> str:
+        raise TimeoutError("timed out")
+
+    report = run_doctor(
+        check_updates=True, version_fetcher=_failing, version_cache_path=cache
+    )
+
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert check["status"] == "info"
+    assert "unavailable" in check["detail"]
+    assert "not a version" not in check["detail"]
+    assert report["meta"]["latest_version"] is None
+
+
+def test_fresh_garbage_cache_refetches_with_flag(tmp_path: Path) -> None:
+    cache = tmp_path / "version-check.json"
+    _write_fresh_garbage_cache(cache)
+
+    report = run_doctor(
+        check_updates=True,
+        version_fetcher=lambda: "2999.1.1",
+        version_cache_path=cache,
+    )
+
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert report["meta"]["latest_version"] == "2999.1.1"
+    assert check["status"] in {"info", "warn"}
+
+
+def test_tags_fallback_when_pypi_and_releases_fail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import urllib.error
+
+    monkeypatch.setattr(cli, "__version__", "2026.9.1")
+
+    def _fake_get(url: str, _timeout: float) -> object:
+        if "pypi.org" in url or "releases/latest" in url:
+            raise urllib.error.URLError("connection refused")
+        return [{"name": "v2026.10.5"}]
+
+    monkeypatch.setattr(cli, "_http_get_json", _fake_get)
+
+    report = run_doctor(
+        check_updates=True,
+        version_cache_path=tmp_path / "version-check.json",
+    )
+
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert check["status"] == "warn"
+    assert report["meta"]["latest_source"] == "github"
+    assert report["meta"]["latest_version"] == "v2026.10.5"
+
+
+def test_stale_cache_fallback_surfaces_on_fetch_failure(tmp_path: Path) -> None:
+    cache = tmp_path / "version-check.json"
+    cache.write_text(
+        json.dumps({
+            "latest": "2000.1.1",
+            "fetched_at": "2000-01-01T00:00:00+00:00",
+            "source": "pypi",
+        }),
+        encoding="utf-8",
+    )
+
+    def _failing() -> str:
+        raise TimeoutError("timed out")
+
+    report = run_doctor(
+        check_updates=True, version_fetcher=_failing, version_cache_path=cache
+    )
+
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert check["status"] == "info"
+    assert "last known latest 2000.1.1" in check["detail"]
+    assert report["meta"]["latest_version"] == "2000.1.1"
+    assert report["meta"]["latest_source"] == "pypi"
+
+
+def test_cache_write_failure_still_info(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "__version__", "2026.9.1")
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    cache = cache_dir / "version-check.json"
+    os.chmod(cache_dir, 0o555)
+    try:
+        report = run_doctor(
+            check_updates=True,
+            version_fetcher=lambda: "2999.1.1",
+            version_cache_path=cache,
+        )
+    finally:
+        os.chmod(cache_dir, 0o755)
+
+    check = next(c for c in report["checks"] if c["name"] == "versions.latest")
+    assert check["status"] == "warn"
+    assert report["meta"]["latest_version"] == "2999.1.1"

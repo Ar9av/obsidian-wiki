@@ -46,6 +46,8 @@ obsidian-wiki doctor --json --check-updates   # meta.latest_version / meta.lates
 
 A behind install is a `warn` (`pip install -U obsidian-wiki && obsidian-wiki setup`);
 an unreachable or malformed upstream is an `info` and never affects the exit code.
+`meta.latest_version` stores the raw upstream string (`v`-prefix preserved);
+comparison normalizes before comparing.
 
 ## Querying & linting
 

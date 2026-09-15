@@ -966,10 +966,27 @@ def _versions_latest_check(
     cache_path = version_cache_path or _version_cache_path()
     cached = _read_version_cache(cache_path)
     if cached and cached["fresh"]:
-        check, meta = _compare_against_latest(
-            str(cached["latest"]), str(cached["source"]), str(cached["checked_at"])
-        )
-        return check, meta
+        try:
+            check, meta = _compare_against_latest(
+                str(cached["latest"]), str(cached["source"]), str(cached["checked_at"])
+            )
+            return check, meta
+        except Exception as exc:
+            reason = str(exc) or type(exc).__name__
+            if not check_updates:
+                return (
+                    {
+                        "name": "versions.latest",
+                        "status": "info",
+                        "detail": f"update check unavailable: {reason}",
+                        "hint": "",
+                    },
+                    null_meta,
+                )
+            # Poisoned fresh cache + flag: drop it so the fetch path below
+            # refetches, and a fetch failure can't resurface the garbage
+            # as "last known latest".
+            cached = None
     if not check_updates:
         return (
             {
@@ -1259,7 +1276,7 @@ def _print_doctor(report: dict[str, object]) -> None:
         status = check["status"]
         detail = check["detail"]
         hint = check["hint"]
-        if name == "versions.latest" and detail == _VERSIONS_LATEST_NOT_RUN:
+        if name == "versions.latest" and status == "info" and detail == _VERSIONS_LATEST_NOT_RUN:
             continue
         print(f"{icon.get(status, '•')} {name}: {detail}")
         if hint:
