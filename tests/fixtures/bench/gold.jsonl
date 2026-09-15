@@ -1,0 +1,31 @@
+# Retrieval — plain topical lookups
+{"q": "what do I know about rate limiting?", "expect": ["concepts/rate-limiting.md"], "intent": "direct"}
+{"q": "token bucket algorithm", "expect": ["concepts/token-bucket.md"]}
+{"q": "how do I debug 429 responses?", "expect": ["skills/debugging-429s.md", "references/http-429.md"]}
+{"q": "what is backpressure", "expect": ["concepts/backpressure.md"]}
+{"q": "idempotency keys on retried writes", "expect": ["concepts/idempotency.md"]}
+{"q": "eventual consistency", "expect": ["concepts/eventual-consistency.md"]}
+{"q": "redis lua scripting", "expect": ["references/redis-lua-scripting.md"]}
+{"q": "load testing", "expect": ["skills/load-testing.md"]}
+{"q": "what proxy do we use for L7 routing?", "expect": ["entities/envoy.md"]}
+{"q": "reliability tradeoffs between shedding and queueing", "expect": ["synthesis/reliability-tradeoffs.md"]}
+{"q": "which store holds the limiter counters?", "expect": ["entities/redis.md"]}
+{"q": "where do durable audit records live?", "expect": ["entities/postgres.md"]}
+# Structural intents — answered from the graph, no page reads
+{"q": "how is rate limiting connected to redis?", "intent": "path"}
+{"q": "what breaks if I delete redis?", "intent": "impact"}
+{"q": "which pages bridge my clusters?", "intent": "bridges"}
+{"q": "what is central in my wiki?", "intent": "hubs"}
+{"q": "what clusters do I have?", "intent": "clusters"}
+{"q": "surprising connections", "intent": "surprising"}
+# Paraphrase — no vocabulary shared with the page, where term matching is
+# expected to struggle. This is the headroom an embedding index would close.
+{"q": "how do I stop one customer from hogging the whole API?", "expect": ["concepts/rate-limiting.md"]}
+{"q": "why am I getting throttled?", "expect": ["skills/debugging-429s.md", "references/http-429.md"]}
+{"q": "is it safe to send the same charge twice?", "expect": ["concepts/idempotency.md"]}
+{"q": "why did a read come back out of date?", "expect": ["concepts/eventual-consistency.md"]}
+{"q": "what should I run before a big traffic spike?", "expect": ["skills/load-testing.md"]}
+{"q": "how do I shed work instead of piling it up?", "expect": ["concepts/backpressure.md"]}
+# Event time — the same question, two answers, depending on when you ask
+{"q": "which api gateway do we run?", "expect": ["references/gateway-envoy.md"]}
+{"q": "which api gateway did we run?", "as_of": "2025-06-01", "expect": ["references/gateway-nginx.md"]}

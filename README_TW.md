@@ -39,6 +39,8 @@ pip install obsidian-wiki
 obsidian-wiki setup --vault ~/brain
 ```
 
+使用 `uv` 或 `pipx`？`uv tool install obsidian-wiki` 與 `pipx install obsidian-wiki` 的效果相同。（不要用 `uvx`，原因見[安裝說明](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md#install-via-pip-uv-or-pipx-recommended)。）
+
 然後在你的 agent 裡打開任何專案，說 **「set up my wiki」**。
 
 不想碰終端機？把下面這行交給你的 agent，它會全部處理好：

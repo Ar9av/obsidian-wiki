@@ -39,7 +39,12 @@ ast = ["tree-sitter>=0.21", "tree-sitter-languages>=1.10"]
 # Higher-fidelity community detection (Leiden algorithm; greedy label propagation is the default fallback).
 graph = ["leidenalg>=0.10", "igraph>=0.11"]
 # HTTP + MCP memory server (obsidian_wiki/server.py). The core wheel stays dependency-free.
-server = ["fastapi>=0.115", "uvicorn[standard]>=0.30", "mcp>=2.0"]
+# mcp needs Python >=3.10; the marker keeps uv's cross-version resolver solvable.
+server = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "mcp>=2.0; python_version >= '3.10'",
+]
 
 [project.urls]
 Homepage = "https://github.com/Ar9av/obsidian-wiki"
@@ -48,6 +53,10 @@ Issues = "https://github.com/Ar9av/obsidian-wiki/issues"
 
 [project.scripts]
 obsidian-wiki = "obsidian_wiki.cli:main"
+
+# Test-only; `uv sync` installs it, so `uv run pytest tests/ -q` needs no extra flags.
+[dependency-groups]
+dev = ["pytest"]
 
 # Version is derived from the git tag (CalVer, e.g. v2026.05.2 -> 2026.5.2),
 # matching the repo's release tags. Tagging a release is the version bump.

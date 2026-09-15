@@ -18,7 +18,8 @@ RUN pip install --no-cache-dir '.[server]'
 RUN useradd --create-home wiki && mkdir -p /vault && chown wiki:wiki /vault
 USER wiki
 
-ENV OBSIDIAN_VAULT_PATH=/vault WIKI_PORT=8080
+# WIKI_HOST is loopback by default; a container must listen on every interface.
+ENV OBSIDIAN_VAULT_PATH=/vault WIKI_PORT=8080 WIKI_HOST=0.0.0.0
 VOLUME /vault
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \

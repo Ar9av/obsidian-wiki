@@ -29,9 +29,24 @@ You are reviewing LLM-written pages that are waiting in `_staging/` for human ap
 
 ## Step 1: Inventory Staged Files
 
-Glob `$OBSIDIAN_VAULT_PATH/_staging/**/*.md` — these are the pending pages.
+The CLI owns the inventory — don't glob `_staging/` yourself:
 
-Also glob `$OBSIDIAN_VAULT_PATH/_staging/**/*.patch.md` — these are pending *updates* to existing pages (diff-style files showing proposed additions and deletions).
+```bash
+obsidian-wiki staging list --json
+```
+
+Each entry carries:
+
+| Field | Meaning |
+|---|---|
+| `staged_path` | vault-relative path of the staged file |
+| `live_path` | where it will land (a `.patch.md` targets the page it is named after) |
+| `kind` | `new`, `update`, or `patch` |
+| `staged_revision` | content hash of the staged file, as you are seeing it now |
+| `live_revision` | content hash of the live page, or `null` if there is none yet |
+| `staged_mtime` | when it was staged |
+
+**Keep `staged_revision` and `live_revision` for every file you show the user.** They are what makes Step 3 refuse to overwrite an agent's concurrent write instead of silently clobbering it.
 
 Report the inventory:
 
@@ -39,17 +54,17 @@ Report the inventory:
 Staged files: 4 new pages, 2 updates
 
 New pages:
-  _staging/concepts/attention-mechanism.md        (ingested 2 days ago)
-  _staging/entities/andrej-karpathy.md            (ingested 2 days ago)
-  _staging/skills/fine-tuning-llms.md             (ingested yesterday)
-  _staging/references/attention-is-all-you-need.md (ingested 3 hours ago)
+  _staging/concepts/attention-mechanism.md        (staged 2026-09-08)
+  _staging/entities/andrej-karpathy.md            (staged 2026-09-08)
 
-Updates (patch files):
-  _staging/concepts/transformer-architecture.patch.md  (target: concepts/transformer-architecture.md)
-  _staging/skills/prompt-engineering.patch.md          (target: skills/prompt-engineering.md)
+Updates:
+  _staging/concepts/transformer-architecture.md   (target: concepts/transformer-architecture.md)
+
+Patches:
+  _staging/skills/prompt-engineering.patch.md     (target: skills/prompt-engineering.md)
 ```
 
-If `_staging/` is empty, report: "Nothing staged. All writes have been committed or no staged writes have been produced yet."
+If the list is empty, report: "Nothing staged. All writes have been committed or no staged writes have been produced yet."
 
 ## Step 2: Per-File Review (interactive mode)
 
@@ -89,7 +104,7 @@ Proposed additions (+):
 Proposed deletions (-):
 - The attention mechanism was first described in [Bahdanau 2015].  (to be replaced by updated claim)
 
-⚠️  Conflict check: target page was modified 3 days after staging. Review carefully.
+⚠️  Conflict check: live_revision no longer matches what was staged against. Review carefully.
 
 Accept [a], Reject [r], Skip [s], Preview full diff [p]?
 ```
@@ -100,42 +115,50 @@ If `--list` flag is set, stop after printing the inventory (Step 1).
 
 ## Step 3: Apply Decisions
 
+The moves are mechanical and the CLI does them atomically. Pass the revisions from Step 1 so a decision made on stale information fails loudly.
+
 ### Accepting a new page
 
-1. Move `_staging/<category>/page.md` → `<category>/page.md` (the final location)
-2. Update `index.md` with the new page entry
-3. Remove the staged file
+```bash
+obsidian-wiki staging promote <staged_path> \
+  --expect-staged <staged_revision> --expect-new
+```
 
-### Accepting a patch/update
+`--expect-new` refuses if a live page has appeared since you listed — someone else got there first.
 
-1. Read the current page at the target path
-2. Apply the proposed additions and deletions (merge, don't just overwrite)
-3. Update the `updated` frontmatter timestamp
-4. Update `index.md` if the summary changed
-5. Remove the staged patch file
+### Accepting an update
+
+```bash
+obsidian-wiki staging promote <staged_path> \
+  --expect-staged <staged_revision> --expect-live <live_revision>
+```
 
 ### Rejecting a file
 
-Move it to `$OBSIDIAN_VAULT_PATH/_raw/` for manual editing:
-- `_staging/concepts/page.md` → `_raw/rejected-concepts-page.md`
-- `_staging/concepts/page.patch.md` → `_raw/rejected-patch-concepts-page.md`
-- Prefix with `rejected-` so the user can identify it
+```bash
+obsidian-wiki staging discard <staged_path>
+```
 
-### Conflict detection on patch accept
+It lands in `_raw/rejected-<category>-<page>.md` for manual editing. An earlier rejection of the same page is never overwritten — the second becomes `-2`.
 
-Before applying a patch, check whether the target page's `updated` frontmatter is newer than the patch file's own `updated` field:
-- If the target was modified AFTER the patch was staged, warn: `⚠️ Conflict: target was updated since this patch was staged. Applying may lose recent changes.`
-- Give the user a chance to abort: `Apply anyway [y], Skip [s], Reject [r]?`
+### Accepting a patch
+
+`promote` refuses `.patch.md` files, because merging a human-readable diff into a page whose surrounding text may have moved is judgment, not a rename. Do it yourself:
+
+1. Read the target page and the patch.
+2. Apply the `+` additions and `-` deletions **as a merge** — never overwrite the page wholesale.
+3. Bump the target's `updated` frontmatter.
+4. `obsidian-wiki staging discard <patch staged_path>` to clear the patch from the queue.
+
+### When the CLI reports a conflict
+
+Exit code **9** with `conflict: ...` on stderr means the staged or live file changed after you listed it. Nothing was moved. Do not retry with fresh revisions blindly — re-run `staging list`, show the user what changed, and ask again. The whole point of the check is that the content they approved is no longer the content that would land.
+
+`index.md` is updated by the ingest that staged the page, so promotion does not touch it. `log.md` gets one `STAGE_COMMIT` line per invocation, written by the CLI.
 
 ## Step 4: Update Tracking Files
 
-After processing all staged files:
-
-1. **`hot.md`** — update the Recent Activity section: "Committed N staged pages; rejected M."
-2. **`log.md`** — append:
-   ```
-   - [TIMESTAMP] STAGE_COMMIT accepted=N rejected=M skipped=K
-   ```
+The CLI appends the `STAGE_COMMIT` line to `log.md` itself. After processing all staged files, update **`hot.md`** — Recent Activity: "Committed N staged pages; rejected M."
 
 ## Step 5: Report
 
@@ -159,6 +182,7 @@ Staging queue: K files remaining
 ## Notes
 
 - Staged files use the same page template as live pages — they are ready to land, just awaiting approval
-- Patch files use a human-readable diff format: lines starting with `+` are additions, lines starting with `-` are deletions
+- Patch files use a human-readable diff format: lines starting with `+` are additions, lines starting with `-` are deletions. `staging promote` refuses them — merge them yourself (Step 3)
 - `index.md` and `log.md` are always updated immediately on ingest (they are low-risk tracking files) — only category pages go through staging
+- The moves live in `obsidian_wiki/staging.py`; this skill supplies the judgment, not the file handling
 - The `_staging/` directory is not tracked by Obsidian's graph view — pages only appear in the wiki after promotion

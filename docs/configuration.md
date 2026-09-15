@@ -172,6 +172,8 @@ Missing CodeGraph never breaks normal `wiki-update` or `doctor` runs. The graph 
 | `CODE_UNDERSTANDING_BACKEND` | How `wiki-update` understands project structure: `auto` (CodeGraph when available, else the built-in `ast-extract` + `rg`), `builtin` (always the built-in, dependency-free), or `codegraph` (explicitly require CodeGraph; warn/error if unavailable) | `auto` |
 | `CODE_UNDERSTANDING_CODEGRAPH_BIN` | Path to the `codegraph` binary if it isn't on `PATH` | *(empty)* |
 
+Both variables resolve like `OBSIDIAN_VAULT_PATH`: a real environment variable wins (empty counts as unset), then the nearest `.env` walking up from the project directory (stopping at the first one that sets a `CODE_UNDERSTANDING` key), then the global config ([where the global config lives](#where-the-global-config-lives)), then the default.
+
 ### Setup (optional)
 
 Install the CodeGraph CLI once to enable the enhanced backend:
@@ -286,3 +288,4 @@ skill use. Full guide: [Deployment](deployment.md).
 | `WIKI_API_KEY` | Bearer token required on every `/v1/*` and `/mcp` request | *(none — the server refuses to start without it)* |
 | `WIKI_ALLOW_ANONYMOUS` | `1` disables auth entirely. Local development only | *(unset)* |
 | `WIKI_PORT` | Port the server listens on | `8080` |
+| `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |

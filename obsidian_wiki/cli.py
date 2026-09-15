@@ -138,6 +138,11 @@ def _is_symlink_privilege_error(error: OSError) -> bool:
     return os.name == "nt" and getattr(error, "winerror", None) == 1314
 
 
+# Set when a symlink install falls back to copying, so the warning prints once
+# and the setup summary can report the mode that actually happened.
+_SYMLINK_FALLBACK = False
+
+
 def install_skills(
     target_dir: Path,
     label: str,
@@ -149,9 +154,9 @@ def install_skills(
     """Install bundled skills into *target_dir*. Returns the count installed."""
     src_root = skills_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
+    global _SYMLINK_FALLBACK
     installed = 0
-    install_mode = mode
-    warned_copy_fallback = False
+    install_mode = "copy" if _SYMLINK_FALLBACK else mode
     for skill in sorted(p for p in src_root.iterdir() if p.is_dir()):
         name = skill.name
         if subset is not None and name not in subset:
@@ -176,13 +181,13 @@ def install_skills(
                 if not _is_symlink_privilege_error(error):
                     raise
                 install_mode = "copy"
-                if not warned_copy_fallback:
+                if not _SYMLINK_FALLBACK:
                     print(
                         "Warning: symbolic links are unavailable; "
                         "copying skills instead. Use Developer Mode or "
                         "--copy to choose this explicitly."
                     )
-                    warned_copy_fallback = True
+                _SYMLINK_FALLBACK = True
                 shutil.copytree(skill, link_path)
         else:  # copy
             shutil.copytree(skill, link_path)
@@ -329,7 +334,7 @@ def install_project(project_dir: Path, mode: str) -> None:
 def _read_config_value(key: str) -> str:
     if not GLOBAL_CONFIG.is_file():
         return ""
-    for line in GLOBAL_CONFIG.read_text().splitlines():
+    for line in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip().strip('"')
     return ""
@@ -339,7 +344,7 @@ def _read_config() -> dict[str, str]:
     if not GLOBAL_CONFIG.is_file():
         return {}
     values: dict[str, str] = {}
-    for raw in GLOBAL_CONFIG.read_text().splitlines():
+    for raw in GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -385,7 +390,7 @@ def write_config(vault_path: str) -> None:
 
     existing: list[str] = []
     if GLOBAL_CONFIG.is_file():
-        existing = GLOBAL_CONFIG.read_text().splitlines()
+        existing = GLOBAL_CONFIG.read_text(encoding="utf-8").splitlines()
 
     out: list[str] = []
     seen: set[str] = set()
@@ -403,7 +408,7 @@ def write_config(vault_path: str) -> None:
         if key not in seen:
             out.append(f'{key}="{value}"')
 
-    GLOBAL_CONFIG.write_text("\n".join(out) + "\n")
+    GLOBAL_CONFIG.write_text("\n".join(out) + "\n", encoding="utf-8")
     print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 
@@ -457,7 +462,8 @@ def scaffold_vault(vault_path: Path) -> bool:
             "## Skills\n\n"
             "## References\n\n"
             "## Synthesis\n\n"
-            "## Journal\n"
+            "## Journal\n",
+            encoding="utf-8",
         )
 
     log_md = vault_path / "log.md"
@@ -468,7 +474,8 @@ def scaffold_vault(vault_path: Path) -> bool:
             "---\n\n"
             "# Wiki Log\n\n"
             f'- [{timestamp}] INIT vault_path="{vault_path}" '
-            "categories=concepts,entities,skills,references,synthesis,journal\n"
+            "categories=concepts,entities,skills,references,synthesis,journal\n",
+            encoding="utf-8",
         )
 
     hot_md = vault_path / "hot.md"
@@ -487,12 +494,13 @@ def scaffold_vault(vault_path: Path) -> bool:
             "## Key Takeaways\n\n"
             "*None yet.*\n\n"
             "## Flagged Contradictions\n\n"
-            "*None yet.*\n"
+            "*None yet.*\n",
+            encoding="utf-8",
         )
 
     manifest_json = vault_path / ".manifest.json"
     if not manifest_json.exists():
-        manifest_json.write_text("{}\n")
+        manifest_json.write_text("{}\n", encoding="utf-8")
 
     app_json = vault_path / ".obsidian" / "app.json"
     if not app_json.exists():
@@ -506,12 +514,15 @@ def scaffold_vault(vault_path: Path) -> bool:
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
+            encoding="utf-8",
         )
 
     appearance_json = vault_path / ".obsidian" / "appearance.json"
     if not appearance_json.exists():
-        appearance_json.write_text(json.dumps({"baseFontSize": 16}, indent=2) + "\n")
+        appearance_json.write_text(
+            json.dumps({"baseFontSize": 16}, indent=2) + "\n", encoding="utf-8"
+        )
 
     return created
 
@@ -661,9 +672,10 @@ def _doctor_code_understanding_checks(
             "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
         })
     else:
+        # info (not warn): optional backend absent must not fail doctor --strict.
         checks.append({
             "name": "code-understanding.codegraph",
-            "status": "warn",
+            "status": "info",
             "detail": "codegraph binary not found (builtin backend will be used)",
             "hint": "set CODE_UNDERSTANDING_CODEGRAPH_BIN or install codegraph",
         })
@@ -674,7 +686,7 @@ def _doctor_code_understanding_checks(
             "name": "code-understanding.codegraph-index",
             "status": "pass" if initialized else "warn",
             "detail": detail,
-            "hint": "" if initialized else "run: codegraph index <project>",
+            "hint": "" if initialized else "run: obsidian-wiki code-understand --project <project>",
         })
         if initialized:
             if not (project_dir / ".git").exists():
@@ -698,8 +710,24 @@ def _doctor_code_understanding_checks(
                 "name": "code-understanding.codegraph-fresh",
                 "status": "pass" if fresh else "warn",
                 "detail": detail,
-                "hint": "" if fresh else "re-run: codegraph index <project>",
+                "hint": "" if fresh else "re-run: obsidian-wiki code-understand --project <project>",
             })
+        gitignore = project_dir / ".gitignore"
+        ignored = False
+        if gitignore.is_file():
+            for line in gitignore.read_text(encoding="utf-8").splitlines():
+                pattern = line.strip()
+                if not pattern or pattern.startswith("#"):
+                    continue
+                if pattern in (".codegraph", ".codegraph/"):
+                    ignored = True
+                    break
+        checks.append({
+            "name": "code-understanding.codegraph-gitignore",
+            "status": "pass" if ignored else "warn",
+            "detail": ".codegraph/ is ignored" if ignored else ".codegraph/ is not ignored",
+            "hint": "" if ignored else "add .codegraph/ to .gitignore",
+        })
     return checks
 
 
@@ -1192,12 +1220,7 @@ def run_doctor(
                 detail=project_check["detail"],
                 hint=project_check["hint"],
             )
-            backend_setting = (
-                os.environ.get("CODE_UNDERSTANDING_BACKEND")
-                or config.get("CODE_UNDERSTANDING_BACKEND")
-                or "auto"
-            )
-            bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+            backend_setting, bin_path = _resolve_code_understanding_settings(project)
             for check in _doctor_code_understanding_checks(project, backend_setting, bin_path):
                 _doctor_add(
                     checks,
@@ -1229,7 +1252,7 @@ def run_doctor(
 
 
 def _print_doctor(report: dict[str, object]) -> None:
-    icon = {"pass": "✅", "warn": "⚠️ ", "fail": "❌", "info": "ℹ️"}
+    icon = {"pass": "✅", "info": "ℹ️", "warn": "⚠️ ", "fail": "❌"}
     print(f"obsidian-wiki doctor: {report['status']}")
     for check in report["checks"]:
         name = check["name"]
@@ -1321,7 +1344,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
-    print(f" Skills installed: {n}  (mode: {mode})")
+    print(f" Skills installed: {n}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")
@@ -1375,7 +1398,18 @@ def cmd_graph_query(args: argparse.Namespace) -> int:
     if not vault.is_dir():
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
-    result = query(vault, args.question, top_n=args.top, max_should_read=args.max_read)
+    try:
+        result = query(
+            vault,
+            args.question,
+            top_n=args.top,
+            max_should_read=args.max_read,
+            as_of=args.as_of,
+            include_historical=args.include_historical,
+        )
+    except ValueError as exc:
+        print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
+        return 1
     if args.pretty:
         print(json.dumps(result, indent=2))
     else:
@@ -1594,12 +1628,16 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
 
 
 def cmd_cache_update(args: argparse.Namespace) -> int:
-    from obsidian_wiki.cache import update_source
+    from obsidian_wiki.cache import stored_key, update_source
     vault = Path(args.vault).expanduser().resolve()
     source = Path(args.source).expanduser().resolve()
     pages = args.pages or []
-    h = update_source(vault, source, pages_produced=pages)
-    print(json.dumps({"path": str(source), "content_hash": h}))
+    h = update_source(vault, source, pages_produced=pages, key=args.key)
+    print(json.dumps({
+        "path": str(source),
+        "key": args.key or stored_key(source, vault) or str(source),
+        "content_hash": h,
+    }))
     return 0
 
 
@@ -1633,14 +1671,19 @@ def cmd_code_understand(args: argparse.Namespace) -> int:
     from obsidian_wiki.code_understanding import ProviderError, code_understand
 
     project = Path(args.project or os.getcwd())
+    backend, bin_path = _resolve_code_understanding_settings(project)
+    env = dict(os.environ)
+    env["CODE_UNDERSTANDING_BACKEND"] = backend
+    env["CODE_UNDERSTANDING_CODEGRAPH_BIN"] = bin_path or ""
     try:
         result = code_understand(
             project,
-            # "auto" must pass through as None so CODE_UNDERSTANDING_BACKEND can win (flag > env > auto).
+            # "auto" must pass through as None so the resolved config can win (flag > config > auto).
             backend_flag=None if args.backend == "auto" else args.backend,
             changed=args.changed,
             since=args.since,
             max_symbols=args.max_symbols,
+            env=env,
         )
     except ProviderError as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -1866,6 +1909,72 @@ def _schema_options(
     }
 
 
+def cmd_staging(args: argparse.Namespace) -> int:
+    """List, promote, or discard staged pages.
+
+    Mirrors `/wiki-stage-commit`, which now calls this instead of restating the
+    steps. Revision pins are opt-in: pass them for a reviewed decision, omit them
+    for an unattended `--all`.
+    """
+    from obsidian_wiki.staging import (
+        StagingConflict,
+        StagingError,
+        discard,
+        list_staged,
+        log_decisions,
+        promote,
+    )
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+
+    if args.staging_action == "list":
+        entries = [entry.as_dict() for entry in list_staged(vault)]
+        if args.json:
+            print(json.dumps(entries, indent=2) if args.pretty else json.dumps(entries))
+        elif not entries:
+            print("Nothing staged.")
+        else:
+            for entry in entries:
+                print(f"{entry['kind']:>6}  {entry['live_path']}  ({entry['staged_path']})")
+            print(f"\n{len(entries)} staged file(s)")
+        return 0
+
+    if not args.path:
+        print(f"error: `staging {args.staging_action}` needs a path", file=sys.stderr)
+        return 1
+
+    try:
+        if args.staging_action == "promote":
+            result = promote(
+                vault,
+                args.path,
+                expected_staged_revision=args.expect_staged,
+                expected_live_revision=args.expect_live,
+                pin_live_absent=args.expect_new,
+            )
+        else:
+            result = discard(vault, args.path)
+    except StagingConflict as exc:
+        # Distinct exit code: a conflict is "re-read and retry", not "bad input".
+        print(f"conflict: {exc}", file=sys.stderr)
+        return 9
+    except StagingError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    log_decisions(vault, [result])
+    if args.json:
+        print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    elif result["action"] == "promote":
+        print(f"promoted {result['staged_path']} -> {result['live_path']} ({result['kind']})")
+    else:
+        print(f"discarded {result['staged_path']} -> {result['raw_path']}")
+    return 0
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     from obsidian_wiki.lint import lint_vault
 
@@ -1951,6 +2060,48 @@ def _resolve_context_pack_vault(vault_arg: str | None) -> Path | None:
             break
         current = current.parent
     return _resolve_command_vault(None)
+
+
+_CODE_UNDERSTANDING_KEYS = ("CODE_UNDERSTANDING_BACKEND", "CODE_UNDERSTANDING_CODEGRAPH_BIN")
+
+
+def _resolve_code_understanding_settings(project: Path) -> tuple[str, str | None]:
+    """Resolve (backend, bin_path) for code-understanding.
+
+    Precedence: os.environ (empty = unset) > nearest walk-up project .env
+    (project dir to HOME, stopping at the first .env setting a
+    CODE_UNDERSTANDING key) > global config > defaults ("auto", None).
+    Mirrors the OBSIDIAN_VAULT_PATH resolution used by the schema/context-pack
+    commands.
+    """
+    backend = os.environ.get("CODE_UNDERSTANDING_BACKEND") or ""
+    bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or ""
+    if not backend or not bin_path:
+        current = Path(project).resolve()
+        home = HOME.resolve()
+        local: dict[str, str] = {}
+        while True:
+            candidate = _read_config_file(current / ".env")
+            if any(key in candidate for key in _CODE_UNDERSTANDING_KEYS):
+                local = candidate
+                break
+            if current == home or current.parent == current:
+                break
+            current = current.parent
+        global_config = _read_config()
+        if not backend:
+            backend = (
+                local.get("CODE_UNDERSTANDING_BACKEND")
+                or global_config.get("CODE_UNDERSTANDING_BACKEND")
+                or "auto"
+            )
+        if not bin_path:
+            bin_path = (
+                local.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+                or global_config.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
+                or ""
+            )
+    return backend, bin_path or None
 
 
 def cmd_trust_record(args: argparse.Namespace) -> int:
@@ -2095,11 +2246,24 @@ def cmd_trust_check(args: argparse.Namespace) -> int:
 
 def _print_query(result: dict[str, object]) -> None:
     print(f"answer_type: {result['answer_type']}")
+    temporal = result.get("temporal") or {}
+    if temporal.get("as_of"):
+        print(f"as_of: {temporal['as_of']}")
+    if temporal.get("excluded_historical"):
+        print(
+            f"excluded {temporal['excluded_historical']} historical page(s) "
+            "— --include-historical or --as-of DATE to see them"
+        )
     candidates = result.get("candidates", [])
     if candidates:
         print("candidates:")
         for item in candidates:
             print(f"- {item['title']} ({item['page']}) score={item['score']}")
+            if item.get("valid_until"):
+                note = f"  valid until {item['valid_until']}"
+                if item.get("superseded_by"):
+                    note += f", superseded by {item['superseded_by']}"
+                print(note)
     path = result.get("path") or []
     if path:
         print("path:")
@@ -2124,7 +2288,18 @@ def cmd_query(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
 
-    result = query(vault, args.question, top_n=args.top, max_should_read=args.max_read)
+    try:
+        result = query(
+            vault,
+            args.question,
+            top_n=args.top,
+            max_should_read=args.max_read,
+            as_of=args.as_of,
+            include_historical=args.include_historical,
+        )
+    except ValueError as exc:
+        print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
+        return 1
     if args.json:
         if args.pretty:
             print(json.dumps(result, indent=2))
@@ -2133,6 +2308,58 @@ def cmd_query(args: argparse.Namespace) -> int:
     else:
         _print_query(result)
     return 0
+
+
+def cmd_eval(args: argparse.Namespace) -> int:
+    from obsidian_wiki.evaluate import (
+        GoldError,
+        default_goldset_path,
+        load_goldset,
+        render_text,
+        run_eval,
+    )
+
+    vault_arg = args.vault or _read_config_value("OBSIDIAN_VAULT_PATH")
+    if not vault_arg:
+        print("error: vault not configured; pass --vault or run obsidian-wiki setup", file=sys.stderr)
+        return 1
+    vault = Path(vault_arg).expanduser().resolve()
+    if not vault.is_dir():
+        print(f"error: vault not found: {vault}", file=sys.stderr)
+        return 1
+
+    gold = Path(args.gold).expanduser() if args.gold else default_goldset_path(vault)
+    if not gold.is_file():
+        print(
+            f"error: no gold set at {gold}\n"
+            "       write one (JSONL: {\"q\": ..., \"expect\": [...]}) or pass --gold",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        cases = load_goldset(gold)
+        report = run_eval(
+            vault,
+            cases,
+            top_n=args.top,
+            max_read=args.max_read,
+            thresholds={
+                "min_recall": args.min_recall,
+                "min_mrr": args.min_mrr,
+                "min_intent": args.min_intent,
+            },
+        )
+    except GoldError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    report["gold"] = str(gold)
+
+    if args.json:
+        print(json.dumps(report, indent=2 if args.pretty else None))
+    else:
+        print(render_text(report, verbose=args.verbose), end="")
+    return 1 if report["status"] == "fail" else 0
 
 
 def cmd_context_pack(args: argparse.Namespace) -> int:
@@ -2244,6 +2471,16 @@ def build_parser() -> argparse.ArgumentParser:
     gq.add_argument("question", help="question to answer")
     gq.add_argument("--top", type=int, default=8, help="number of candidate pages to rank (default: 8)")
     gq.add_argument("--max-read", type=int, default=3, help="max pages to return in should_read (default: 3)")
+    gq.add_argument(
+        "--as-of",
+        metavar="DATE",
+        help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
+    )
+    gq.add_argument(
+        "--include-historical",
+        action="store_true",
+        help="also rank pages whose valid_until has passed",
+    )
     gq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     gq.set_defaults(func=cmd_graph_query)
 
@@ -2368,6 +2605,11 @@ def build_parser() -> argparse.ArgumentParser:
     cu.add_argument("vault", help="path to the Obsidian vault")
     cu.add_argument("source", help="source file or directory that was just ingested")
     cu.add_argument("--pages", nargs="*", metavar="PAGE", help="vault-relative paths of pages produced")
+    cu.add_argument(
+        "--key",
+        default=None,
+        help="explicit portable key (repo:/url:/agent:) for sources outside the vault and $HOME",
+    )
     cu.set_defaults(func=cmd_cache_update)
 
     ch = sub.add_parser(
@@ -2417,6 +2659,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     cdu.add_argument("--pretty", action="store_true", help="print a human-readable summary instead of JSON")
     cdu.set_defaults(func=cmd_code_understand)
+
+    st = sub.add_parser(
+        "staging",
+        help="list, promote, or discard pages waiting in _staging/ (WIKI_STAGED_WRITES)",
+    )
+    st.add_argument("staging_action", choices=["list", "promote", "discard"], help="what to do")
+    st.add_argument("path", nargs="?", help="staged path, as printed by `staging list`")
+    st.add_argument("--vault", dest="vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    st.add_argument("--expect-staged", metavar="SHA", help="refuse if the staged file no longer matches this revision")
+    st.add_argument("--expect-live", metavar="SHA", help="refuse if the live page no longer matches this revision")
+    st.add_argument(
+        "--expect-new",
+        action="store_true",
+        help="refuse if a live page has appeared since review (pairs with kind=new)",
+    )
+    st.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    st.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    st.set_defaults(func=cmd_staging)
 
     dr = sub.add_parser(
         "doctor",
@@ -2547,8 +2807,38 @@ def build_parser() -> argparse.ArgumentParser:
     qq.add_argument("--top", type=int, default=8, help="number of candidate pages to rank (default: 8)")
     qq.add_argument("--max-read", type=int, default=3, help="max pages to return in should_read (default: 3)")
     qq.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    qq.add_argument(
+        "--as-of",
+        metavar="DATE",
+        help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
+    )
+    qq.add_argument(
+        "--include-historical",
+        action="store_true",
+        help="also rank pages whose valid_until has passed",
+    )
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
+
+    ev = sub.add_parser(
+        "eval",
+        help="score the vault query index against a gold set (recall@k, MRR, intent accuracy)",
+    )
+    ev.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH")
+    ev.add_argument(
+        "--gold",
+        metavar="FILE",
+        help="JSONL gold set (default: <vault>/_meta/eval.jsonl)",
+    )
+    ev.add_argument("--top", type=int, default=10, help="candidates to rank per case (default: 10)")
+    ev.add_argument("--max-read", type=int, default=3, help="should_read cap per case (default: 3)")
+    ev.add_argument("--min-recall", type=float, help="fail below this recall@5 (CI gate)")
+    ev.add_argument("--min-mrr", type=float, help="fail below this MRR")
+    ev.add_argument("--min-intent", type=float, help="fail below this intent accuracy")
+    ev.add_argument("--verbose", action="store_true", help="list every missed case")
+    ev.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ev.set_defaults(func=cmd_eval)
 
     cp = sub.add_parser(
         "context-pack",

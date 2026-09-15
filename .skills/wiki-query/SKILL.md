@@ -73,6 +73,7 @@ Output fields:
 - **`path`**: for multi-hop queries, the shortest wikilink path between the two concepts
 - **`god_nodes_relevant`**: hub pages related to your query terms — always useful context
 - **`index_only`**: if `true`, the top candidate's summary already answers the question — skip page reads
+- **`temporal`**: `as_of`, `retrievable`, `excluded_historical` — how many pages the event-time filter held back (see below)
 
 **Structural intents** — these are answered entirely from the graph. The user's phrasing routes automatically:
 
@@ -94,6 +95,29 @@ Report the `graph` payload directly — do **not** re-derive it by reading pages
 4. Otherwise → open only `should_read` pages (not all candidates). This replaces the speculative 5–10 page reads the old flow required.
 
 > The graph used here excludes vault bookkeeping files (`index.md`, `log.md`, `hot.md`, `_insights.md`). They link to nearly every page, so including them made any two pages look ~2 hops apart and produced meaningless `A → index → B` paths.
+
+**Event time.** Pages may carry `valid_from` / `valid_until` / `superseded_by`
+frontmatter. A page whose `valid_until` has passed is **historical**: it stays in
+the vault and in the graph, but drops out of `candidates` by default, so "which X
+do we use?" answers with what is true *now* rather than whatever was written first.
+
+- When `temporal.excluded_historical` is non-zero, say so if it is material to the
+  answer — the user may be asking about the superseded state.
+- If the question is about the past ("what did we use in 2025", "before the
+  migration"), re-run with `--as-of YYYY-MM-DD` to retrieve what held then.
+- Use `--include-historical` when the user explicitly wants the whole history, or
+  when you are tracing how a decision changed.
+- A returned candidate carrying `superseded_by` names its replacement — follow it
+  rather than reporting the stale claim as current.
+
+```bash
+obsidian-wiki graph-query "$OBSIDIAN_VAULT_PATH" "<question>" --as-of 2025-06-01 --pretty
+obsidian-wiki graph-query "$OBSIDIAN_VAULT_PATH" "<question>" --include-historical --pretty
+```
+
+The structural intents ignore this filter on purpose: deleting a page still breaks
+the historical pages that link to it, so a blast radius must not shrink just
+because a dependent is no longer current.
 
 **Fallback** (if `obsidian-wiki` is not installed): proceed with Step 1 as normal using grep and index.md.
 
@@ -269,12 +293,12 @@ Examples in a synthesized answer:
 
 Pages with no lifecycle field (legacy pages predating the schema) are treated the same as `draft` — annotate if stale, skip otherwise. Never fabricate a `lifecycle_reason`; if the field is absent, omit the reason from the annotation.
 
-**Surface the project source path (project-scoped queries).** When the cited pages are project-scoped — their path is under `projects/<name>/...`, or their frontmatter carries a `source_path` field — resolve where the actual code lives so a proposed fix can name real files and a follow-up turn can edit them:
+**Surface the project source location (project-scoped queries).** When the cited pages are project-scoped — their path is under `projects/<name>/...`, or their frontmatter carries a `source_path`/`source_repo` field — resolve where the actual code lives so a proposed fix can name real files and a follow-up turn can edit them:
 
-1. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` and look up `.projects.<name>.source_cwd` — this is the authoritative path.
-2. Fallback: if the project isn't in the manifest, use the page's `source_path` frontmatter.
+1. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` and look up `.projects.<name>.source_repo` — this is the **authoritative, machine-independent** identity (e.g. `github.com/owner/name`). It is what you report.
+2. Resolve a local checkout root by trying these in order and stopping at the first that exists: `.projects.<name>.source_cwd_hint` (a `~`-relative hint), then a legacy `.projects.<name>.source_cwd` (an absolute path, older manifests only), then the page's `source_path` frontmatter. Expand `~` in any candidate and confirm the directory actually exists before using it. A legacy absolute path is used only as a local convenience — never reported as the project's identity.
 
-Include a **`Source code:`** line in the answer with that absolute path. When the query implies a code fix is wanted, name the specific files to edit using that path (e.g. `<source_cwd>/public/lib/anticheat.js`) and **offer to implement it as an explicit, separate next step** — but never edit during the query itself (see the READ-ONLY guard above).
+Report the **`Source code:`** line using `source_repo`. When a local checkout resolved in step 2, append the concrete path so the reader can act on it (e.g. `<repo> — local checkout at ~/code/name/public/lib/anticheat.js`). When the query implies a code fix is wanted and a local checkout exists, name the specific files to edit and **offer to implement it as an explicit, separate next step** — but never edit during the query itself (see the READ-ONLY guard above). If no local checkout resolves, report the repo and say the code is not checked out on this machine.
 
 ### Step 6: Log the Query
 
@@ -299,9 +323,9 @@ Structure answers like this:
 >
 > **Retrieval:** N candidates seen, M read, D dropped (untouched matches, if any: [[page-d]], [[page-e]])
 >
-> **Source code:** `<source_cwd>` — to implement, the relevant files are `…`.
+> **Source code:** `<source_repo>` (local checkout at `~/code/<name>`) — to implement, the relevant files are `…`.
 > (Say the word and I'll switch out of query mode to make the change.)
 
-The **Source code** line is optional — include it only for project-scoped queries where you resolved a `source_cwd` (see Step 5).
+The **Source code** line is optional — include it only for project-scoped queries where you resolved a `source_repo` (see Step 5). Report the repository, not a machine absolute path; add the local checkout path only when it actually exists on this machine.
 
 The **Retrieval** line is always included — it's the transparency report from the counts tracked since Step 2 (mirrors the `candidates_seen`/`candidates_used`/`dropped` fields logged in Step 6). In index-only mode, report the counts from the frontmatter scan; if D is 0, drop the parenthetical rather than writing an empty list.

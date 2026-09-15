@@ -88,7 +88,8 @@ Each project directory has an overview page structured like this:
 
 ```markdown
 ---
-title: My Project
+title: >-
+    My Project
 category: project
 tags: [ai, web, backend]
 source_path: ~/.claude/projects/-Users-name-Documents-projects-my-project
@@ -151,7 +152,23 @@ The manifest enables:
 - **Audit** — which source produced which wiki page
 - **Staleness detection** — source changed but wiki page hasn't been updated
 
-**Canonical source keys.** Source keys MUST be stored in a single canonical form: **absolute paths with `~` and env vars expanded** (e.g. `/Users/me/.claude/projects/.../abc.jsonl`, never `~/.claude/...`). The manifest is keyed by the raw string, so a mix of `~`-relative and absolute keys lets the *same file* be tracked twice — and the delta check then re-ingests an already-processed file because the lookup misses the other-form key. Always expand before you compare against the manifest and before you write a new entry. To repair an existing vault that already has both forms, run `scripts/manifest.py normalize <vault>` (merges colliding entries, keeps the newest `ingested_at`).
+**Source key contract (v2).** Source keys — the `sources` keys in `.manifest.json`, the `sources:` frontmatter values on pages, and a project's `source_repo` — MUST be machine-portable. A vault is synced across machines, so a bare absolute path (`/Users/...`, `/home/...`) is never a valid stored key. This is the single canonical definition; other skills reference it rather than restating it.
+
+| Where the source lives | Canonical key form | Example |
+|---|---|---|
+| Inside the vault | **vault-relative path** — POSIX separators, no leading `./`, no `..` | `Raw/database/postgres.pdf`, `Clippings/article.md` |
+| Under `$HOME` | **home-relative path** — starts with `~` | `~/.claude/projects/-Users-name-my-app/abc.jsonl` |
+| Not a file at all | **pseudo-key** — any `scheme:`/`://` identifier, treated as opaque | `url:https://example.com/article`, `agent:claude/<session-id>` |
+
+Rules:
+
+1. **Never store a bare absolute path.** Convert before writing, not after.
+2. **Normalize before comparing.** Expand `~` and environment variables, resolve vault-relative keys against the vault root, and treat `scheme:`/`://` pseudo-keys as opaque identifiers. Never compare raw strings without normalizing first.
+3. **Identity survives path changes.** The same logical source keeps the same key across machines.
+4. **Pseudo-keys are an open namespace.** What makes a key a pseudo-key is its shape (`scheme:` or `://`, so it can never be mistaken for a file path), not a fixed list of names. Recommended names: `repo:<host/owner/name>` for a git project, `url:<canonical-url>` for a web page, `agent:<agent>/<id>` for an agent session. A source that is neither in the vault nor under `$HOME` still needs one — do not let it fall back to an absolute path.
+5. **Project identity is a repository, not a checkout.** In the `projects` block, identify a project by `source_repo` (`host/owner/name`) rather than a machine path. A machine-specific checkout location, if useful at all, belongs in an optional `source_cwd_hint` (`~`-relative), never in the identity.
+
+Reading is backward compatible: an existing manifest full of absolute keys keeps working, and `scripts/manifest.py migrate <vault> --dry-run` converts it to contract v2 (merging collisions, keeping the newest `ingested_at`). **If the vault has moved between machines**, its absolute keys are rooted at the *old* vault path, which matches neither the new vault nor `$HOME` — pass that old root explicitly with `migrate <vault> --from-root <old-vault-root>` (repeat the flag if the vault lived at more than one location). The command then reports `nothing portable to write — N key(s) kept non-portable` rather than claiming success. New writes go through the same normalization, so a skill may pass an absolute path to `obsidian-wiki cache-update` and still have a portable key land in the manifest.
 
 **Recording provenance.** When you write a manifest entry, populate `pages_created` and `pages_updated` with the vault-relative page paths that source contributed to. This is what makes re-ingestion (when a source changes) able to find the pages to revisit, instead of guessing.
 
@@ -161,7 +178,8 @@ When creating a new wiki page, use this structure:
 
 ```markdown
 ---
-title: Page Title
+title: >-
+    Page Title
 category: concepts
 tags: [ml, architecture]
 aliases: [alternate name]
@@ -169,7 +187,8 @@ relationships:
   - target: "[[concepts/related-concept]]"
     type: extends
 sources: [papers/attention.pdf]
-summary: One or two sentences, ≤200 chars, so a reader (or another skill) can preview this page without opening it.
+summary: >-
+    One or two sentences, ≤200 chars, so a reader (or another skill) can preview this page without opening it.
 provenance:
   extracted: 0.72
   inferred: 0.25
@@ -202,6 +221,8 @@ Things that are unresolved or need more sources.
 
 - [[references/attention-is-all-you-need]] — Original paper
 ```
+
+**Parser-safe scalars.** Write free-text frontmatter values — at minimum `title` and `summary` — with folded scalar syntax (`>-`) as shown above: a bare scalar containing `: ` (colon + space), `#`, or quotes breaks YAML parsing, and Obsidian then reports "Invalid properties" and hides the frontmatter. Keep the value indented on the line(s) following `title: >-` / `summary: >-`.
 
 ## Paper Deep-Dive Template
 
@@ -622,6 +643,10 @@ The wiki is configured through environment variables (see `.env.example`). The o
 - `WIKI_STAGED_WRITES` — When `true`, all LLM-written pages go to `_staging/<category>/` for human review before promotion. See `wiki-setup` and `wiki-stage-commit` for details.
 - `CODE_UNDERSTANDING_BACKEND` — how wiki-update understands a project before distilling: `auto` (CodeGraph when available, else builtin ast-extract + rg; default), `builtin`, or `codegraph` (explicitly require; warn/error if unavailable).
 - `CODE_UNDERSTANDING_CODEGRAPH_BIN` — optional path to the codegraph binary when it isn't on PATH.
+- `CODE_UNDERSTANDING_CODEGRAPH_BIN` — optional path to the codegraph binary when it isn't on PATH.
+  Both resolve like `OBSIDIAN_VAULT_PATH`: a real environment variable wins (empty counts as
+  unset), then the nearest `.env` walking up from the project directory, then the global config
+  (`$(obsidian_wiki_config_dir)/config`), then the default.
 - `OBSIDIAN_MAX_PAGES_PER_INGEST` — cap on pages created/updated per `wiki-ingest` run (default: `15`). See `wiki-ingest`, Step 4.
 - `LINT_SCHEDULE` — how often `daily-update` also runs `wiki-lint`: `daily` \| `weekly` (default) \| `manual`. See `daily-update`, Step 4a.
 

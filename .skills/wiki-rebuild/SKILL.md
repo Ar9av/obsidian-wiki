@@ -56,7 +56,7 @@ $OBSIDIAN_VAULT_PATH/
   "total_pages": 87,
   "total_sources": 42,
   "total_projects": 6,
-  "vault_path": "/Users/name/Knowledge",
+  "vault_path": "$OBSIDIAN_VAULT_PATH",
   "manifest_snapshot": ".manifest.json"
 }
 ```

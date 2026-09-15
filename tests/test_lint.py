@@ -114,6 +114,43 @@ def test_lint_vault_fails_on_broken_links_and_missing_frontmatter(tmp_path: Path
     assert any(item["page"] == "concepts/beta.md" for item in report["findings"]["missing_frontmatter"])
 
 
+def test_lint_vault_broken_links_ignores_embeds_and_normalises_md_and_escaped_pipe(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    _page(vault, "concepts/beta.md")
+    (vault / "diagram.png").write_text("not a real png\n", encoding="utf-8")
+    _page(
+        vault,
+        "concepts/index.md",
+        links=["alpha.md", "diagram.png", "ghost"],
+    )
+    # A Markdown-table cell escapes a literal pipe, which _WIKILINK_RE's own
+    # alternation consumes into the alias group it does not capture.
+    index = vault / "concepts" / "index.md"
+    index.write_text(index.read_text(encoding="utf-8") + "| [[beta\\|B]] | note |\n", encoding="utf-8")
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["broken_links"] == [{"page": "concepts/index.md", "target": "ghost"}]
+
+
+def test_lint_vault_keeps_links_to_pages_whose_name_contains_a_dot(tmp_path: Path) -> None:
+    """A dot in a page name ("Node.js", "v1.2 notes") is not a file extension —
+    dropping those links would report the target as an orphan."""
+    vault = tmp_path / "vault"
+    for name in ("Node.js", "v1.2 release notes"):
+        _page(vault, f"entities/{name}.md")
+    _page(vault, "concepts/index.md", links=["Node.js", "v1.2 release notes"])
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["broken_links"] == []
+    assert report["findings"]["orphan_pages"] == []
+    assert report["stats"]["link_count"] == 2
+
+
 def test_lint_vault_warns_on_duplicates_missing_summaries_and_orphans(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", title="Same Title", summary=None)
@@ -127,6 +164,34 @@ def test_lint_vault_warns_on_duplicates_missing_summaries_and_orphans(tmp_path: 
     assert report["findings"]["duplicate_titles"]
     assert "concepts/alpha.md" in report["findings"]["missing_summaries"]
     assert "references/beta.md" in report["findings"]["orphan_pages"]
+
+
+def test_lint_vault_ignores_tool_owned_directories(tmp_path: Path) -> None:
+    """A `.venv` (or any dot-dir / dependency tree) inside the vault must not
+    enter the findings — one `uv sync` in a project-vault would otherwise
+    sweep thousands of dependency READMEs into the CI baseline."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "references/beta.md")
+    junk = [
+        ".venv/lib/python3.12/site-packages/somepkg/README.md",
+        ".trash/draft.md",
+        "node_modules/pkg/README.md",
+        "venv/readme.md",
+        "__pycache__/x.md",
+    ]
+    for rel in junk:
+        path = vault / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# dependency readme\nno frontmatter\n", encoding="utf-8")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "pass"
+    assert report["stats"]["pages"] == 2
+    assert report["findings"]["missing_frontmatter"] == []
+    assert report["findings"]["orphan_pages"] == []
+    assert report["findings"]["missing_summaries"] == []
 
 
 def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
@@ -724,3 +789,172 @@ def test_no_ledger_means_no_transition_findings(tmp_path: Path) -> None:
     report = lint_vault(vault, require_trust_ledger=False)
 
     assert report["findings"]["illegal_lifecycle_transitions"] == []
+
+
+def test_lint_vault_warns_on_pages_sharing_a_stem(tmp_path: Path) -> None:
+    """`graph_analysis` keys a page by its bare stem, so these two are one node.
+
+    Nothing in the vault references the stem: the collision is the defect, not
+    the reference to it.
+    """
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/mercury.md", title="Mercury the concept", links=["alpha"])
+    _page(vault, "entities/mercury.md", title="Mercury the planet", links=["beta"])
+    _page(vault, "concepts/alpha.md", title="Alpha")
+    _page(vault, "concepts/beta.md", title="Beta")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["status"] == "warn"
+    assert report["findings"]["duplicate_stems"] == [
+        {"stem": "mercury", "pages": ["concepts/mercury.md", "entities/mercury.md"]}
+    ]
+
+
+def test_duplicate_stems_ignores_how_the_link_was_written(tmp_path: Path) -> None:
+    """Both documented link formats carry a folder; neither creates a collision."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/vector-search.md", title="Vector Search")
+    _page(
+        vault,
+        "projects/renewal.md",
+        title="Renewal",
+        links=["concepts/vector-search|Vector Search"],
+    )
+    _page(vault, "projects/rollout.md", title="Rollout")
+    (vault / "projects/rollout.md").write_text(
+        (vault / "projects/rollout.md").read_text(encoding="utf-8")
+        + "\n[Vector Search](../concepts/vector-search.md)\n",
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == []
+    assert report["status"] == "pass"
+
+
+def test_duplicate_stems_follows_the_graph_page_selection(tmp_path: Path) -> None:
+    """Root `index.md` is not a graph page; `_bootstrap/` is."""
+    vault = tmp_path / "vault"
+    _page(vault, "index.md", title="Index")
+    _page(vault, "concepts/index.md", title="Concepts index")
+    _page(vault, "_bootstrap/vector-search.md", title="Bootstrap copy")
+    _page(vault, "concepts/vector-search.md", title="Vector Search")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["_bootstrap/vector-search.md", "concepts/vector-search.md"],
+        }
+    ]
+
+
+def test_duplicate_stems_rows_and_pages_are_sorted(tmp_path: Path) -> None:
+    """Neither ordering follows the page walk: `concepts/` precedes `concepts-x/`
+    by path but not by string, and `zebra` is walked before `dup`."""
+    vault = tmp_path / "vault"
+    _page(vault, "a-dir/zebra.md", title="Zebra one")
+    _page(vault, "b-dir/zebra.md", title="Zebra two")
+    _page(vault, "concepts/dup.md", title="Dup one")
+    _page(vault, "concepts-x/dup.md", title="Dup two")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {"stem": "dup", "pages": ["concepts-x/dup.md", "concepts/dup.md"]},
+        {"stem": "zebra", "pages": ["a-dir/zebra.md", "b-dir/zebra.md"]},
+    ]
+
+
+def test_duplicate_stems_slugs_the_filename(tmp_path: Path) -> None:
+    """`Vector Search.md` and `vector-search.md` are the same node; a raw
+    `Path.stem` would not see it."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/Vector Search.md", title="Vector Search")
+    _page(vault, "entities/vector-search.md", title="The Pinecone product")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["concepts/Vector Search.md", "entities/vector-search.md"],
+        }
+    ]
+
+
+def test_duplicate_stems_reports_a_collision_inside_one_folder(tmp_path: Path) -> None:
+    """A hand-named page beside a tool-written one: same folder, same node."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/Vector Search.md", title="Vector Search")
+    _page(vault, "concepts/vector-search.md", title="Vector search notes")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_stems"] == [
+        {
+            "stem": "vector-search",
+            "pages": ["concepts/Vector Search.md", "concepts/vector-search.md"],
+        }
+    ]
+
+
+def test_machine_path_in_sources_is_reported(tmp_path: Path) -> None:
+    """A `sources:` entry holding a machine absolute path cannot resolve on
+    another machine — read-only report, the page is not modified."""
+    vault = tmp_path / "vault"
+    _page(
+        vault, "references/alpha.md",
+        sources='["/DATA/disk1/me/wiki/Raw/a.pdf"]', links=["beta"],
+    )
+    _page(vault, "references/beta.md", sources='["~/docs/b.pdf"]', links=["alpha"])
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/DATA/disk1/me/wiki/Raw/a.pdf"]}
+    ]
+    # The only thing wrong with this vault is the machine path, and it warns.
+    assert report["findings"]["orphan_pages"] == []
+    assert report["findings"]["missing_summaries"] == []
+    assert report["status"] == "warn"
+
+
+def test_machine_path_in_block_style_sources_is_reported(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    path = vault / "references" / "alpha.md"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "---\n"
+        "title: alpha\n"
+        "category: references\n"
+        "tags: [test]\n"
+        "sources:\n"
+        "  - /home/other/notes/wiki/Raw/a.pdf\n"
+        "  - Raw/local.pdf\n"
+        "created: 2026-07-01\n"
+        "updated: 2026-07-01\n"
+        "---\n# alpha\n",
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/home/other/notes/wiki/Raw/a.pdf"]}
+    ]
+
+
+def test_machine_path_in_scalar_sources_is_reported(tmp_path: Path) -> None:
+    """`sources:` may be written as a scalar; that is still a stored source key."""
+    vault = tmp_path / "vault"
+    _page(vault, "references/alpha.md", sources="/abs/only.md")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["machine_path_sources"] == [
+        {"page": "references/alpha.md", "sources": ["/abs/only.md"]}
+    ]

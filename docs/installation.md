@@ -8,17 +8,28 @@ All full setup entry points — `obsidian-wiki setup`, `setup.sh`, and an agent 
 
 | Path | Best for | Writes global config | Installs into all agents |
 |---|---|---|---|
-| [pip](#install-via-pip-recommended) | Most people | ✅ | ✅ |
+| [pip / uv / pipx](#install-via-pip-uv-or-pipx-recommended) | Most people | ✅ | ✅ |
 | [Let your agent do it](#let-your-agent-set-it-up) | No terminal required | ✅ | ✅ |
 | [git clone + `setup.sh`](#install-via-git-clone) | Contributors, hackers | ✅ | ✅ |
 | [Skills CLI](#install-via-skills-cli-deprecated) | Deprecated — partial install | ❌ | ❌ (current agent only) |
 
-## Install via pip (recommended)
+## Install via pip, uv, or pipx (recommended)
 
 ```bash
 pip install obsidian-wiki
 obsidian-wiki setup --vault /path/to/your/digital/brain
 ```
+
+`uv` and `pipx` work just as well — use whichever you already have:
+
+```bash
+uv tool install obsidian-wiki     # or: uv pip install obsidian-wiki
+pipx install obsidian-wiki
+```
+
+Upgrades are `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`; re-run `obsidian-wiki setup` afterwards to pick up new skills.
+
+> **Don't use `uvx obsidian-wiki setup`.** `uvx` runs from a throwaway environment, and setup symlinks skills *into the installed package*. When the environment is discarded, every skill link in `~/.claude/skills/`, `~/.codex/skills/`, and the rest points at a path that no longer exists. If you must run it that way, use `uvx obsidian-wiki setup --copy`, which copies the skill files instead.
 
 `obsidian-wiki setup` writes the config to `~/.config/obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere — just re-run `obsidian-wiki setup` to pick up new skills.
 

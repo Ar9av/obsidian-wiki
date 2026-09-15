@@ -56,8 +56,10 @@ Find `[[wikilinks]]` that point to pages that don't exist.
 
 **How to check:**
 - Grep for `\[\[.*?\]\]` across all pages
-- Extract the link targets
-- Check if a corresponding `.md` file exists
+- Extract the link target: drop everything from the first `|` (alias) or `#` (heading/block anchor), and strip a trailing backslash left by an escaped `\|` inside a table cell
+- Skip a target whose extension is an attachment type (`.png`, `.jpg`, `.gif`, `.svg`, `.webp`, `.pdf`, `.canvas`, `.base`, audio and video): it's an embed, not a page link, and has no entry in the `.md` inventory this check compares against
+- Do **not** treat every dot as an extension — `[[Node.js]]`, `[[Next.js]]`, and `[[v1.2 release notes]]` are page links whose names happen to contain a dot, and dropping them would both miss real broken links and make the target page look like an orphan
+- Strip an explicit `.md` suffix from what remains, then check if a corresponding `.md` file exists
 
 **How to fix:**
 - If the target was renamed, update the link
@@ -330,6 +332,7 @@ Validate `relationships:` frontmatter blocks. Skip pages that have no `relations
 - For each entry in the block:
   1. **Type validation** — flag any `type:` value not in the allowed set above
   2. **Broken target** — strip `[[` and `]]` from the `target:` string, normalize (lowercase, spaces→hyphens, strip `.md`), and check whether a `.md` file at that path exists in the vault. Flag unresolved targets.
+     Before normalizing, drop everything from the first `|` (alias) or `#` (heading/block anchor): a pipe-aliased or heading-anchored target is not broken just because the literal bracket contents don't match a filename.
   3. **Self-reference** — flag any entry where the resolved target equals the page's own node id
 
 **How to fix:**
@@ -349,6 +352,43 @@ Validate `relationships:` frontmatter blocks. Skip pages that have no `relations
 Append to the `LINT` log entry:
 ```
 ... relationship_issues=N
+```
+
+### 14. Event-Time Validity
+
+Validate `valid_from` / `valid_until` / `superseded_by` frontmatter. All three are optional — skip pages that carry none of them.
+
+`created`/`updated` are ingestion time; these three are event time, when the claim itself was true. A page whose `valid_until` has passed is **historical**, not wrong: it stays in the vault and in the graph, and only drops out of default retrieval.
+
+**How to check:**
+- Grep frontmatter for `^valid_from:`, `^valid_until:`, `^superseded_by:` across all vault pages
+- For each page that has any of them:
+  1. **Date parseability** — each value must be `YYYY-MM-DD` or a full ISO 8601 timestamp. Flag anything else.
+  2. **Window order** — flag any page where `valid_until` precedes `valid_from`
+  3. **Dangling successor** — strip `[[`/`]]` from `superseded_by`, drop everything from the first `|` or `#`, strip `.md`, normalize, and check the page exists. Flag unresolved targets and self-references.
+
+`obsidian-wiki lint` reports all three as `temporal_errors` (dates, windows) and `superseded_dangling` (successors). A bracketed dangling successor also shows up in `broken_links`.
+
+**Why the dates fail rather than warn:** retrieval treats an unparseable window as current, so an unreported typo lets a stale claim answer as fact — the exact failure the fields exist to prevent.
+
+**How to fix:**
+- Unparseable date: rewrite as `YYYY-MM-DD`; if the real date is unknown, remove the field rather than guessing
+- Inverted window: confirm which date is wrong with the page's sources; never silently swap them
+- Dangling successor: create the replacement page, correct the pointer, or remove it if nothing replaced the claim
+- Never "fix" a historical page by rewriting it as current — that destroys the record the window exists to keep
+
+**Output additions:**
+
+```markdown
+### Event-Time Issues (N found)
+- `references/gateway-nginx.md` — valid_until (2026-04-01) precedes valid_from (2026-05-01)
+- `references/old-limits.md` — valid_until "soon" is not a date
+- `references/legacy-auth.md` — superseded_by "[[oauth-rollout]]" resolves to no page in vault
+```
+
+Append to the `LINT` log entry:
+```
+... temporal_issues=N
 ```
 
 ### 11. Synthesis Gaps

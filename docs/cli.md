@@ -52,7 +52,8 @@ an unreachable or malformed upstream is an `info` and never affects the exit cod
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, and orphans |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten) |
+| `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash
 obsidian-wiki query "what do I know about MCP security?"
@@ -68,6 +69,26 @@ obsidian-wiki lint --allow-lifecycle active --allow-relationship-type synthesize
 
 Lint resolves its vault and schema together: explicit path (no config inheritance), positional `@name`, nearest CWD `.env`, then global config. CLI schema flags extend/replace that resolved vault's settings and are recorded in the JSON `schema` block.
 
+### Colliding page stems
+
+`duplicate_stems` reports two or more pages whose filename stems are equal after slugging —
+`concepts/vector-search.md` and `entities/vector-search.md` across folders, or `Vector Search.md`
+beside `vector-search.md` inside one. The graph
+identifies a page by its bare stem, so those pages are a single node in every graph metric:
+degree, communities, betweenness, and the `graph-analyse --around` blast radius. The check keys
+on the same slug and the same page selection `graph_analysis` uses, so what it reports is exactly
+what the graph will merge — root `index.md`/`log.md`/`hot.md`/`_insights.md` are excluded, and a
+legitimate `concepts/index.md` is not.
+
+It is independent of how any link is written: the collision is between the pages, not between
+references to them, so a vault where nothing links to the stem is still reported.
+
+`duplicate_titles` does not cover this — it keys on the `title:` value, and stems can collide
+while titles differ (`"Vector Search"` and `"vector-search"` slug to the same stem).
+
+The check warns. A vault carrying a collision moves from `pass` to `warn`, which leaves
+`obsidian-wiki lint` at exit 0 and takes `obsidian-wiki lint --strict` to exit 1.
+
 ### Lifecycle transition checking
 
 `illegal_lifecycle_transitions` compares each page's current `lifecycle` against the value recorded in `_meta/trust-ledger.json` at its last review, and flags moves the state machine forbids: any state falling back to `draft` (only ingest sets `draft`), and any exit from `archived` (a restore is a deliberate delete-and-recreate, not a transition).
@@ -75,6 +96,118 @@ Lint resolves its vault and schema together: explicit path (no config inheritanc
 `draft → verified` is deliberately **not** flagged — ledger snapshots are sparse, so a legitimate intermediate `reviewed` may have happened between two reviews.
 
 The check warns by default and fails only under `--strict-trust`. Pages whose ledger entry predates the `lifecycle` field carry no baseline and are skipped silently, so existing vaults behave exactly as before until their next `trust-record`.
+
+## Event time (`valid_from` / `valid_until`)
+
+`created` and `updated` are *ingestion* time — when the vault learned something.
+Three optional frontmatter fields add *event* time, when the claim itself was true:
+
+```yaml
+valid_from: 2024-01-01
+valid_until: 2026-03-31           # inclusive: the last day the claim held
+superseded_by: "[[gateway-envoy]]"
+```
+
+A page whose `valid_until` has passed is **historical**, not wrong. It stays in the
+vault and stays in the graph — only retrieval skips it, so the same question gets
+different answers depending on when you ask:
+
+```bash
+obsidian-wiki query "which api gateway do we run?"
+# -> references/gateway-envoy.md
+
+obsidian-wiki query "which api gateway do we run?" --as-of 2025-06-01
+# -> references/gateway-nginx.md  (valid until 2026-03-31, superseded by gateway-envoy)
+
+obsidian-wiki query "which api gateway do we run?" --include-historical
+# -> both, historical ones labelled
+```
+
+| Flag | Effect |
+|---|---|
+| `--as-of DATE` | Retrieve what was true on `DATE` (`YYYY-MM-DD`) instead of today |
+| `--include-historical` | Also rank pages whose `valid_until` has passed |
+
+Both flags work on `query` and `graph-query`. The JSON response gains a `temporal`
+block (`as_of`, `retrievable`, `excluded_historical`), and any candidate that opted
+in carries its own `valid_from` / `valid_until` / `superseded_by` so an agent can
+follow the pointer to the replacement. Pages that don't use the fields are
+unaffected — they are current, always, and their JSON is byte-identical to before.
+
+**The structural intents deliberately ignore the filter.** `what breaks if I delete
+X`, `bridges`, `hubs`, and `clusters` ask about the shape of the vault, and deleting
+a page still breaks the historical pages that link to it.
+
+`lint` reads the same fields. A malformed or inverted window is a `temporal_errors`
+finding and **fails** — retrieval treats an unparseable window as current, so an
+unreported typo lets a stale claim answer as fact. A `superseded_by` pointing at a
+page that doesn't exist (or at itself) is a `superseded_dangling` finding; written
+as `"[[wikilink]]"` it is also a wikilink, so the pre-existing `broken_links` check
+fires and the vault **fails**, exactly as a typed `relationships:` target pointing
+at nothing does. Written as a plain `superseded_by: gateway-envoy` it only
+**warns**.
+
+## Retrieval evals
+
+`obsidian-wiki eval` scores what the query index returns against a gold set you
+write, so a ranking change gets compared to a number instead of eyeballed.
+
+```bash
+obsidian-wiki eval                                    # uses <vault>/_meta/eval.jsonl
+obsidian-wiki eval --gold bench/gold.jsonl --verbose
+obsidian-wiki eval --min-recall 0.9 --json            # CI gate; exit 1 below it
+```
+
+The gold set is JSONL, one case per line. Blank lines and `#` comments are skipped:
+
+```jsonl
+# plain lookups
+{"q": "what do I know about rate limiting?", "expect": ["concepts/rate-limiting.md"], "intent": "direct"}
+{"q": "how do I debug 429 responses?", "expect": ["skills/debugging-429s.md", "references/http-429.md"]}
+# structural intents — classification only
+{"q": "which pages bridge my clusters?", "intent": "bridges"}
+# event time — pin the date the page was still current
+{"q": "which api gateway did we run?", "as_of": "2025-06-01", "expect": ["references/gateway-nginx.md"]}
+```
+
+`expect` matches a page by vault-relative path, bare stem, or `[[wikilink]]`, so a
+gold set survives a page moving between category folders. A case needs `expect`,
+`intent`, or both — `expect` alone scores retrieval, `intent` alone scores
+classification, which is how the structural intents are covered.
+
+| Metric | What it measures |
+|---|---|
+| `recall@1/@3/@5` | Did an expected page come back in the top k |
+| `mrr` | Mean reciprocal rank of the first expected hit |
+| `intent_accuracy` | Did `classify_query` pick the right answer type |
+| `should_read_precision` | What fraction of pages the agent is told to open are wanted — the token-waste metric |
+
+Gate any of them in CI with `--min-recall` (recall@5), `--min-mrr`, or
+`--min-intent`. A metric with no cases to average reads `n/a` and **fails** its
+threshold rather than passing vacuously.
+
+### The bundled benchmark
+
+`tests/fixtures/bench/` holds a 15-page fixture vault and a 26-case gold set,
+gated by `tests/test_evaluate.py`. Current baseline on the pure-lexical index:
+
+| Metric | Score |
+|---|---|
+| recall@1 | 0.850 |
+| recall@3 | 0.950 |
+| recall@5 | 0.950 |
+| mrr | 0.900 |
+| intent_accuracy | 1.000 |
+| should_read_precision | 0.444 |
+
+```bash
+obsidian-wiki eval --vault tests/fixtures/bench/vault --gold tests/fixtures/bench/gold.jsonl --verbose
+```
+
+The gold set deliberately includes paraphrase cases that share no vocabulary with
+the target page ("why am I getting throttled?" for `debugging-429s`). Term matching
+returns nothing at all for those — that gap is the headroom a semantic index would
+close, and it is now measured rather than asserted.
 
 ## Context packs
 
@@ -135,6 +268,35 @@ obsidian-wiki sessions-name --from names.json      # or - for stdin
 
 `sessions-name` takes a JSON array of `{"id": N, "name": "...", "summary": "..."}`. The `/session-brain` skill generates this for you.
 
+## Staged writes
+
+With `WIKI_STAGED_WRITES=true`, skills write pages into `_staging/` for review instead of straight into the vault. These commands are the mechanical half of that workflow — `/wiki-stage-commit` calls them.
+
+| Command | What it does |
+|---|---|
+| `staging list` | Inventory `_staging/`, with each file's kind and content revisions |
+| `staging promote <path>` | Move a staged page to its live path |
+| `staging discard <path>` | Move a staged file back to `_raw/rejected-…` |
+
+```bash
+obsidian-wiki staging list --json
+
+# Promote a reviewed page, refusing if either side changed since you looked.
+obsidian-wiki staging promote concepts/attention.md \
+  --expect-staged 9f2c… --expect-live 41ab…
+
+# A page that did not exist live when you reviewed it.
+obsidian-wiki staging promote concepts/new-idea.md --expect-new
+
+obsidian-wiki staging discard concepts/rejected-draft.md
+```
+
+Promotion is a rename, so the page that lands is byte-for-byte the one that was reviewed — arbitrary frontmatter, prose and wikilinks all survive untouched.
+
+The revision flags are optional but are the point of the command: an agent can write to `_staging/` or to the live page while a human is mid-review. When a pin no longer matches, nothing moves and the command exits **9** with `conflict:` on stderr — distinct from exit 1 for bad input, so a caller can tell "re-read and ask again" from "you passed something wrong".
+
+`.patch.md` files are listed with `kind: patch` and refused by `promote`: merging a human-readable diff into a page whose surrounding text may have moved is judgment, and belongs to the skill.
+
 ## Vault syncing
 
 | Command | What it does |
@@ -178,11 +340,11 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `graph-analyse <vault> [--top N] [--snapshot] [--diff-against FILE]` | Graph analysis in pure Python (the graphify algorithm family): god nodes (degree), bridge pages (Brandes betweenness centrality), communities with cohesion scores, cross-community surprising connections, suggested questions, and — with `--diff-against` a previous `_insights.md` — a graph diff. Vault bookkeeping files (`index`, `log`, `hot`, `_insights`) are excluded. |
 | `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
-| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json` |
-| `cache-update <vault> <source>` | Record a source's SHA-256 in `.manifest.json` after ingest |
+| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable` |
+| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME` |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
-| `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. Used by wiki-update Step 3b. |
+| `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. `--backend` beats the resolved `CODE_UNDERSTANDING_*` config (env → project `.env` → global config). Used by wiki-update Step 3b. |
 
 ```bash
 obsidian-wiki graph-query /path/to/vault "transformer architecture" --pretty
@@ -196,6 +358,7 @@ obsidian-wiki graph-analyse /path/to/vault --around attention --depth 2 --direct
 obsidian-wiki batch-plan /path/to/vault ~/research --max-mb 4 --max-files 30
 obsidian-wiki cache-check /path/to/vault ~/research/*.pdf
 obsidian-wiki cache-update /path/to/vault ~/research/paper.pdf --pages concepts/attention.md
+obsidian-wiki cache-update /path/to/vault /srv/data/report.pdf --key repo:github.com/acme/reports
 obsidian-wiki ast-extract ./src --pretty
 obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
@@ -209,6 +372,40 @@ Most commands accept `--json` and/or `--pretty` for machine-readable output.
 `cache-update` therefore takes an advisory lock (`.manifest.lock` in the vault root, `O_CREAT|O_EXCL`, stdlib only so it works on Windows) and writes the manifest atomically via a temp file plus `os.replace`. A reader never sees a partial file, and a crashed writer's lock is stolen after 60 seconds.
 
 In parallel runs, always update the manifest through `obsidian-wiki cache-update` rather than hand-editing `.manifest.json` — hand edits bypass the lock.
+
+### Source keys and legacy migration
+
+Manifest `sources` keys — and the `sources:` frontmatter on pages — are **portable**. A vault is synced across machines, so a stored key is one of:
+
+| Source location | Key form | Example |
+|---|---|---|
+| Inside the vault | vault-relative | `Raw/papers/attention.pdf` |
+| Under `$HOME` | `~`-relative | `~/.claude/projects/.../abc123.jsonl` |
+| Not a file at all | pseudo-key | `url:https://example.com/article`, `repo:github.com/o/n`, `agent:claude/<id>` |
+
+A pseudo-key is any `scheme:`/`://` identifier — the shape is what matters (it can never be mistaken for a file path), not a fixed list of names. Recommended names are `repo:` for a git remote, `url:` for a canonical URL, and `agent:` for a session log.
+
+`cache-update` normalises the key automatically. Pass `--key` for a source with no portable path form — the explicit key is authoritative, and re-keys an entry the manifest previously tracked by path. If a source is outside the vault and `$HOME` and no `--key` is given, the absolute path is stored for backward compatibility but a `no portable key` warning goes to stderr.
+
+To convert a manifest that already holds legacy absolute keys:
+
+```bash
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault --dry-run
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault
+```
+
+`migrate` rewrites in-vault keys to vault-relative and `$HOME` keys to `~`-relative, merges collisions, and leaves pseudo-keys and unclassifiable paths untouched (warning on the latter). `normalize` is kept as an alias for older instructions.
+
+**After moving a vault between machines**, its absolute keys are rooted at the *old* vault path, so neither the new vault root nor `$HOME` matches them and a plain `migrate` cannot strip anything. When that happens the summary says `nothing portable to write — N key(s) kept non-portable` (it never claims `already portable` while absolute keys remain) and tells you to pass the old root explicitly. Repeat the flag if the vault lived at more than one location:
+
+```bash
+python3 "$OBSIDIAN_WIKI_REPO/scripts/manifest.py" migrate /path/to/vault \
+  --from-root /old/machine/path/to/vault --dry-run
+```
+
+`--from-root` takes precedence over the current-vault/`$HOME` rules for keys under it. It does not help with keys from *outside* any vault (e.g. another host's `~/.claude` or `~/.hermes` cache): those have no portable path form, so record them with an explicit key (`agent:` or your own scheme) instead.
+
+`python3 scripts/manifest.py delta <vault> --scan '<glob>'` lists new/modified sources, honouring `WIKI_SKIP_PROJECTS`.
 
 ### Graph cache
 
