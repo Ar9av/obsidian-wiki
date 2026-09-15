@@ -19,7 +19,7 @@ import stat
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TypedDict
+from typing import Callable, TypedDict
 
 from obsidian_wiki import __version__
 
@@ -731,7 +731,324 @@ def _doctor_code_understanding_checks(
     return checks
 
 
-def run_doctor(*, vault_override: str | None = None, project_dir: str | None = None) -> dict[str, object]:
+# ── versions.latest: framework update check ──────────────────────────────────
+# Opt-in (`doctor --check-updates`) comparison of the installed package against
+# the latest upstream release. PyPI JSON is primary (it is what
+# `pip install -U obsidian-wiki` delivers); GitHub releases/tags are the
+# fallback. Zero network I/O unless explicitly asked; fail-open to info.
+
+_VERSION_CHECK_TTL_S = 24 * 60 * 60
+_VERSION_CHECK_TIMEOUT_S = 3
+_VERSION_CHECK_FILENAME = "version-check.json"
+_VERSION_FIXTURE_ENV = "OBSIDIAN_WIKI_LATEST_FIXTURE"
+_VERSIONS_LATEST_HINT = "run: pip install -U obsidian-wiki && obsidian-wiki setup"
+_VERSIONS_LATEST_NOT_RUN = "update check not run (pass --check-updates to check for new releases)"
+_PYPI_JSON_URL = "https://pypi.org/pypi/obsidian-wiki/json"
+_GITHUB_RELEASES_URL = "https://api.github.com/repos/Ar9av/obsidian-wiki/releases/latest"
+_GITHUB_TAGS_URL = "https://api.github.com/repos/Ar9av/obsidian-wiki/tags"
+
+
+def _normalize_version(text: str) -> tuple[tuple[int, ...], str]:
+    """Split a version string into (numeric release tuple, pre-release rest).
+
+    Strips a leading ``v`` and compares CalVer numerically, so ``v2026.09.1``
+    and ``2026.9.1`` are equal. Raises ValueError when nothing parseable.
+    """
+    s = text.strip()
+    if s[:1] in ("v", "V"):
+        s = s[1:].strip()
+    match = re.match(r"(\d+(?:\.\d+)*)(.*)", s)
+    if not match:
+        raise ValueError(f"unparseable version: {text!r}")
+    release = tuple(int(part) for part in match.group(1).split("."))
+    return release, match.group(2).strip()
+
+
+def _compare_versions(a: str, b: str) -> int:
+    """Return -1/0/1 for a<b, a==b, a>b. Raises ValueError if either is garbage."""
+    rel_a, rest_a = _normalize_version(a)
+    rel_b, rest_b = _normalize_version(b)
+    width = max(len(rel_a), len(rel_b))
+    rel_a += (0,) * (width - len(rel_a))
+    rel_b += (0,) * (width - len(rel_b))
+    if rel_a != rel_b:
+        return -1 if rel_a < rel_b else 1
+    if rest_a == rest_b:
+        return 0
+    if not rest_a:
+        return 1
+    if not rest_b:
+        return -1
+    return -1 if rest_a < rest_b else 1
+
+
+def _http_get_json(url: str, timeout: float) -> object:
+    import urllib.request
+
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": "obsidian-wiki-doctor"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _extract_pypi_version(data: object) -> str:
+    version: object = None
+    if isinstance(data, dict):
+        info = data.get("info")
+        if isinstance(info, dict):
+            version = info.get("version")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError("malformed PyPI response: missing info.version")
+    return version.strip()
+
+
+def _extract_github_release(data: object) -> str:
+    tag = data.get("tag_name") if isinstance(data, dict) else None
+    if not isinstance(tag, str) or not tag.strip():
+        raise ValueError("releases/latest has no tag_name")
+    return tag.strip()
+
+
+def _extract_github_tag(data: object) -> str:
+    first = data[0] if isinstance(data, list) and data else None
+    name = first.get("name") if isinstance(first, dict) else None
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("tags have no name")
+    return name.strip()
+
+
+_LATEST_SOURCES: tuple[tuple[str, str, Callable[[object], str]], ...] = (
+    (_PYPI_JSON_URL, "pypi", _extract_pypi_version),
+    (_GITHUB_RELEASES_URL, "github", _extract_github_release),
+    (_GITHUB_TAGS_URL, "github", _extract_github_tag),
+)
+
+
+def _fetch_latest_from_network(timeout: float) -> tuple[str, str]:
+    """Return (version, source). PyPI primary, GitHub fallback."""
+    errors: list[str] = []
+    for url, source, extract in _LATEST_SOURCES:
+        try:
+            return extract(_http_get_json(url, timeout)), source
+        except Exception as exc:
+            errors.append(f"{url}: {exc}")
+    raise RuntimeError("version check failed (" + "; ".join(errors) + ")")
+
+
+def _version_cache_path() -> Path:
+    return _resolve_global_config_dir() / _VERSION_CHECK_FILENAME
+
+
+def _read_version_cache(path: Path) -> dict[str, object] | None:
+    """Return the cached record plus a freshness flag, or None if unusable."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        latest = data.get("latest")
+        fetched_at = data.get("fetched_at")
+        source = data.get("source")
+        if not isinstance(latest, str) or not latest.strip():
+            return None
+        if not isinstance(fetched_at, str):
+            return None
+        stamp = datetime.fromisoformat(fetched_at.replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age = (datetime.now(timezone.utc) - stamp).total_seconds()
+        if age < 0:
+            age = 0
+        return {
+            "latest": latest.strip(),
+            "checked_at": fetched_at,
+            "source": source if isinstance(source, str) and source else "unknown",
+            "fresh": age < _VERSION_CHECK_TTL_S,
+        }
+    except (OSError, ValueError, AttributeError, TypeError):
+        return None
+
+
+def _write_version_cache(path: Path, *, latest: str, source: str) -> str:
+    """Persist a fresh lookup (best-effort) and return the timestamp written."""
+    checked_at = datetime.now(timezone.utc).isoformat()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"latest": latest, "fetched_at": checked_at, "source": source}) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+    return checked_at
+
+
+def _read_fixture_version(path: Path) -> str:
+    """Read a pinned upstream version from a fixture file (PyPI or tag shape)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"unreadable latest-version fixture {path}: {exc}")
+    version: object = None
+    if isinstance(data, dict):
+        info = data.get("info")
+        if isinstance(info, dict):
+            version = info.get("version")
+        if version is None:
+            tag = data.get("tag_name")
+            version = tag if isinstance(tag, str) else data.get("name")
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError(f"malformed latest-version fixture {path}: missing info.version")
+    return version.strip()
+
+
+def _compare_against_latest(
+    latest: str, source: str, checked_at: str
+) -> tuple[dict[str, str], dict[str, object | None]]:
+    outcome = _compare_versions(__version__, latest)
+    meta: dict[str, object | None] = {
+        "latest_version": latest,
+        "latest_checked_at": checked_at,
+        "latest_source": source,
+    }
+    if outcome < 0:
+        check = {
+            "name": "versions.latest",
+            "status": "warn",
+            "detail": f"installed {__version__} is behind latest {latest} (via {source})",
+            "hint": _VERSIONS_LATEST_HINT,
+        }
+    elif outcome == 0:
+        check = {
+            "name": "versions.latest",
+            "status": "info",
+            "detail": f"installed {__version__} matches latest {latest} (via {source})",
+            "hint": "",
+        }
+    else:
+        check = {
+            "name": "versions.latest",
+            "status": "info",
+            "detail": f"installed {__version__} is newer than latest {latest} (via {source})",
+            "hint": "",
+        }
+    return check, meta
+
+
+def _versions_latest_check(
+    *,
+    check_updates: bool,
+    version_fetcher: Callable[[], str] | None,
+    version_cache_path: Path | None,
+) -> tuple[dict[str, str], dict[str, object | None]]:
+    """Build the versions.latest check plus its meta triple. Never raises.
+
+    Reads a fresh 24h cache without network; fetches (PyPI, GitHub fallback)
+    only under check_updates. Any failure degrades to info with null meta —
+    this check never fails and never affects the exit code.
+    """
+    null_meta: dict[str, object | None] = {
+        "latest_version": None,
+        "latest_checked_at": None,
+        "latest_source": None,
+    }
+    try:
+        _normalize_version(__version__)
+    except ValueError:
+        return (
+            {
+                "name": "versions.latest",
+                "status": "info",
+                "detail": f"update check unavailable: unparseable installed version ({__version__})",
+                "hint": "",
+            },
+            null_meta,
+        )
+    cache_path = version_cache_path or _version_cache_path()
+    cached = _read_version_cache(cache_path)
+    if cached and cached["fresh"]:
+        try:
+            check, meta = _compare_against_latest(
+                str(cached["latest"]), str(cached["source"]), str(cached["checked_at"])
+            )
+            return check, meta
+        except Exception as exc:
+            reason = str(exc) or type(exc).__name__
+            if not check_updates:
+                return (
+                    {
+                        "name": "versions.latest",
+                        "status": "info",
+                        "detail": f"update check unavailable: {reason}",
+                        "hint": "",
+                    },
+                    null_meta,
+                )
+            # Poisoned fresh cache + flag: drop it so the fetch path below
+            # refetches, and a fetch failure can't resurface the garbage
+            # as "last known latest".
+            cached = None
+    if not check_updates:
+        return (
+            {
+                "name": "versions.latest",
+                "status": "info",
+                "detail": _VERSIONS_LATEST_NOT_RUN,
+                "hint": "",
+            },
+            null_meta,
+        )
+    fixture = os.environ.get(_VERSION_FIXTURE_ENV, "").strip()
+    try:
+        if version_fetcher is not None:
+            latest_raw, source = version_fetcher(), "fixture"
+        elif fixture:
+            latest_raw, source = _read_fixture_version(Path(fixture)), "fixture"
+        else:
+            latest_raw, source = _fetch_latest_from_network(_VERSION_CHECK_TIMEOUT_S)
+        if not isinstance(latest_raw, str) or not latest_raw.strip():
+            raise ValueError(f"malformed upstream version: {latest_raw!r}")
+        latest = latest_raw.strip()
+        _normalize_version(latest)
+        checked_at = _write_version_cache(cache_path, latest=latest, source=source)
+        return _compare_against_latest(latest, source, checked_at)
+    except Exception as exc:
+        reason = str(exc) or type(exc).__name__
+        if cached and cached["latest"]:
+            return (
+                {
+                    "name": "versions.latest",
+                    "status": "info",
+                    "detail": (
+                        f"update check unavailable: {reason}; "
+                        f"last known latest {cached['latest']} (via {cached['source']})"
+                    ),
+                    "hint": "",
+                },
+                {
+                    "latest_version": cached["latest"],
+                    "latest_checked_at": cached["checked_at"],
+                    "latest_source": cached["source"],
+                },
+            )
+        return (
+            {
+                "name": "versions.latest",
+                "status": "info",
+                "detail": f"update check unavailable: {reason}",
+                "hint": "",
+            },
+            null_meta,
+        )
+
+
+def run_doctor(
+    *,
+    vault_override: str | None = None,
+    project_dir: str | None = None,
+    check_updates: bool = False,
+    version_fetcher: Callable[[], str] | None = None,
+    version_cache_path: str | Path | None = None,
+) -> dict[str, object]:
     checks: list[dict[str, str]] = []
 
     try:
@@ -895,6 +1212,20 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             hint="",
         )
 
+    cache_override = Path(version_cache_path).expanduser() if version_cache_path else None
+    latest_check, latest_meta = _versions_latest_check(
+        check_updates=check_updates,
+        version_fetcher=version_fetcher,
+        version_cache_path=cache_override,
+    )
+    _doctor_add(
+        checks,
+        name=latest_check["name"],
+        status=latest_check["status"],
+        detail=latest_check["detail"],
+        hint=latest_check["hint"],
+    )
+
     if project_dir:
         project = Path(project_dir).expanduser().resolve()
         if project.is_dir():
@@ -927,6 +1258,13 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
     return {
         "status": _doctor_status(checks),
         "checks": checks,
+        "meta": {
+            "package_version": __version__,
+            "setup_version": setup_version or None,
+            "latest_version": latest_meta["latest_version"],
+            "latest_checked_at": latest_meta["latest_checked_at"],
+            "latest_source": latest_meta["latest_source"],
+        },
     }
 
 
@@ -938,6 +1276,8 @@ def _print_doctor(report: dict[str, object]) -> None:
         status = check["status"]
         detail = check["detail"]
         hint = check["hint"]
+        if name == "versions.latest" and status == "info" and detail == _VERSIONS_LATEST_NOT_RUN:
+            continue
         print(f"{icon.get(status, '•')} {name}: {detail}")
         if hint:
             print(f"   hint: {hint}")
@@ -1390,7 +1730,11 @@ def cmd_code_understand(args: argparse.Namespace) -> int:
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
-    report = run_doctor(vault_override=args.vault, project_dir=args.project)
+    report = run_doctor(
+        vault_override=args.vault,
+        project_dir=args.project,
+        check_updates=args.check_updates,
+    )
     if args.json:
         if args.pretty:
             print(json.dumps(report, indent=2))
@@ -2360,6 +2704,11 @@ def build_parser() -> argparse.ArgumentParser:
     dr.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     dr.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     dr.add_argument("--strict", action="store_true", help="exit non-zero on warnings as well as failures")
+    dr.add_argument(
+        "--check-updates",
+        action="store_true",
+        help="check PyPI (GitHub fallback) for a newer release; cached 24h, never fails",
+    )
     dr.set_defaults(func=cmd_doctor)
 
     lt = sub.add_parser(
