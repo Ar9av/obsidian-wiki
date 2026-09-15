@@ -13,7 +13,10 @@ from typing import Any, Iterable
 DEFAULT_BUDGET = 8_000
 MIN_BUDGET = 256
 MAX_BUDGET = 100_000
-SKIP_DIRS = frozenset({"_raw", "_staging", "_archives", "_archived", "_readouts", ".obsidian", ".git"})
+# Tool-owned directories, not vault content: dot-prefixed paths (`.venv`, `.git`)
+# are skipped wholesale by `load_pages`, and this list adds the non-hidden
+# equivalents (`venv/`, `node_modules/`).
+SKIP_DIRS = frozenset({"_raw", "_staging", "_archives", "_archived", "_readouts", ".obsidian", ".git", "venv", "node_modules", "__pycache__"})
 SKIP_FILES = frozenset({"AGENTS.md", "CLAUDE.md", "GEMINI.md", "hot.md", "index.md", "log.md", "_insights.md"})
 BLOCKED_PUBLIC_TAGS = frozenset({"visibility/internal", "visibility/pii"})
 TIER_ORDER = {"core": 0, "supporting": 1, "peripheral": 2}
@@ -191,7 +194,9 @@ def load_pages(vault: Path, *, public_only: bool = False) -> list[PageRecord]:
     pages: list[PageRecord] = []
     for path in sorted(vault.rglob("*.md")):
         relative = path.relative_to(vault)
-        if path.name in SKIP_FILES or any(part in SKIP_DIRS for part in relative.parts):
+        if path.name in SKIP_FILES or any(
+            part in SKIP_DIRS or part.startswith(".") for part in relative.parts
+        ):
             continue
         page = _page_from_path(path, vault)
         if not public_only or not BLOCKED_PUBLIC_TAGS.intersection(page.tags):

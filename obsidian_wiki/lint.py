@@ -23,7 +23,13 @@ from obsidian_wiki.trust import (
     validate_trust_metadata,
 )
 
-SKIP_DIRS = frozenset("_raw _archived _staging _archives _bootstrap .obsidian .git".split())
+# Tool-owned directories, not vault content: dot-prefixed paths (`.venv`, `.git`)
+# are skipped wholesale by `_iter_pages`, and this list adds the non-hidden
+# equivalents (`venv/`, `node_modules/`).
+SKIP_DIRS = frozenset({
+    "_raw", "_archived", "_staging", "_archives", "_bootstrap", ".obsidian", ".git",
+    "venv", "node_modules", "__pycache__",
+})
 REQUIRED_FRONTMATTER = (
     "title",
     "category",
@@ -119,7 +125,10 @@ def _slug(text: str) -> str:
 def _iter_pages(vault: Path) -> list[Path]:
     return [
         path for path in vault.rglob("*.md")
-        if not any(part in SKIP_DIRS for part in path.relative_to(vault).parts)
+        if not any(
+            part in SKIP_DIRS or part.startswith(".")
+            for part in path.relative_to(vault).parts
+        )
     ]
 
 

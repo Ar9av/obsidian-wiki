@@ -24,9 +24,13 @@ from typing import Any
 TRUST_LEDGER_RELATIVE_PATH = Path("_meta/trust-ledger.json")
 TRUST_LEDGER_SCHEMA_VERSION = 1
 TRUST_REVIEW_METHOD = "manual-lineage-and-claim-coverage-v1"
-TRUST_SKIP_DIRS = frozenset(
-    "_raw _archived _staging _archives _bootstrap .obsidian .git".split()
-)
+# Tool-owned directories, not vault content: dot-prefixed paths (`.venv`, `.git`)
+# are skipped wholesale by `iter_trust_pages`, and this list adds the non-hidden
+# equivalents (`venv/`, `node_modules/`).
+TRUST_SKIP_DIRS = frozenset({
+    "_raw", "_archived", "_staging", "_archives", "_bootstrap", ".obsidian", ".git",
+    "venv", "node_modules", "__pycache__",
+})
 TRUST_RESERVED_STEMS = frozenset({"index", "log", "hot", "_insights"})
 ALLOWED_LIFECYCLES = frozenset({"draft", "reviewed", "verified", "disputed", "archived"})
 # Transitions the llm-wiki state machine forbids outright: only ingest sets
@@ -272,7 +276,7 @@ def iter_trust_pages(vault: Path) -> list[Path]:
     pages: list[Path] = []
     for path in vault.rglob("*.md"):
         rel = path.relative_to(vault)
-        if any(part in TRUST_SKIP_DIRS for part in rel.parts):
+        if any(part in TRUST_SKIP_DIRS or part.startswith(".") for part in rel.parts):
             continue
         if path.stem in TRUST_RESERVED_STEMS:
             continue

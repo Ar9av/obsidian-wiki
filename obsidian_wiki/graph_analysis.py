@@ -70,8 +70,11 @@ def _page_slug(path: Path, root: Path) -> str:
 # wikilink graph is identical no matter which entry point produced it.
 
 #: Directories that hold staging / archive / config material, not knowledge.
+#: Dot-prefixed paths (`.venv`, `.git`) are skipped wholesale by `is_wiki_page`;
+#: this list also covers the non-hidden equivalents (`venv/`, `node_modules/`).
 SKIP_DIRS = frozenset({
     "_raw", "_archived", "_staging", "_archives", "_meta", "_readouts", ".obsidian",
+    ".git", "venv", "node_modules", "__pycache__",
 })
 
 #: Vault bookkeeping files at the vault ROOT. They link to (almost) every page,
@@ -88,7 +91,7 @@ def is_wiki_page(path: Path, vault: Path) -> bool:
         rel = path.relative_to(vault)
     except ValueError:
         return False
-    if any(part in SKIP_DIRS for part in rel.parts):
+    if any(part in SKIP_DIRS or part.startswith(".") for part in rel.parts):
         return False
     if len(rel.parts) == 1 and path.stem in SKIP_ROOT_FILES:
         return False

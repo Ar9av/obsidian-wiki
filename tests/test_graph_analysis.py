@@ -587,6 +587,18 @@ class TestPageSelection:
         _page(vault, "a", [])
         assert [p.stem for p in iter_pages(vault)] == ["a"]
 
+    def test_tool_owned_directories_excluded(self, vault):
+        """Dot-dirs are skipped outright (`.venv`, `.git`, `.trash`, …); the
+        non-hidden dependency trees batch.py skips are skipped here too."""
+        for d in (".venv/lib/site-packages/pkg", ".git/hooks", ".trash",
+                  "node_modules/pkg", "venv", "__pycache__"):
+            (vault / d).mkdir(parents=True, exist_ok=True)
+            (vault / d / "note.md").write_text("---\ntitle: x\n---\n")
+        _page(vault, "a", [])
+        assert [p.stem for p in iter_pages(vault)] == ["a"]
+        assert not is_wiki_page(vault / ".venv" / "lib" / "site-packages" / "pkg" / "note.md", vault)
+        assert not is_wiki_page(vault / "node_modules" / "pkg" / "note.md", vault)
+
     def test_iter_pages_is_sorted(self, vault):
         for n in ("zebra", "alpha", "middle"):
             _page(vault, n, [])
