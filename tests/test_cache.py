@@ -348,6 +348,11 @@ class TestCacheCLIVaultRelativeSources:
         assert proc.returncode == 0, proc.stderr
         data = json.loads(proc.stdout)
         assert data["path"] == str(workdir / "Raw" / "database" / "x.pdf")
+        # The typed string is byte-for-byte a manifest key, yet the vault file
+        # it names is not the one hashed — say so rather than choosing silently.
+        assert (f"note: Raw/database/x.pdf matched both "
+                f"{workdir / 'Raw' / 'database' / 'x.pdf'} and "
+                f"{vault / 'Raw' / 'database' / 'x.pdf'}") in proc.stderr
 
     def test_cache_update_missing_source_clean_error(self, vault, tmp_path):
         elsewhere = tmp_path / "elsewhere"

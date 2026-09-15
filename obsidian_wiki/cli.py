@@ -1326,6 +1326,21 @@ def _resolve_source_arg(vault: Path, raw: str) -> Path:
     return candidates[0]
 
 
+def _note_source_ambiguity(vault: Path, raw: str, chosen: Path) -> None:
+    """Warn when a relative argument exists under both the CWD and the vault.
+
+    The typed string is then byte-for-byte a manifest key, but the vault file
+    it names is not the one being hashed. Staying quiet would let the vault
+    entry keep a stale hash while a second entry appears under the CWD key.
+    """
+    candidates = _source_candidates(vault, raw)
+    if len(candidates) != 2 or not all(c.exists() for c in candidates):
+        return
+    cwd_path, vault_path = candidates
+    print(f"note: {raw} matched both {cwd_path} and {vault_path}; "
+          f"using {chosen}", file=sys.stderr)
+
+
 def cmd_cache_check(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import check_sources
     vault = Path(args.vault).expanduser().resolve()
@@ -1347,6 +1362,7 @@ def cmd_cache_update(args: argparse.Namespace) -> int:
         print(f"error: source {args.source} does not exist (tried {tried})",
               file=sys.stderr)
         return 1
+    _note_source_ambiguity(vault, args.source, source)
     pages = args.pages or []
     h = update_source(vault, source, pages_produced=pages, key=args.key)
     print(json.dumps({
