@@ -33,21 +33,11 @@ obsidian-wiki doctor --strict          # exit non-zero on warnings too
 
 Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
 
-### Checking for framework updates
+### Upgrading the framework
 
-`doctor` performs zero network I/O by default. Pass `--check-updates` to compare
-the installed package against the latest release (PyPI primary, GitHub releases
-fallback; the result is cached 24h in `version-check.json` next to the global config):
-
-```bash
-obsidian-wiki doctor --check-updates
-obsidian-wiki doctor --json --check-updates   # meta.latest_version / meta.latest_checked_at / meta.latest_source
-```
-
-A behind install is a `warn` (`pip install -U obsidian-wiki && obsidian-wiki setup`);
-an unreachable or malformed upstream is an `info` and never affects the exit code.
-`meta.latest_version` stores the raw upstream string (`v`-prefix preserved);
-comparison normalizes before comparing.
+`doctor` never checks for new releases. To upgrade, use your installer
+(`pip install -U obsidian-wiki` / `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`)
+then re-run `obsidian-wiki setup`.
 
 ## Querying & linting
 
