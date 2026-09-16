@@ -33,6 +33,12 @@ obsidian-wiki doctor --strict          # exit non-zero on warnings too
 
 Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
 
+### Upgrading the framework
+
+`doctor` never checks for new releases. To upgrade, use your installer
+(`pip install -U obsidian-wiki` / `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`)
+then re-run `obsidian-wiki setup`.
+
 ## Querying & linting
 
 | Command | What it does |

@@ -927,6 +927,10 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
     return {
         "status": _doctor_status(checks),
         "checks": checks,
+        "meta": {
+            "package_version": __version__,
+            "setup_version": setup_version or None,
+        },
     }
 
 
