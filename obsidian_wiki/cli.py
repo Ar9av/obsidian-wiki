@@ -1296,10 +1296,59 @@ def cmd_sessions_name(args: argparse.Namespace) -> int:
     return 0
 
 
+def _source_candidates(vault: Path, raw: str) -> list[Path]:
+    """Candidate absolute paths for a source argument, in resolution order.
+
+    Relative arguments resolve against the CWD first (the long-standing
+    behavior out-of-vault sources rely on), then against the vault root —
+    relative manifest keys are read as vault-relative by
+    ``cache.resolve_key``, so a vault-relative argument must resolve the same
+    way on the way in. Absolute arguments keep only themselves.
+    """
+    p = Path(raw).expanduser()
+    if p.is_absolute():
+        return [p.resolve()]
+    candidates = []
+    for base in (Path.cwd(), vault):
+        resolved = (base / p).resolve()
+        if resolved not in candidates:
+            candidates.append(resolved)
+    return candidates
+
+
+def _resolve_source_arg(vault: Path, raw: str) -> Path:
+    """First *source_candidates* form that exists on disk.
+
+    When no candidate exists, the CWD-relative form is returned so read-only
+    callers (cache-check) can classify it as missing; writers must treat a
+    missing result as an error rather than hashing a wrong file.
+    """
+    candidates = _source_candidates(vault, raw)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _note_source_ambiguity(vault: Path, raw: str, chosen: Path) -> None:
+    """Warn when a relative argument exists under both the CWD and the vault.
+
+    The typed string is then byte-for-byte a manifest key, but the vault file
+    it names is not the one being hashed. Staying quiet would let the vault
+    entry keep a stale hash while a second entry appears under the CWD key.
+    """
+    candidates = _source_candidates(vault, raw)
+    if len(candidates) != 2 or not all(c.exists() for c in candidates):
+        return
+    cwd_path, vault_path = candidates
+    print(f"note: {raw} matched both {cwd_path} and {vault_path}; "
+          f"using {chosen}", file=sys.stderr)
+
+
 def cmd_cache_check(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import check_sources
     vault = Path(args.vault).expanduser().resolve()
-    sources = [Path(p).expanduser().resolve() for p in args.sources]
+    sources = [_resolve_source_arg(vault, p) for p in args.sources]
     result = check_sources(vault, sources)
     if args.pretty:
         print(json.dumps(result, indent=2))
@@ -1311,7 +1360,13 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
 def cmd_cache_update(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import stored_key, update_source
     vault = Path(args.vault).expanduser().resolve()
-    source = Path(args.source).expanduser().resolve()
+    source = _resolve_source_arg(vault, args.source)
+    if not source.exists():
+        tried = " and ".join(str(c) for c in _source_candidates(vault, args.source))
+        print(f"error: source {args.source} does not exist (tried {tried})",
+              file=sys.stderr)
+        return 1
+    _note_source_ambiguity(vault, args.source, source)
     pages = args.pages or []
     h = update_source(vault, source, pages_produced=pages, key=args.key)
     print(json.dumps({
