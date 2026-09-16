@@ -223,13 +223,13 @@ def cmd_migrate(args: argparse.Namespace) -> int:
         f"{non_portable} kept non-portable)"
     )
     if args.dry_run:
-        print("(dry-run — no changes written)")
+        print("(dry-run - no changes written)")
         return 0
     if new_sources == sources:
         if non_portable:
-            print(f"nothing portable to write — {non_portable} key(s) kept non-portable")
+            print(f"nothing portable to write - {non_portable} key(s) kept non-portable")
         else:
-            print("already portable — nothing to write")
+            print("already portable - nothing to write")
         return 0
     m["sources"] = new_sources
     mp = manifest_path(args.vault)
