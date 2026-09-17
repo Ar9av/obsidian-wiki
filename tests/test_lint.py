@@ -102,6 +102,23 @@ def test_lint_vault_passes_clean_graph(tmp_path: Path) -> None:
     assert report["findings"]["missing_frontmatter"] == []
 
 
+def test_lint_vault_honors_okignore(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    _page(vault, "_chatwithgpt/export.md", include_frontmatter=False, links=["ghost"])
+    _page(vault, "notes/old/stale.md", include_frontmatter=False)
+    _page(vault, "notes/keep.md", title="Keep", links=["alpha"])
+    (vault / ".okignore").write_text("# inboxes\n_chatwithgpt/\n/notes/old\n", encoding="utf-8")
+
+    report = lint_vault(vault)
+    flagged = json.dumps(report["findings"])
+
+    assert "_chatwithgpt" not in flagged
+    assert "notes/old" not in flagged
+    assert report["findings"]["broken_links"] == []
+
+
 def test_lint_vault_fails_on_broken_links_and_missing_frontmatter(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", links=["ghost"])

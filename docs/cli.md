@@ -44,7 +44,7 @@ then re-run `obsidian-wiki setup`.
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten) |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
 | `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash

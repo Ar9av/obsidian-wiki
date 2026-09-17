@@ -10,6 +10,7 @@ from typing import Any
 
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
+from obsidian_wiki.graph_analysis import okignore_patterns, okignored
 from obsidian_wiki.temporal import (
     SUPERSEDED_FIELD,
     superseded_target,
@@ -123,12 +124,14 @@ def _slug(text: str) -> str:
 
 
 def _iter_pages(vault: Path) -> list[Path]:
+    patterns = okignore_patterns(vault)
     return [
         path for path in vault.rglob("*.md")
         if not any(
             part in SKIP_DIRS or part.startswith(".")
             for part in path.relative_to(vault).parts
         )
+        and not okignored(path.relative_to(vault), patterns)
     ]
 
 
