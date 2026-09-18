@@ -40,7 +40,7 @@ def main() -> int:
     if last_tw:
         print(git("diff", log_range, "--", ENGLISH))
     else:
-        print(f"{TRANSLATION} has no history — the entire {ENGLISH} is untranslated.")
+        print(f"{TRANSLATION} has no history - the entire {ENGLISH} is untranslated.")
     print(f"Translate the changes above and backfill them into {TRANSLATION}.")
     return 1
 
