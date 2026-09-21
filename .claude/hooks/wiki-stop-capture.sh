@@ -32,6 +32,16 @@ print('1' if d.get('stop_hook_active') else '0')
 " 2>/dev/null || echo "0")
 [[ "$IS_HOOK_TURN" == "1" ]] && exit 0
 
+# Per-session kill switch. `wiki-setup` has always documented HIVEMIND_CAPTURE
+# as the opt-out, but nothing read it, so the documented escape hatch was a
+# no-op. WIKI_STOP_CAPTURE is the name that matches the other knobs here
+# (WIKI_STOP_REARM_*); HIVEMIND_CAPTURE stays supported so the documented
+# spelling keeps working. Exits without claiming the sentinel, so unsetting it
+# re-arms the nudge for the rest of the session.
+case "${WIKI_STOP_CAPTURE:-${HIVEMIND_CAPTURE:-}}" in
+  false|0|off|no) exit 0 ;;
+esac
+
 # Fire at most once per session — sentinel keyed to session_id prevents
 # repeated nudges after the threshold is crossed on the first turn.
 #

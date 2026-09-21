@@ -99,6 +99,18 @@ Open the vault in Obsidian and hit the graph view (Cmd/Ctrl+P → "Open graph vi
 
 Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
 
+## It remembers between sessions
+
+A session starts with the vault's memory already in context — who you are, what threads are open, what changed recently — and ends by capturing anything reusable before the context closes.
+
+<p align="center">
+  <img width="720" alt="session lifecycle: recap injected at start, capture nudged at stop" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/memory-session-lifecycle.png?raw=true" />
+</p>
+
+`index.md`, `log.md`, `hot.md`, and the owner profile and todo index under `_meta/` all go through one writer that takes a lock and writes atomically, so parallel agents can't drop each other's updates.
+
+More → **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)**
+
 ## Why this and not a notes folder
 
 - **It compiles, it doesn't accumulate.** New knowledge merges into existing pages. Contradictions get flagged. Nothing gets duplicated.
@@ -106,6 +118,7 @@ Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Po
 - **You can tell knowledge from guessing.** Every claim is tagged `extracted`, `^[inferred]`, or `^[ambiguous]`, and lint flags pages drifting into speculation.
 - **Queries stay cheap as it grows.** Titles, tags, and summaries get read before page bodies. 20 pages or 2000, roughly the same cost.
 - **It's yours.** Plain markdown in a folder. Push it to a private repo, open it in Obsidian, grep it, delete it. No service, no lock-in, nothing leaves your machine.
+- **It carries context across sessions.** An owner profile, open threads, and a running snapshot get injected at session start, so you don't re-explain yourself.
 - **Works where you already work.** One `.skills/` directory, symlinked into every agent you use.
 
 More → **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**
@@ -171,6 +184,7 @@ Full data, per-run logs and the scaling measurements are in
 | **[CLI Reference](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/cli.md)** | Every `obsidian-wiki` subcommand |
 | **[Configuration](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/configuration.md)** | Config vars, QMD semantic search, `_raw/` staging, GitHub sync |
 | **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)** | The four ingest stages, vault structure, what we added to Karpathy's pattern |
+| **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | The index, log, hot cache, owner profile, and todo index |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | Topic graph over your agent session history |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | Capture pages into the vault, and fill web forms from it |
 | **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | Run a vault as a Dockerized memory service agents reach over HTTP/MCP |

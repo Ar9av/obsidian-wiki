@@ -34,10 +34,12 @@ You can maintain multiple vaults (each a `<global config dir>/config.<name>` fil
 $OBSIDIAN_VAULT_PATH/
 ├── index.md                # Master index — every page listed, always kept current
 ├── log.md                  # Chronological activity log (ingests, updates, lints)
-├── hot.md                  # Session hot cache — ~500-word semantic snapshot of recent activity
+├── hot.md                  # Session hot cache — ~500-word semantic snapshot (generated)
 ├── .manifest.json          # Tracks every ingested source: path, timestamps, pages produced
 ├── _meta/
 │   ├── taxonomy.md         # Controlled tag vocabulary
+│   ├── profile.md          # Durable facts about the vault owner (memory skill)
+│   ├── todos.md            # Open threads carried between sessions (memory skill)
 │   └── *.base              # Obsidian Bases dashboard definitions (wiki-dashboard skill)
 ├── _insights.md            # Graph analysis output (hubs, bridges, dead ends)
 ├── _raw/                   # Staging area — drop rough notes here, next ingest promotes them
@@ -166,6 +168,7 @@ See `wiki-query` and `wiki-export` skills for how the filter is applied.
 - **Frontmatter is required.** Every wiki page needs: `title`, `category`, `tags`, `sources`, `created`, `updated`.
 - **Single source of truth.** Visibility tags shape how content is surfaced — they don't duplicate or separate it.
 - **Keep context warm.** `hot.md` is a ~500-word semantic snapshot of recent activity. Every write skill updates it so the next session can pick up where the last one left off without crawling the full vault.
+- **Write memory through the CLI.** `index.md`, `log.md`, `hot.md`, `_meta/profile.md`, and `_meta/todos.md` are maintained by `obsidian-wiki memory`, which locks and writes atomically. Call `obsidian-wiki memory sync --verb <VERB> --field k=v` after a write operation instead of editing those files by hand — hand edits in a parallel run drop whichever write lands second. The one exception is `## Key Takeaways` in `hot.md`, which is yours: pass it with `memory hot --takeaways`.
 
 ## Architecture Reference
 

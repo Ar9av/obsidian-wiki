@@ -260,6 +260,79 @@ obsidian-wiki sessions-name --from names.json      # or - for stdin
 
 `sessions-name` takes a JSON array of `{"id": N, "name": "...", "summary": "..."}`. The `/session-brain` skill generates this for you.
 
+## Memory surface
+
+`index.md`, `log.md`, `hot.md`, and the two `_meta/` tables are the vault's memory. They used to be maintained by prose: fifteen-odd skills each restated "append to the log, add the new pages to the index, rewrite the hot cache" in their own words, rewrote the files wholesale, and took no lock. Two skills running in parallel silently dropped one of the two updates, and nothing enforced the documented ~500-word cap on the hot cache.
+
+These commands are that work as one code path, serialised by the same advisory lock the manifest uses and written atomically.
+
+For what the surface *is* — the generated-vs-yours split, the session hooks, the design decisions — see **[Memory Surface](memory.md)**. This section is the command reference.
+
+![The memory commands in a terminal](images/memory-cli-session.png)
+
+| Command | What it does |
+|---|---|
+| `memory status` | Index drift, log size, hot-cache budget, profile and todo counts |
+| `memory sync` | Log, index, and hot cache as one locked update — the post-write call |
+| `memory log VERB` | Append one parseable operation line to `log.md` |
+| `memory index` | Reconcile `index.md` against the pages actually on disk |
+| `memory hot` | Regenerate `hot.md` within its word cap |
+| `memory recap` | Print profile, open threads, and recent activity as one injectable block |
+| `memory profile list\|set\|forget` | Durable facts about the vault owner |
+| `memory todo list\|add\|done\|drop\|prune` | Open threads carried between sessions |
+
+```bash
+# After an ingest: one lock held across all three writes.
+obsidian-wiki memory sync --verb INGEST \
+  --field source=papers/attention.pdf --field pages_created=3
+
+# Individually, when that is all you need.
+obsidian-wiki memory log LINT --field issues_found=2 --field orphans=1
+obsidian-wiki memory index
+obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric."
+
+obsidian-wiki memory status --json
+```
+
+### What is generated and what is yours
+
+`index.md` is **reconciled**, not overwritten. One section per category is regenerated from disk, and the preamble plus any section whose heading is not a category is preserved verbatim — a hand-written "Reading queue" section survives, a stale entry for a deleted page does not.
+
+`hot.md` is generated except for `## Key Takeaways`, which is the one slot a model writes on purpose. It carries across every rebuild unless `--takeaways` replaces it; `--takeaways -` reads the prose from stdin.
+
+The word cap is enforced. It defaults to 500, overridable with `OBSIDIAN_HOT_MAX_WORDS`, and counts content only — frontmatter and the generated-file note do not spend the budget. Over budget, sections are dropped in increasing order of value: activity lines first, then contradictions, then threads, and the takeaways are truncated last.
+
+`--check` reports drift and exits **2** without writing, so a CI job can fail on a stale index without a bot committing to the vault. Exit 1 stays reserved for bad input, so a caller can tell the two apart.
+
+![memory index --check as a CI gate](images/memory-check-gate.png)
+
+### Owner profile and todo index
+
+Two tables under `_meta/`, both created empty by `setup`:
+
+```bash
+obsidian-wiki memory profile set stack "Python, FastAPI, Postgres" --confidence 0.85
+obsidian-wiki memory todo add "Persist the retrieval index" --origin projects/obsidian-wiki.md
+obsidian-wiki memory todo done t1
+```
+
+They are markdown tables so Obsidian renders them and a human can edit them in place; the parser round-trips hand edits, including values containing a literal `|`. Confidence is the writer's own calibration, not a measurement. Re-adding an open thread with the same text touches it rather than duplicating it.
+
+Staleness is **reported, never enforced**. An open item untouched for 30 days is flagged by `memory todo list` and in `memory recap`; nothing closes it on your behalf.
+
+### Session injection
+
+`memory recap` is what the SessionStart hook (`wiki-session-recap.sh`) feeds into a fresh session, so the model starts with the owner profile and the open threads instead of having to remember to read `hot.md`.
+
+The hook never breaks session startup: a missing vault, a missing install, an empty vault, or a slow filesystem all exit 0 with no output. Tune or disable it per session:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `WIKI_SESSION_RECAP` | *(on)* | `false` skips injection for this session |
+| `WIKI_RECAP_MAX_WORDS` | `350` | Word budget for the injected block |
+| `WIKI_RECAP_MIN_CONFIDENCE` | `0.0` | Drop profile facts below this confidence |
+| `WIKI_RECAP_TIMEOUT` | `10` | Seconds before the recap is abandoned |
+
 ## Staged writes
 
 With `WIKI_STAGED_WRITES=true`, skills write pages into `_staging/` for review instead of straight into the vault. These commands are the mechanical half of that workflow — `/wiki-stage-commit` calls them.

@@ -99,6 +99,18 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
 
+## 它會跨 session 記住
+
+一個 session 開始時，vault 的記憶就已經在 context 裡了——你是誰、有哪些未完成的線索、最近改了什麼——並在結束時，趁 context 關閉前把值得留下的內容擷取起來。
+
+<p align="center">
+  <img width="720" alt="session 生命週期：開始時注入回顧，結束時提示擷取" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/memory-session-lifecycle.png?raw=true" />
+</p>
+
+`index.md`、`log.md`、`hot.md`，以及 `_meta/` 底下的擁有者檔案與待辦索引，全都經由同一個 writer 寫入；它會取得 lock 並以 atomic 方式寫檔，所以平行執行的 agent 不會蓋掉彼此的更新。
+
+更多 → **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)**
+
 ## 為什麼不是一個筆記資料夾就好
 
 - **它會編譯，而不是堆積。** 新知識會合併進既有頁面，矛盾會被標記出來，內容不會重複。
@@ -106,6 +118,7 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 - **你分得出哪些是知識、哪些是猜測。** 每個陳述都會標記為 `extracted`、`^[inferred]` 或 `^[ambiguous]`，lint 會標出開始偏向臆測的頁面。
 - **查詢成本不隨規模爆炸。** 先讀標題、tag 和 summary，需要時才打開頁面內容。20 頁或 2000 頁，成本差不多。
 - **它是你的。** 就是資料夾裡的純 markdown。推到私人 repo、用 Obsidian 打開、用 grep 搜、直接刪掉都行。沒有服務、沒有鎖定，什麼都不會離開你的機器。
+- **它會把脈絡帶到下一個 session。** 擁有者檔案、未完成的線索，以及一份滾動的快照，會在 session 開始時注入，你不用再把自己重新介紹一遍。
 - **在你原本工作的地方就能用。** 一個 `.skills/` 目錄，symlink 到你使用的每一個 agent。
 
 更多細節請見 **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**（英文）
@@ -157,6 +170,7 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 | **[CLI Reference](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/cli.md)** | 每一個 `obsidian-wiki` 子命令 |
 | **[Configuration](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/configuration.md)** | 設定變數、QMD 語意搜尋、`_raw/` 暫存區、GitHub 同步 |
 | **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)** | 四個匯入階段、vault 結構、我們在 Karpathy 模式上加了什麼 |
+| **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | index、log、hot cache、擁有者檔案與待辦索引 |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | 建立在 agent session 歷史之上的主題圖譜 |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | 將網頁擷取進 vault，並用 vault 內容填寫網頁表單 |
 | **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 以 Docker 將 vault 部署成記憶服務，讓 agent 透過 HTTP/MCP 存取 |

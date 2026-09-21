@@ -82,24 +82,31 @@ def _lock_path(vault: Path) -> Path:
     return vault / ".manifest.lock"
 
 
-class ManifestLockTimeout(RuntimeError):
+class AdvisoryLockTimeout(RuntimeError):
+    """Raised when an advisory lockfile could not be claimed within the timeout."""
+
+
+class ManifestLockTimeout(AdvisoryLockTimeout):
     """Raised when the manifest lock could not be acquired within the timeout."""
 
 
 @contextmanager
-def manifest_lock(vault: Path, *, timeout: float = 10.0, stale_after: float = 60.0):
-    """Advisory lock around a manifest read-modify-write.
+def advisory_lock(
+    lock: Path,
+    *,
+    timeout: float = 10.0,
+    stale_after: float = 60.0,
+    error_cls: type = AdvisoryLockTimeout,
+):
+    """Claim *lock* as an advisory lockfile for a read-modify-write.
 
-    Parallel ingest agents (``batch-plan`` fan-out) and the Docker server can
-    all write one vault's manifest; without this the read-modify-write races
-    and a whole entry is silently lost. ``O_CREAT | O_EXCL`` is the portable
-    stdlib primitive here — ``fcntl`` is POSIX-only and this ships on Windows.
+    ``O_CREAT | O_EXCL`` is the portable stdlib primitive here — ``fcntl`` is
+    POSIX-only and this ships on Windows. A lockfile older than *stale_after*
+    is assumed to belong to a crashed process and is stolen.
 
-    A lockfile older than *stale_after* is assumed to belong to a crashed
-    process and is stolen.
+    Shared by the manifest writer and the prose-memory writer
+    (:mod:`obsidian_wiki.memory`) so both serialise the same way.
     """
-    # ponytail: whole-manifest advisory lock; per-entry locking if batch fan-out ever contends
-    lock = _lock_path(vault)
     deadline = time.monotonic() + timeout
     fd = None
     while True:
@@ -120,7 +127,7 @@ def manifest_lock(vault: Path, *, timeout: float = 10.0, stale_after: float = 60
                     pass
                 continue
             if time.monotonic() >= deadline:
-                raise ManifestLockTimeout(
+                raise error_cls(
                     f"could not acquire {lock} within {timeout}s "
                     f"(held for {age:.1f}s; stale after {stale_after}s)"
                 )
@@ -137,6 +144,24 @@ def manifest_lock(vault: Path, *, timeout: float = 10.0, stale_after: float = 60
             lock.unlink()
         except FileNotFoundError:
             pass
+
+
+@contextmanager
+def manifest_lock(vault: Path, *, timeout: float = 10.0, stale_after: float = 60.0):
+    """Advisory lock around a manifest read-modify-write.
+
+    Parallel ingest agents (``batch-plan`` fan-out) and the Docker server can
+    all write one vault's manifest; without this the read-modify-write races
+    and a whole entry is silently lost.
+    """
+    # ponytail: whole-manifest advisory lock; per-entry locking if batch fan-out ever contends
+    with advisory_lock(
+        _lock_path(vault),
+        timeout=timeout,
+        stale_after=stale_after,
+        error_cls=ManifestLockTimeout,
+    ):
+        yield
 
 
 def _write_manifest(vault: Path, manifest: dict) -> None:

@@ -215,18 +215,30 @@ If the project is not a git repository, use a `repo:<stable-name>` pseudo-key fo
 
 Add entries for any new pages created.
 
-### Update `log.md`
+### Update `index.md`, `log.md`, and `hot.md`
 
-Append:
+One locked call, not three hand edits:
+
+```bash
+obsidian-wiki memory sync --verb WIKI_UPDATE \
+  --field project=<project-name> \
+  --field pages_created=X --field pages_updated=Y \
+  --field source_repo=github.com/owner/<project-name> \
+  --takeaways "Synced obsidian-wiki — wiki-capture and wiki-research added; the new capabilities are autonomous web research and conversation capture."
 ```
-- [TIMESTAMP] WIKI_UPDATE project=<project-name> pages_updated=X pages_created=Y source_repo=github.com/owner/<project-name>
+
+`--takeaways` should carry the most important architectural insight or decision
+surfaced during this sync, written conceptually rather than as a file list. Omit
+it to leave the previous takeaways untouched.
+
+If this project is an ongoing focus, record the thread so the next session picks
+it up:
+
+```bash
+obsidian-wiki memory todo add "<the open thread>" --origin projects/<project-name>.md
 ```
 
-### Update `hot.md`
-
-Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Rewrite **Recent Activity** with what was just synced — last 3 operations max. Update **Active Threads** if this project is an ongoing focus. Update **Key Takeaways** with the most important architectural insight or decision surfaced during this sync. Update `updated` timestamp.
-
-Write conceptually: "Synced obsidian-wiki — added wiki-capture and wiki-research skills, core new capabilities are autonomous web research and conversation capture."
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Step 7: Refresh QMD Wiki Index (optional — requires `QMD_WIKI_COLLECTION`)
 

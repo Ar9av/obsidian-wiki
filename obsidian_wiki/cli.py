@@ -432,6 +432,7 @@ VAULT_SUBDIRS = (
     "_archives",
     "_raw",
     "_staging",
+    "_meta",
     ".obsidian",
 )
 
@@ -497,6 +498,21 @@ def scaffold_vault(vault_path: Path) -> bool:
             "*None yet.*\n",
             encoding="utf-8",
         )
+
+    # The owner profile and todo index are part of the memory surface: seed
+    # them empty so they are discoverable in Obsidian before the first write.
+    from obsidian_wiki.memory import (
+        PROFILE_REL,
+        TODOS_REL,
+        render_profile,
+        render_todos,
+    )
+
+    for relative, render in ((PROFILE_REL, render_profile), (TODOS_REL, render_todos)):
+        target = vault_path / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(render([]), encoding="utf-8")
 
     manifest_json = vault_path / ".manifest.json"
     if not manifest_json.exists():
@@ -2094,6 +2110,219 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 1 if report["status"] == "fail" else 0
 
 
+def _memory_fields(pairs: list) -> dict:
+    fields: dict[str, str] = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            raise ValueError(f"--field expects key=value, got {pair!r}")
+        key, value = pair.split("=", 1)
+        fields[key.strip()] = value
+    return fields
+
+
+def _memory_takeaways(raw: str | None) -> str | None:
+    """`-` reads the takeaway prose from stdin, so a skill can pipe it in."""
+    if raw is None:
+        return None
+    return sys.stdin.read().strip() if raw == "-" else raw
+
+
+def cmd_memory(args: argparse.Namespace) -> int:
+    """Maintain the vault memory surface: log, index, hot cache, profile, todos.
+
+    One code path for files that fifteen skills used to each rewrite from prose,
+    all of it under a single advisory lock so a parallel writer cannot drop an
+    update. `--check` reports drift and exits 2 without writing, for CI.
+    """
+    from obsidian_wiki import memory as mem
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault, config, _source = context
+    link_format = (config.get("OBSIDIAN_LINK_FORMAT") or _read_config_value("OBSIDIAN_LINK_FORMAT") or "wikilink").strip()
+    rest = list(args.rest or [])
+
+    def emit(payload: dict, lines: list) -> int:
+        if args.json:
+            print(json.dumps(payload, indent=2 if args.pretty else None))
+        else:
+            for line in lines:
+                print(line)
+        return 0
+
+    try:
+        action = args.memory_action
+
+        if action == "status":
+            status = mem.memory_status(vault)
+            drift = status["index_drift"]
+            return emit(status, [
+                f"vault:    {status['vault']}",
+                f"pages:    {status['pages']}",
+                f"index:    {'stale' if drift['stale'] else 'current'}"
+                + (f" (+{len(drift['added'])} / -{len(drift['removed'])})" if drift["stale"] else ""),
+                f"log:      {status['log_entries']} entries",
+                f"hot:      {status['hot']['words']}/{status['hot']['max_words']} words"
+                + ("  OVER BUDGET" if status["hot"]["over_budget"] else "")
+                + ("" if status["hot"]["generated"] else "  (hand-written, not yet generated)"),
+                f"profile:  {status['profile_facts']} fact(s)",
+                f"todos:    {status['todos']['open']} open, {status['todos']['stale']} stale,"
+                f" {status['todos']['closed']} closed",
+            ])
+
+        if action == "log":
+            if not rest:
+                print("error: memory log needs a VERB, e.g. `memory log INGEST --field source=x`", file=sys.stderr)
+                return 1
+            line = mem.append_log(vault, rest[0], _memory_fields(args.field))
+            return emit({"line": line}, [line])
+
+        if action == "index":
+            result = mem.rebuild_index(vault, link_format=link_format, write=not args.check)
+            payload = {
+                "total": result.total,
+                "added": list(result.added),
+                "removed": list(result.removed),
+                "changed": result.changed,
+                "written": result.changed and not args.check,
+            }
+            lines = [
+                f"{result.total} page(s); "
+                + (f"+{len(result.added)} / -{len(result.removed)}" if result.changed else "no drift")
+            ]
+            lines += [f"  + {path}" for path in result.added]
+            lines += [f"  - {path}" for path in result.removed]
+            emit(payload, lines)
+            return 2 if (args.check and result.changed) else 0
+
+        if action == "hot":
+            result = mem.rebuild_hot(
+                vault,
+                write=not args.check,
+                takeaways=_memory_takeaways(args.takeaways),
+                link_format=link_format,
+                max_words=args.max_words,
+            )
+            payload = {
+                "words": result.words,
+                "max_words": args.max_words or mem.hot_max_words(),
+                "trimmed": result.trimmed,
+                "activity": result.activity,
+                "threads": result.threads,
+                "contradictions": result.contradictions,
+                "written": not args.check,
+            }
+            emit(payload, [
+                f"hot.md {'would be ' if args.check else ''}rebuilt: {result.words} words"
+                + (" (trimmed to fit)" if result.trimmed else ""),
+                f"  {result.activity} activity, {result.threads} thread(s),"
+                f" {result.contradictions} contradiction(s)",
+            ])
+            return 0
+
+        if action == "recap":
+            print(mem.build_recap(vault, max_words=args.max_words or 400, min_confidence=args.min_confidence), end="")
+            return 0
+
+        if action == "sync":
+            # The post-write call: one lock held across log, index, and hot, so
+            # another writer cannot interleave between the three.
+            with mem.memory_lock(vault):
+                line = (
+                    mem.append_log(vault, args.verb, _memory_fields(args.field), lock=False)
+                    if args.verb else ""
+                )
+                index = mem.rebuild_index(vault, link_format=link_format, lock=False)
+                hot = mem.rebuild_hot(
+                    vault,
+                    lock=False,
+                    takeaways=_memory_takeaways(args.takeaways),
+                    link_format=link_format,
+                    max_words=args.max_words,
+                )
+            payload = {
+                "log_line": line,
+                "index": {"total": index.total, "added": list(index.added), "removed": list(index.removed)},
+                "hot": {"words": hot.words, "trimmed": hot.trimmed},
+            }
+            lines = [line] if line else []
+            lines.append(f"index: {index.total} page(s), +{len(index.added)} / -{len(index.removed)}")
+            lines.append(f"hot:   {hot.words} words" + (" (trimmed)" if hot.trimmed else ""))
+            return emit(payload, lines)
+
+        if action == "profile":
+            sub_action = rest[0] if rest else "list"
+            if sub_action == "list":
+                facts = mem.load_profile(vault)
+                return emit(
+                    {"facts": [f.__dict__ for f in facts]},
+                    [f"{f.key}: {f.value}  ({f.confidence:.2f}, {f.source}, {f.updated})" for f in facts]
+                    or ["no profile facts recorded"],
+                )
+            if sub_action == "set":
+                if len(rest) < 3:
+                    print("error: memory profile set KEY VALUE", file=sys.stderr)
+                    return 1
+                fact = mem.set_fact(
+                    vault, rest[1], " ".join(rest[2:]),
+                    confidence=args.confidence, source=args.source,
+                )
+                return emit({"fact": fact.__dict__}, [f"set {fact.key}: {fact.value} ({fact.confidence:.2f})"])
+            if sub_action == "forget":
+                if len(rest) < 2:
+                    print("error: memory profile forget KEY", file=sys.stderr)
+                    return 1
+                removed = mem.forget_fact(vault, rest[1])
+                emit({"removed": removed, "key": rest[1]},
+                     [f"forgot {rest[1]}" if removed else f"no such fact: {rest[1]}"])
+                return 0 if removed else 1
+            print(f"error: memory profile takes list|set|forget, got {sub_action!r}", file=sys.stderr)
+            return 1
+
+        if action == "todo":
+            sub_action = rest[0] if rest else "list"
+            if sub_action == "list":
+                todos = mem.load_todos(vault)
+                shown = todos if args.all else [t for t in todos if t.status == "open"]
+                return emit(
+                    {"todos": [dict(t.__dict__, stale=t.is_stale(days=args.stale_days)) for t in shown]},
+                    [
+                        f"[{t.status:7}] {t.id:4} {t.text}"
+                        + (f"  ({t.origin})" if t.origin else "")
+                        + ("  STALE" if t.is_stale(days=args.stale_days) else "")
+                        for t in shown
+                    ] or ["no todos recorded"],
+                )
+            if sub_action == "add":
+                if len(rest) < 2:
+                    print("error: memory todo add TEXT", file=sys.stderr)
+                    return 1
+                todo = mem.add_todo(vault, " ".join(rest[1:]), origin=args.origin or "")
+                return emit({"todo": todo.__dict__}, [f"{todo.id}: {todo.text}"])
+            if sub_action in ("done", "drop"):
+                if len(rest) < 2:
+                    print(f"error: memory todo {sub_action} ID", file=sys.stderr)
+                    return 1
+                status = "done" if sub_action == "done" else "dropped"
+                todo = mem.set_todo_status(vault, rest[1], status)
+                return emit({"todo": todo.__dict__}, [f"{todo.id} -> {todo.status}"])
+            if sub_action == "prune":
+                removed = mem.prune_todos(vault)
+                return emit({"pruned": removed}, [f"pruned {removed} closed item(s)"])
+            print(f"error: memory todo takes list|add|done|drop|prune, got {sub_action!r}", file=sys.stderr)
+            return 1
+
+        print(f"error: unknown memory action {action!r}", file=sys.stderr)
+        return 1
+    except mem.MemoryError_ as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_context_pack(args: argparse.Namespace) -> int:
     from obsidian_wiki.context_pack import ContextError, build_context_pack, render_markdown
 
@@ -2566,6 +2795,40 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ev.set_defaults(func=cmd_eval)
+
+    mm = sub.add_parser(
+        "memory",
+        help="maintain the memory surface: log, index, hot cache, owner profile, todos",
+    )
+    mm.add_argument(
+        "memory_action",
+        choices=["status", "log", "index", "hot", "recap", "sync", "profile", "todo"],
+        help="what to do",
+    )
+    mm.add_argument("rest", nargs="*", help="action arguments, e.g. `profile set KEY VALUE`")
+    mm.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    mm.add_argument(
+        "--field",
+        action="append",
+        metavar="KEY=VALUE",
+        help="log field; repeatable (memory log / memory sync)",
+    )
+    mm.add_argument("--verb", help="log verb to append as part of `memory sync`")
+    mm.add_argument(
+        "--takeaways",
+        help="replace the Key Takeaways section; `-` reads it from stdin",
+    )
+    mm.add_argument("--max-words", type=int, help="word cap for hot/recap (default: OBSIDIAN_HOT_MAX_WORDS or 500)")
+    mm.add_argument("--min-confidence", type=float, default=0.0, help="drop profile facts below this in `recap`")
+    mm.add_argument("--confidence", type=float, default=0.6, help="confidence for `profile set` (default: 0.6)")
+    mm.add_argument("--source", default="conversation", help="source for `profile set`")
+    mm.add_argument("--origin", help="originating page for `todo add`")
+    mm.add_argument("--stale-days", type=int, default=30, help="open-todo staleness threshold (default: 30)")
+    mm.add_argument("--all", action="store_true", help="include closed items in `todo list`")
+    mm.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")
+    mm.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    mm.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    mm.set_defaults(func=cmd_memory)
 
     cp = sub.add_parser(
         "context-pack",
