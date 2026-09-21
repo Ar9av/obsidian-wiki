@@ -168,19 +168,22 @@ When the user wants to add a tag to the vocabulary:
 
 ## After Any Tag Operation
 
-Append to `log.md`:
+One locked call updates the log, the index (tags appear in index entries), and the hot cache:
 
-```
-- [TIMESTAMP] TAG_AUDIT tags_normalized=N unknown_tags=M pages_modified=P
+```bash
+# audit
+obsidian-wiki memory sync --verb TAG_AUDIT \
+  --field tags_normalized=<N> --field unknown_tags=<M> --field pages_modified=<P> \
+  --takeaways "Tag audit: normalized 14 tags across 28 pages; 2 new canonical tags added."
+
+# normalization
+obsidian-wiki memory sync --verb TAG_NORMALIZE \
+  --field tags_renamed=<N> --field pages_modified=<M> --field new_tags_added=<P>
 ```
 
-Or for normalization:
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
 
-```
-- [TIMESTAMP] TAG_NORMALIZE tags_renamed=N pages_modified=M new_tags_added=P
-```
-
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary — e.g. "Tag audit: normalized 14 tags across 28 pages; 2 new canonical tags added." Keep the last 3 operations. Update `updated` timestamp.
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## QMD Refresh After Vault Writes
 

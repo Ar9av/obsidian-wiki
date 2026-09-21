@@ -158,7 +158,13 @@ Exit code **9** with `conflict: ...` on stderr means the staged or live file cha
 
 ## Step 4: Update Tracking Files
 
-The CLI appends the `STAGE_COMMIT` line to `log.md` itself. After processing all staged files, update **`hot.md`** — Recent Activity: "Committed N staged pages; rejected M."
+The CLI appends the `STAGE_COMMIT` line to `log.md` itself. After processing all staged files, reconcile the index and hot cache so the promoted pages appear:
+
+```bash
+obsidian-wiki memory sync --takeaways "Committed N staged pages; rejected M."
+```
+
+(No `--verb`: the log line was already written by `staging promote`.) Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
 
 ## Step 5: Report
 

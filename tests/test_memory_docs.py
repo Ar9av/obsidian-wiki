@@ -61,6 +61,8 @@ class MemoryDocsTest(unittest.TestCase):
             "WIKI_RECAP_MAX_WORDS",
             "WIKI_RECAP_MIN_CONFIDENCE",
             "WIKI_RECAP_TIMEOUT",
+            "WIKI_RECAP_PROJECT",
+            "WIKI_RECAP_DEBUG",   # read only once /tmp/blocked-edits.py has been applied
         ):
             self.assertIn(variable, recap_hook, f"{variable} documented but unread")
 
@@ -73,10 +75,36 @@ class MemoryDocsTest(unittest.TestCase):
         for variable in ("WIKI_SESSION_RECAP", "WIKI_STOP_CAPTURE", "OBSIDIAN_HOT_MAX_WORDS"):
             self.assertIn(variable, configuration, f"{variable} read but undocumented")
 
-    def test_skills_call_the_cli_instead_of_restating_the_procedure(self) -> None:
-        for name in ("wiki-ingest", "wiki-update"):
+    WRITE_SKILLS = (
+        "wiki-ingest", "wiki-update", "wiki-capture", "wiki-research", "wiki-synthesize",
+        "wiki-dedup", "wiki-import", "wiki-agent", "wiki-stage-commit", "cross-linker",
+        "tag-taxonomy", "daily-update",
+        "claude-history-ingest", "codex-history-ingest", "copilot-history-ingest",
+        "hermes-history-ingest", "openclaw-history-ingest", "pi-history-ingest",
+    )
+
+    def test_every_write_skill_calls_the_shared_writer(self) -> None:
+        """A skill that still rewrites hot.md by hand drops the per-file
+        marker and, before the adoption record existed, re-armed the guard."""
+        for name in self.WRITE_SKILLS:
             text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("obsidian-wiki memory sync", text, f"{name} does not call the shared writer")
+            self.assertRegex(
+                text, r"obsidian-wiki memory (sync|hot|index)",
+                f"{name} does not call the shared writer",
+            )
+
+    def test_no_skill_tells_the_model_to_create_hot_md_from_a_template(self) -> None:
+        """That instruction produced a hot.md with no marker and no lock."""
+        offenders = [
+            path.parent.name for path in SKILLS.glob("*/SKILL.md")
+            if "create from the template in `wiki-ingest`" in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_read_only_skills_log_through_the_writer(self) -> None:
+        for name in ("wiki-query", "wiki-narrate"):
+            text = (SKILLS / name / "SKILL.md").read_text(encoding="utf-8")
+            self.assertIn("obsidian-wiki memory log", text, f"{name} appends to log.md by hand")
 
     def test_the_shared_reference_states_the_non_obvious_rules(self) -> None:
         reference = (SKILLS / "llm-wiki" / "references" / "MEMORY.md").read_text(encoding="utf-8")
@@ -93,6 +121,24 @@ class MemoryDocsTest(unittest.TestCase):
         self.assertNotIn("The prose files take no lock", architecture)
         self.assertIn(".memory.lock", architecture)
 
+
+
+class HooksDocsTest(unittest.TestCase):
+    def test_the_installer_is_documented_where_people_will_look(self) -> None:
+        """A normal install got no session-start injection because the only
+        install procedure was prose and covered one hook. The command must be
+        findable from the CLI reference and the install guide."""
+        for page in ("cli.md", "installation.md", "memory.md"):
+            text = (DOCS / page).read_text(encoding="utf-8")
+            self.assertIn("hooks install", text, f"{page} does not mention `hooks install`")
+
+    def test_the_debug_switch_is_documented(self) -> None:
+        configuration = (DOCS / "configuration.md").read_text(encoding="utf-8")
+        self.assertIn("WIKI_RECAP_DEBUG", configuration)
+
+    def test_the_adoption_record_is_documented(self) -> None:
+        memory = (DOCS / "memory.md").read_text(encoding="utf-8")
+        self.assertIn(".memory-adopted", memory)
 
 if __name__ == "__main__":
     unittest.main()

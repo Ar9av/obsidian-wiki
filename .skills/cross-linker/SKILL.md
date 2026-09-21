@@ -258,12 +258,19 @@ To promote: move the page to `projects/<project-name>/references/` and update al
 
 ## Step 7: Update Log and Hot Cache
 
-Append to `log.md`:
-```
-- [TIMESTAMP] CROSS_LINK pages_scanned=N links_added=M typed_relations_written=T pages_modified=P orphans_remaining=Q misc_affinity_updated=R promotion_candidates=S
+One locked call updates the log and the hot cache (the index is unaffected — no pages were created):
+
+```bash
+obsidian-wiki memory sync --verb CROSS_LINK \
+  --field pages_scanned=<N> --field links_added=<M> --field typed_relations_written=<T> \
+  --field pages_modified=<P> --field orphans_remaining=<Q> \
+  --field misc_affinity_updated=<R> --field promotion_candidates=<S> \
+  --takeaways "Cross-linked 23 mentions across 12 pages; 2 orphans remain."
 ```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary of what was linked — e.g. "Cross-linked 23 mentions across 12 pages; 2 orphans remain." Keep the last 3 operations. Update `updated` timestamp.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Tips
 

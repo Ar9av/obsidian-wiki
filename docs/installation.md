@@ -140,3 +140,14 @@ obsidian-wiki doctor
 - [Skills Reference](skills.md) — what you can actually ask for
 - [Configuration](configuration.md) — every config variable, QMD, GitHub sync
 - [Agent Compatibility](agents.md) — per-agent details and manual setup
+
+## Session hooks
+
+After setup, register the two Claude Code hooks so memory is injected at session start and findings are captured at session end:
+
+```bash
+obsidian-wiki hooks install
+obsidian-wiki hooks status
+```
+
+Without this step the vault, the CLI, and the MCP tools all work, but nothing is injected when a session starts. `doctor` warns if they are missing. See [Memory Surface → Session lifecycle](memory.md#session-lifecycle).

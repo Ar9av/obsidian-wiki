@@ -38,7 +38,10 @@ Every skill here is a markdown file that any agent — Claude Code, Cursor, Code
 ```bash
 pip install obsidian-wiki
 obsidian-wiki setup --vault ~/brain
+obsidian-wiki hooks install      # memory in at session start, capture out at session end
 ```
+
+The third line is what makes it a memory system rather than a notes folder: every new session starts with who you are and what's open. Skip it and everything else still works.
 
 Using `uv` or `pipx`? `uv tool install obsidian-wiki` and `pipx install obsidian-wiki` work the same way. (Not `uvx` — see [Installation](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md#install-via-pip-uv-or-pipx-recommended).)
 

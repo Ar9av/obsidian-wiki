@@ -302,10 +302,16 @@ Report the **`Source code:`** line using `source_repo`. When a local checkout re
 
 ### Step 6: Log the Query
 
-Append to `log.md`. This `log.md` append is the *only* write this skill performs — do not edit anything else.
+This is the *only* write this skill performs — do not edit anything else, and do not append to `log.md` by hand:
+
+```bash
+obsidian-wiki memory log QUERY \
+  --field query="the user's question" --field result_pages=<N> \
+  --field mode=<normal|index_only|filtered> --field escalated=<true|false> \
+  --field candidates_seen=<N> --field candidates_used=<N> --field dropped=<N>
 ```
-- [TIMESTAMP] QUERY query="the user's question" result_pages=N mode=normal|index_only|filtered escalated=true|false candidates_seen=N candidates_used=N dropped=N
-```
+
+The command takes the memory lock and appends one parseable line; it never touches `index.md` or `hot.md`.
 
 Use the counts tracked since Step 2. If a count wasn't tracked (e.g. index-only mode never built a full candidate set), write `0` rather than omitting the field — the log format should stay parseable.
 

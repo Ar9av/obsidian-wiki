@@ -69,6 +69,12 @@ DEFAULT_TODO_STALE_DAYS = 30
 #: would reorder or discard someone's work, so we refuse until `memory migrate`
 #: has run and taken a backup.
 GENERATED_MARKER = "obsidian-wiki memory"
+#: Durable adoption record. The per-file marker alone was fragile: a skill
+#: that still rewrites hot.md by hand drops the marker, and the next sync
+#: would then refuse as if the vault had never been migrated. Adoption is a
+#: property of the vault, so it lives in the vault, not in a file a legacy
+#: skill can overwrite.
+ADOPTED_REL = "_meta/.memory-adopted"
 #: Raw log lines can be enormous (a research ingest records every page it made).
 #: Pasting them into a word-capped snapshot spends the whole budget on one line.
 HOT_FIELDS_PER_ENTRY = 3
@@ -186,6 +192,19 @@ def parse_frontmatter(frontmatter: str) -> dict:
         values[key] = _scalar(raw)
         i += 1
     return values
+
+
+def is_adopted(vault: Path) -> bool:
+    return (Path(vault) / ADOPTED_REL).is_file()
+
+
+def mark_adopted(vault: Path) -> None:
+    """Record that this vault's memory files are ours to regenerate.
+
+    Delete the file to re-arm the guard — say, after restoring a curated
+    index.md from ``_archives/`` — and ``memory migrate`` will ask again.
+    """
+    atomic_write(Path(vault) / ADOPTED_REL, f"adopted: {utc_now()}\nby: {GENERATED_MARKER}\n")
 
 
 def is_generated(path: Path) -> bool:
@@ -499,7 +518,7 @@ def rebuild_index(
     """
     vault = _require_vault(vault)
     index = vault / "index.md"
-    if write and not force and not is_generated(index):
+    if write and not force and not (is_adopted(vault) or is_generated(index)):
         raise MemoryError_(
             "unmigrated",
             "index.md was not written by this tool; run `obsidian-wiki memory migrate` "
@@ -1020,7 +1039,7 @@ def rebuild_hot(
     vault: Path, *, write: bool = True, lock: bool = True, force: bool = False, **kwargs
 ) -> HotResult:
     vault = _require_vault(vault)
-    if write and not force and not is_generated(vault / "hot.md"):
+    if write and not force and not (is_adopted(vault) or is_generated(vault / "hot.md")):
         raise MemoryError_(
             "unmigrated",
             "hot.md was not written by this tool; run `obsidian-wiki memory migrate` "
@@ -1146,7 +1165,8 @@ def migration_status(vault: Path) -> dict:
     """
     vault = _require_vault(vault)
     index, hot = vault / "index.md", vault / "hot.md"
-    index_generated, hot_generated = is_generated(index), is_generated(hot)
+    adopted = is_adopted(vault)
+    index_generated, hot_generated = adopted or is_generated(index), adopted or is_generated(hot)
 
     preview = rebuild_index(vault, write=False, lock=False, force=True)
     old_index = index.read_text(encoding="utf-8") if index.is_file() else ""
@@ -1216,6 +1236,7 @@ def migrate(vault: Path, *, link_format: str = "wikilink", backup: bool = True) 
 
         index = rebuild_index(vault, link_format=link_format, lock=False, force=True)
         hot_result = rebuild_hot(vault, lock=False, force=True, link_format=link_format)
+        mark_adopted(vault)
 
     return {
         "vault": str(vault),
@@ -1253,7 +1274,7 @@ def memory_status(vault: Path) -> dict:
             "over_budget": content_words(hot_text) > hot_max_words(),
             "generated": bool(hot_values.get("generated_by")),
         },
-        "migrated": is_generated(vault / "index.md") and is_generated(hot),
+        "migrated": is_adopted(vault) or (is_generated(vault / "index.md") and is_generated(hot)),
         "profile_facts": len(load_profile(vault)),
         "todos": {
             "open": sum(1 for t in todos if t.status == "open"),

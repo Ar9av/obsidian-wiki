@@ -184,13 +184,22 @@ Add/update a top-level summary block:
 
 ### Update special files
 
-Update `index.md` and `log.md`:
+Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
-```
-- [TIMESTAMP] HERMES_HISTORY_INGEST memories=N sessions=M pages_updated=X pages_created=Y mode=append|full
+```bash
+obsidian-wiki memory sync --verb HERMES_HISTORY_INGEST \
+  --field memories=<memories> \
+  --field sessions=<sessions> \
+  --field pages_updated=<pages_updated> \
+  --field pages_created=<pages_created> \
+  --field mode=<mode> \
+  --takeaways "Ingested 42 Hermes memories and 7 sessions; dominant themes: reasoning strategies, tool use patterns."
 ```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary — e.g. "Ingested 42 Hermes memories and 7 sessions; dominant themes: reasoning strategies, tool use patterns." Keep the last 3 operations. Update `updated` timestamp.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update. `--takeaways` is the one-line conceptual summary that used to go in Recent Activity;
+omit it to leave the previous takeaways untouched.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Privacy and Compliance
 

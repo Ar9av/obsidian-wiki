@@ -69,6 +69,8 @@ What migration guarantees:
 - **Narrative threads become todos.** A hand-written `## Active Threads` list is parsed into the todo index before the rebuild, so that prose survives as live entries rather than being replaced by "no open threads". Skipped entirely if you already have todos.
 - **Key Takeaways carry across**, as they do on every rebuild.
 
+Adoption is recorded in `_meta/.memory-adopted`, not only in the files themselves. A skill that still rewrites `hot.md` by hand drops the per-file marker, and without the vault-level record the next sync would refuse as if the vault had never been migrated. Delete that file to re-arm the guard, for instance after restoring a curated `index.md` from `_archives/`.
+
 `obsidian-wiki doctor` reports migration state, so an upgraded install surfaces it on its own.
 
 ## Owner profile and todo index
@@ -102,6 +104,13 @@ Two rules it enforces, both worth repeating:
 
 Two hooks bracket a session. One injects memory at the start, the other captures it at the end.
 
+Register both with one command; it is idempotent and never touches your other hooks:
+
+```bash
+obsidian-wiki hooks install
+obsidian-wiki hooks status
+```
+
 ![Session lifecycle](images/memory-session-lifecycle.png)
 
 `wiki-session-recap.sh` runs at SessionStart and prints the profile, open threads, and recent activity, which Claude Code adds to the session's context. Before it existed, every session started blind and the model had to remember to go read `hot.md`, which it mostly did not.
@@ -109,6 +118,8 @@ Two hooks bracket a session. One injects memory at the start, the other captures
 `wiki-stop-capture.sh` runs at Stop and nudges a `/wiki-capture --quick` when the session changed anything.
 
 **Neither hook can fail a session.** Every error path — no vault configured, package not importable, vault directory missing, slow filesystem — exits 0 with no output. A hook that breaks session startup is worse than a hook that contributes nothing.
+
+The cost of that silence is that a missing registration or an unreachable package is invisible from inside a session. `obsidian-wiki hooks status` and `doctor` both check for it, and `WIKI_RECAP_DEBUG=1` makes the recap hook say why it exited.
 
 Tune or disable per session:
 

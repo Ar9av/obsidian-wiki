@@ -255,12 +255,19 @@ Update `.manifest.json` for each session file processed:
 }
 ```
 
-Append to `log.md`:
-```
-- [TIMESTAMP] WIKI-AGENT agent=<agent> query="<query>" sessions_searched=N sessions_ingested=M pages_created=X pages_updated=Y
+One locked call updates the log, the index, and the hot cache:
+
+```bash
+obsidian-wiki memory sync --verb WIKI-AGENT \
+  --field agent=<agent> --field query="<query>" \
+  --field sessions_searched=<N> --field sessions_ingested=<M> \
+  --field pages_created=<X> --field pages_updated=<Y> \
+  --takeaways "<one line: what was pulled in and what it changes>"
 ```
 
-Update `hot.md` with a one-line summary of what was ingested.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ---
 

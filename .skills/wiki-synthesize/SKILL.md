@@ -150,14 +150,20 @@ Skipped (consider next time):
 
 ## Step 7: Update Special Files
 
-**`index.md`** — Add entries for all new synthesis pages.
+One locked call updates the index, the log, and the hot cache:
 
-**`log.md`** — Append:
-```
-- [TIMESTAMP] WIKI_SYNTHESIZE pages_scanned=N synthesis_created=M candidates_skipped=K
+```bash
+obsidian-wiki memory sync --verb WIKI_SYNTHESIZE \
+  --field pages_scanned=<N> --field synthesis_created=<M> --field candidates_skipped=<K> \
+  --takeaways "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …"
 ```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with what was synthesized — e.g. "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …". Update **Active Threads** with any open questions the synthesis surfaced. Update `updated` timestamp.
+Open questions the synthesis surfaced are threads, not takeaways — record each one:
+`obsidian-wiki memory todo add "<question>" --origin synthesis/<page>.md`.
+
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Quality Checklist
 

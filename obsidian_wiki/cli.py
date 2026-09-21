@@ -515,6 +515,10 @@ def scaffold_vault(vault_path: Path) -> bool:
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(render([]), encoding="utf-8")
+    from obsidian_wiki.memory import is_adopted, mark_adopted
+
+    if not is_adopted(vault_path):
+        mark_adopted(vault_path)
 
     manifest_json = vault_path / ".manifest.json"
     if not manifest_json.exists():
@@ -894,6 +898,41 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
                     status="warn",
                     detail=f"could not read the memory surface: {exc}",
                     hint="run: obsidian-wiki memory status",
+                )
+
+            # Session hooks: unregistered means the headline feature — memory
+            # injected at session start — silently never happens.
+            try:
+                from obsidian_wiki import hooks as _hk
+
+                entries = _hk.status()
+                reach = _hk.reachability()
+                unregistered = [e.script for e in entries if not e.registered]
+                if unregistered:
+                    # The hooks are optional, so an install that never asked
+                    # for them is not misconfigured — but it also has no
+                    # session-start memory, and that is worth one visible line.
+                    _doctor_add(
+                        checks, name="session-hooks", status="info",
+                        detail="not registered (optional): " + ", ".join(unregistered)
+                               + " — no memory is injected at session start",
+                        hint="run: obsidian-wiki hooks install",
+                    )
+                elif not reach["reachable"]:
+                    _doctor_add(
+                        checks, name="session-hooks", status="warn",
+                        detail="registered, but hooks cannot reach the package and will exit silently",
+                        hint=reach["hint"],
+                    )
+                else:
+                    _doctor_add(
+                        checks, name="session-hooks", status="pass",
+                        detail="SessionStart and Stop hooks registered and reachable", hint="",
+                    )
+            except Exception as exc:
+                _doctor_add(
+                    checks, name="session-hooks", status="warn",
+                    detail=f"could not inspect hooks: {exc}", hint="run: obsidian-wiki hooks status",
                 )
 
             manifest_path = vault / ".manifest.json"
@@ -2438,6 +2477,62 @@ def cmd_memory(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_hooks(args: argparse.Namespace) -> int:
+    """Register, remove, or inspect the Claude Code session hooks.
+
+    Replaces the prose procedure in `wiki-setup` that asked the agent to
+    hand-merge JSON — and covered only the Stop hook, so a pip install never
+    got session-start memory injection.
+    """
+    from obsidian_wiki import hooks as hk
+
+    try:
+        if args.hooks_action == "install":
+            result = hk.install(only=args.only)
+            lines = [f"settings: {result['settings']}"]
+            lines += [f"  + registered {name}" for name in result["added"]]
+            lines += [f"  = already registered {name}" for name in result["already"]]
+            lines += [f"  ! not bundled: {name} (reinstall obsidian-wiki)" for name in result["missing"]]
+            reach = hk.reachability()
+            if not reach["reachable"]:
+                lines.append(f"  ! hooks would exit silently: {reach['hint']}")
+            payload = {**result, "reachability": reach}
+            rc = 1 if result["missing"] else 0
+        elif args.hooks_action == "uninstall":
+            result = hk.uninstall(only=args.only)
+            lines = [f"settings: {result['settings']}"]
+            lines += [f"  - removed {name}" for name in result["removed"]] or ["  nothing to remove"]
+            payload, rc = result, 0
+        else:
+            entries = hk.status()
+            reach = hk.reachability()
+            lines = []
+            for entry in entries:
+                healthy = entry.registered and entry.bundled and entry.executable
+                detail = ("registered" if entry.registered else "NOT registered")
+                if not entry.bundled:
+                    detail += ", script not bundled"
+                elif not entry.executable:
+                    detail += ", not executable"
+                lines.append(f"{'ok ' if healthy else '-- '}{entry.event:13} {entry.script:24} {detail}")
+            if reach["reachable"]:
+                lines.append("ok  reachable      " + (reach["console_script"] or "python3 -m obsidian_wiki.cli"))
+            else:
+                lines.append(f"--  NOT reachable  {reach['hint']}")
+            payload = {"hooks": [e.__dict__ for e in entries], "reachability": reach}
+            rc = 0 if all(e.registered for e in entries) and reach["reachable"] else 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(payload, indent=2 if args.pretty else None))
+    else:
+        for line in lines:
+            print(line)
+    return rc
+
+
 def cmd_context_pack(args: argparse.Namespace) -> int:
     from obsidian_wiki.context_pack import ContextError, build_context_pack, render_markdown
 
@@ -2911,6 +3006,16 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ev.set_defaults(func=cmd_eval)
 
+    hk = sub.add_parser(
+        "hooks",
+        help="register the SessionStart (memory recap) and Stop (capture) hooks for Claude Code",
+    )
+    hk.add_argument("hooks_action", choices=["install", "uninstall", "status"], help="what to do")
+    hk.add_argument("--only", choices=["SessionStart", "Stop"], help="act on one hook only")
+    hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    hk.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    hk.set_defaults(func=cmd_hooks)
+
     mm = sub.add_parser(
         "memory",
         help="maintain the memory surface: log, index, hot cache, owner profile, todos",
@@ -3032,7 +3137,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     # Warn about stale installs on every command except `setup` (which fixes it)
     # and `info` (which calls _check_stale itself with richer output).
-    if getattr(args, "command", None) not in ("setup", "info", "doctor", None):
+    # `memory` runs from the SessionStart hook and from every write skill, and
+    # `hooks` is what fixes the thing the nag is about; nagging there is noise.
+    if getattr(args, "command", None) not in ("setup", "info", "doctor", "memory", "hooks", None):
         _check_stale()
     try:
         return args.func(args)

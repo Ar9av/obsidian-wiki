@@ -266,10 +266,6 @@ def log_decisions(vault: Path, results: list[dict[str, Any]]) -> None:
         return
     promoted = sum(1 for r in results if r["action"] == "promote")
     discarded = sum(1 for r in results if r["action"] == "discard")
-    log = Path(vault) / "log.md"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as handle:
-        handle.write(
-            f"- [{date.today().isoformat()}] STAGE_COMMIT "
-            f"accepted={promoted} rejected={discarded}\n"
-        )
+    from obsidian_wiki.memory import append_log
+
+    append_log(Path(vault), "STAGE_COMMIT", {"accepted": promoted, "rejected": discarded})

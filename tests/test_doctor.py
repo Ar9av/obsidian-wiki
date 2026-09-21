@@ -502,3 +502,41 @@ def test_doctor_passes_on_an_adopted_memory_surface(tmp_path: Path) -> None:
     data = json.loads(proc.stdout)
     check = next(c for c in data["checks"] if c["name"] == "memory-surface")
     assert check["status"] == "pass"
+
+
+def test_doctor_reports_unregistered_hooks_as_info_not_warn(tmp_path: Path) -> None:
+    """The hooks are optional. A clean install that never asked for them must
+    still pass — but the line has to be there, because without it nobody
+    learns that session-start memory is not happening."""
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+
+    proc = _run(home, "doctor", "--json", "--strict")
+
+    assert proc.returncode == 0, proc.stdout
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "session-hooks")
+    assert check["status"] == "info"
+    assert "hooks install" in check["hint"]
+
+
+def test_doctor_passes_the_hooks_check_once_installed(tmp_path: Path) -> None:
+    from obsidian_wiki import hooks as hk
+
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+    hk.install(home)
+
+    proc = _run(home, "doctor", "--json")
+
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "session-hooks")
+    assert check["status"] in ("pass", "warn")  # warn only if this box cannot reach the package
+    if check["status"] == "warn":
+        assert "reach" in check["detail"]

@@ -33,6 +33,25 @@ obsidian-wiki doctor --strict          # exit non-zero on warnings too
 
 Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
 
+### Session hooks
+
+Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture. They only take effect once registered in `~/.claude/settings.json`.
+
+| Command | What it does |
+|---|---|
+| `hooks install` | Register both hooks; idempotent, appends without touching your other hooks |
+| `hooks uninstall` | Remove our entries and nothing else |
+| `hooks status` | Registered? Bundled? Executable? Can the hook reach the package? Exit 1 if not |
+
+```bash
+obsidian-wiki hooks install
+obsidian-wiki hooks status
+```
+
+`hooks status` is the answer to "why is nothing being injected?". Both hooks exit silently on every failure so they can never break a session, which also means a missing registration or an unreachable package is invisible from inside one. `doctor` runs the same check. Set `WIKI_RECAP_DEBUG=1` to have the recap hook explain each silent exit on stderr.
+
+A malformed `settings.json` is refused rather than overwritten.
+
 ### Upgrading the framework
 
 `doctor` never checks for new releases. To upgrade, use your installer

@@ -660,3 +660,55 @@ def test_recap_falls_back_rather_than_claiming_no_history(vault: Path) -> None:
     recap = mem.build_recap(vault, project="nothing-matches-this")
     assert "Only thread" in recap
     assert "INGEST" in recap
+
+
+# --------------------------------------------------------------------------
+# adoption record — survives a legacy skill rewriting hot.md
+# --------------------------------------------------------------------------
+
+
+def test_a_legacy_rewrite_of_hot_md_does_not_unadopt_the_vault(vault: Path) -> None:
+    """Sixteen skills still rewrite hot.md by hand. If that dropped the
+    per-file marker and nothing else recorded adoption, the next sync would
+    refuse as though the vault had never been migrated."""
+    _legacy(vault)
+    mem.migrate(vault)
+    (vault / "hot.md").write_text(
+        "---\nupdated: now\n---\n# Hot\n\n## Key Takeaways\n\nWritten by an old skill.\n",
+        encoding="utf-8",
+    )
+    assert not mem.is_generated(vault / "hot.md")
+    assert mem.is_adopted(vault)
+    result = mem.rebuild_hot(vault)  # must not raise
+    assert result.words > 0
+    assert "Written by an old skill" in (vault / "hot.md").read_text(encoding="utf-8")
+
+
+def test_deleting_the_adoption_record_re_arms_the_guard(vault: Path) -> None:
+    """The documented way back: restore a curated file from the backup and
+    delete the record. Both are needed — a regenerated file is legitimately
+    ours and carries its own marker."""
+    _legacy(vault)
+    result = mem.migrate(vault)
+    backup = Path(result["backup_dir"])
+    (vault / "index.md").write_text((backup / "index.md").read_text(encoding="utf-8"), encoding="utf-8")
+    (vault / mem.ADOPTED_REL).unlink()
+    with pytest.raises(mem.MemoryError_) as excinfo:
+        mem.rebuild_index(vault)
+    assert excinfo.value.code == "unmigrated"
+
+
+def test_a_scaffolded_vault_carries_the_adoption_record(tmp_path: Path) -> None:
+    from obsidian_wiki.cli import scaffold_vault
+
+    vault = tmp_path / "fresh"
+    scaffold_vault(vault)
+    assert mem.is_adopted(vault)
+
+
+def test_migrate_records_adoption(vault: Path) -> None:
+    _legacy(vault)
+    assert not mem.is_adopted(vault)
+    mem.migrate(vault)
+    assert mem.is_adopted(vault)
+    assert mem.memory_status(vault)["migrated"] is True
