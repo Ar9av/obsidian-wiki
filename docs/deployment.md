@@ -50,7 +50,9 @@ claude mcp add --transport http wiki-memory http://localhost:8080/mcp/ \
   --header "Authorization: Bearer $WIKI_API_KEY"
 ```
 
-Four tools: `memory_search`, `memory_read`, `memory_write`, `memory_context_pack`.
+Eight tools. Four for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`.
+
+`memory_recap` is the one to call at session start: it returns the owner profile, open threads, and recent activity as a single block, optionally scoped to a `project`.
 
 ## REST
 
@@ -63,6 +65,12 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
+| `GET` | `/v1/memory/recap?project=&max_words=` | Owner profile, open threads, recent activity |
+| `GET` | `/v1/memory/profile` | Durable facts about the vault owner |
+| `POST` | `/v1/memory/profile` | `{action: set\|forget, key, value, confidence, source}` |
+| `GET` | `/v1/memory/todos?include_closed=` | Threads carried between sessions |
+| `POST` | `/v1/memory/todos` | `{action: add\|done\|drop, text, todo_id, origin}` |
+| `POST` | `/v1/memory/sync` | `{verb, takeaways, fields}` — reconcile index and hot cache |
 
 ```bash
 curl -X POST localhost:8080/v1/pages -H "Authorization: Bearer $WIKI_API_KEY" \
@@ -72,12 +80,18 @@ curl -X POST localhost:8080/v1/pages -H "Authorization: Bearer $WIKI_API_KEY" \
 ```
 
 Writes land at `<category>/<slug-of-title>.md` with the six required frontmatter keys plus `summary`,
-and append a line to `log.md`. `created:` is preserved across updates. Use `category: "_raw"` for a
+and append a line to `log.md` through the shared memory writer, so an API write is locked and
+parseable like every other operation. `created:` is preserved across updates. Use `category: "_raw"` for a
 rough capture you intend to promote with `wiki-ingest` later — the same role `_raw/` plays for the
 `wiki-capture` skill.
 
 `POST /v1/pages` writes exactly what you send. It does not distil, dedupe, or cross-link — those are
-the agent's job, via the `wiki-capture` and `cross-linker` skills.
+the agent's job, via the `wiki-capture` and `cross-linker` skills. Call `POST /v1/memory/sync`
+afterwards to fold the new pages into `index.md` and `hot.md`.
+
+On a vault whose memory files predate this writer, `memory_sync` and `POST /v1/memory/sync` return
+**409** rather than overwriting curated files. Run `obsidian-wiki memory migrate --apply` against
+the mounted vault once — see [Memory Surface](memory.md#adopting-an-existing-vault).
 
 ## Backups
 

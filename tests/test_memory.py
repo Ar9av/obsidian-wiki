@@ -9,6 +9,7 @@ profile and todo tables round-trip content containing table syntax.
 from __future__ import annotations
 
 import concurrent.futures
+import re
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
@@ -491,3 +492,171 @@ def test_cli_recap_prints_the_injectable_block(vault: Path) -> None:
     recap = _cli("recap", "--vault", str(vault))
     assert recap.returncode == 0
     assert recap.stdout.startswith("# Vault memory")
+
+
+# --------------------------------------------------------------------------
+# migration — adopting a vault that predates the writer
+# --------------------------------------------------------------------------
+
+
+def _legacy(vault: Path) -> None:
+    """A hand-curated vault: custom index sections, narrative hot cache."""
+    (vault / "index.md").write_text(
+        "# Project Brain\n\nCentral index.\n\n"
+        "## Project Index\n\n| Project | Repo |\n|---|---|\n| [[alpha]] | r |\n\n"
+        "## Quick Reference\n\n```bash\ngh repo list\n```\n",
+        encoding="utf-8",
+    )
+    (vault / "hot.md").write_text(
+        "---\nupdated: 2026-06-04T00:00:00Z\n---\n\n# Hot\n\n"
+        "## Recent Activity (last 3 ops)\n\n1. **2026-06-04** — researched karpathy\n\n"
+        "## Active Threads\n\n"
+        "- **karpathy-llm-resources** — Full coverage of the educational ecosystem.\n"
+        "- **tractorex** — domain-configurable document intelligence.\n\n"
+        "## Key Takeaways\n\n- Build the mechanism before the abstraction.\n",
+        encoding="utf-8",
+    )
+
+
+def test_a_scaffolded_vault_is_born_migrated(tmp_path: Path) -> None:
+    """Otherwise every sync on a brand-new vault would skip index and hot."""
+    from obsidian_wiki.cli import scaffold_vault
+
+    vault = tmp_path / "fresh"
+    scaffold_vault(vault)
+    assert mem.is_generated(vault / "index.md")
+    assert mem.is_generated(vault / "hot.md")
+    assert mem.memory_status(vault)["migrated"] is True
+
+
+def test_the_guard_refuses_to_clobber_a_hand_curated_vault(vault: Path) -> None:
+    _legacy(vault)
+    for call in (lambda: mem.rebuild_index(vault), lambda: mem.rebuild_hot(vault)):
+        with pytest.raises(mem.MemoryError_) as excinfo:
+            call()
+        assert excinfo.value.code == "unmigrated"
+    assert "Project Brain" in (vault / "index.md").read_text(encoding="utf-8")
+
+
+def test_dry_runs_are_allowed_on_an_unmigrated_vault(vault: Path) -> None:
+    _legacy(vault)
+    assert mem.rebuild_index(vault, write=False, force=True).total == 2
+    assert mem.migration_status(vault)["migrated"] is False
+
+
+def test_migration_preview_reports_what_would_change(vault: Path) -> None:
+    _legacy(vault)
+    status = mem.migration_status(vault)
+    assert status["index"]["sections_preserved"] == ["Project Index", "Quick Reference"]
+    assert status["hot"]["takeaways_carried"] is True
+    assert set(status["hot"]["sections_regenerated"]) == {"Active Threads", "Recent Activity"}
+    assert len(status["hot"]["threads_to_seed"]) == 2
+
+
+def test_migration_backs_up_before_writing(vault: Path) -> None:
+    _legacy(vault)
+    original = (vault / "index.md").read_text(encoding="utf-8")
+    result = mem.migrate(vault)
+    assert len(result["backup"]) == 2
+    restored = Path(result["backup_dir"]) / "index.md"
+    assert restored.read_text(encoding="utf-8") == original
+
+
+def test_migration_preserves_custom_sections_above_the_catalog(vault: Path) -> None:
+    _legacy(vault)
+    mem.migrate(vault)
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    headings = re.findall(r"^##\s+(.+)$", text, re.MULTILINE)
+    assert headings[:2] == ["Project Index", "Quick Reference"]
+    assert "Concepts" in headings              # catalog appended after
+    assert "gh repo list" in text              # the author's code block survives
+    assert "# Project Brain" in text           # and their preamble
+
+
+def test_migration_converts_narrative_threads_into_todos(vault: Path) -> None:
+    """The one thing the generator cannot reconstruct, so it is carried over."""
+    _legacy(vault)
+    result = mem.migrate(vault)
+    assert len(result["threads_seeded"]) == 2
+    texts = " ".join(todo.text for todo in mem.load_todos(vault))
+    assert "karpathy" in texts and "tractorex" in texts
+    assert "karpathy" in (vault / "hot.md").read_text(encoding="utf-8")
+
+
+def test_migration_never_overwrites_existing_todos(vault: Path) -> None:
+    _legacy(vault)
+    mem.add_todo(vault, "A thread I already had")
+    result = mem.migrate(vault)
+    assert result["threads_seeded"] == []
+    assert [todo.text for todo in mem.load_todos(vault)] == ["A thread I already had"]
+
+
+def test_migration_marks_a_custom_preamble_so_it_is_not_asked_again(vault: Path) -> None:
+    """The marker has to land inside the author's own preamble, or the guard
+    refuses forever and sync silently skips index and hot on every run."""
+    _legacy(vault)
+    mem.migrate(vault)
+    assert mem.is_generated(vault / "index.md")
+    mem.rebuild_index(vault)  # must not raise now
+    assert mem.rebuild_index(vault, write=False).changed is False
+
+
+def test_migration_is_idempotent(vault: Path) -> None:
+    _legacy(vault)
+    mem.migrate(vault)
+    first = (vault / "index.md").read_text(encoding="utf-8")
+    second = mem.migrate(vault)
+    assert second["was_migrated"] is True
+    assert (vault / "index.md").read_text(encoding="utf-8") == first
+
+
+# --------------------------------------------------------------------------
+# hot cache: log lines must not blow the budget
+# --------------------------------------------------------------------------
+
+
+def test_a_huge_log_line_is_summarised_not_pasted(vault: Path) -> None:
+    """A research ingest records every page it made in one field."""
+    mem.append_log(vault, "WIKI_RESEARCH", {
+        "source": "karpathy",
+        "pages_created": 18,
+        "note": " ".join(f"references/page-{n}" for n in range(40)),
+        "extra": "dropped",
+    })
+    mem.rebuild_hot(vault)
+    activity = mem._section_body((vault / "hot.md").read_text(encoding="utf-8"), "Recent Activity")
+    assert len(activity.split()) < 25
+    assert "page-39" not in activity
+    assert "WIKI_RESEARCH" in activity
+
+
+def test_summarised_entries_keep_the_date_and_verb(vault: Path) -> None:
+    entry = mem.parse_log_line(mem.format_log_line("INGEST", {"source": "a.pdf"}, timestamp="2026-09-21T10:00:00Z"))
+    assert mem.summarize_log_entry(entry) == "- [2026-09-21] INGEST source=a.pdf"
+
+
+# --------------------------------------------------------------------------
+# recap scoping
+# --------------------------------------------------------------------------
+
+
+def test_recap_scopes_threads_to_a_project(vault: Path) -> None:
+    mem.add_todo(vault, "Ship the tractorex pipeline")
+    mem.add_todo(vault, "Read the karpathy series")
+    scoped = mem.build_recap(vault, project="tractorex")
+    assert "tractorex" in scoped
+    assert "karpathy" not in scoped
+
+
+def test_recap_matches_a_project_named_in_the_origin(vault: Path) -> None:
+    mem.add_todo(vault, "Something unrelated in wording", origin="projects/tractorex.md")
+    assert "Something unrelated" in mem.build_recap(vault, project="tractorex")
+
+
+def test_recap_falls_back_rather_than_claiming_no_history(vault: Path) -> None:
+    """An unmatched filter must not look like an empty vault."""
+    mem.add_todo(vault, "Only thread")
+    mem.append_log(vault, "INGEST", {"source": "a.pdf"})
+    recap = mem.build_recap(vault, project="nothing-matches-this")
+    assert "Only thread" in recap
+    assert "INGEST" in recap

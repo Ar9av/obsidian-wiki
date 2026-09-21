@@ -73,6 +73,7 @@ Two Claude Code hooks bracket a session. `wiki-session-recap.sh` runs at Session
 | `WIKI_RECAP_MAX_WORDS` | Word budget for the injected block | `350` |
 | `WIKI_RECAP_MIN_CONFIDENCE` | Drop profile facts below this confidence | `0.0` |
 | `WIKI_RECAP_TIMEOUT` | Seconds before the recap is abandoned | `10` |
+| `WIKI_RECAP_PROJECT` | Override the project the recap is scoped to (default: git repo name) | *(auto)* |
 | `WIKI_STOP_CAPTURE` | `false` skips the end-of-session capture nudge | *(on)* |
 | `WIKI_STOP_REARM_SECONDS` | Elapsed time before the capture nudge can fire again | `21600` |
 | `WIKI_STOP_REARM_EDITS` | New edits required before the nudge can fire again | `10` |

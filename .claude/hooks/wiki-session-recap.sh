@@ -76,6 +76,14 @@ run_recap() {
 
   local cmd=("${runner[@]}" memory recap --vault "$VAULT"
              --max-words "$RECAP_MAX_WORDS" --min-confidence "$RECAP_MIN_CONFIDENCE")
+  # Scope to the project being worked on, so a session about A does not get
+  # handed B's open threads. Git repo name first, directory name as fallback.
+  local project="${WIKI_RECAP_PROJECT:-}"
+  if [[ -z "$project" ]]; then
+    project=$(git rev-parse --show-toplevel 2>/dev/null) || project=""
+    project=$(basename "${project:-$PWD}")
+  fi
+  [[ -n "$project" && "$project" != "/" ]] && cmd+=(--project "$project")
   if command -v timeout >/dev/null 2>&1; then
     timeout "$RECAP_TIMEOUT" "${cmd[@]}" 2>/dev/null
   else

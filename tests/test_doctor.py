@@ -47,10 +47,17 @@ def _write_config(home: Path, vault: Path, *, version: str | None = None) -> Non
     (config_dir / "config").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _make_vault(vault: Path, *, manifest: str = '{"sources": {}}') -> None:
+def _make_vault(vault: Path, *, manifest: str = '{"sources": {}}', migrated: bool = True) -> None:
     vault.mkdir(parents=True, exist_ok=True)
-    for name in ("index.md", "log.md", "hot.md"):
-        (vault / name).write_text(f"# {name}\n", encoding="utf-8")
+    (vault / "log.md").write_text("# log.md\n", encoding="utf-8")
+    # `scaffold_vault` stamps index.md and hot.md with the memory writer's
+    # marker, so a vault from `setup` is already adopted. Without it the
+    # memory-surface check correctly warns that sync would skip those files.
+    for name, kind in (("index.md", "index"), ("hot.md", "hot")):
+        marker = f"generated_by: obsidian-wiki memory {kind}\n" if migrated else ""
+        (vault / name).write_text(
+            f"---\ntitle: {name}\n{marker}---\n\n# {name}\n", encoding="utf-8"
+        )
     (vault / ".manifest.json").write_text(manifest, encoding="utf-8")
 
 
@@ -464,3 +471,34 @@ def test_doctor_project_codegraph_not_initialized_hints_run_command(tmp_path: Pa
     check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph-index")
     assert check["status"] == "warn"
     assert check["hint"] == "run: obsidian-wiki code-understand --project <project>"
+
+
+def test_doctor_warns_when_the_memory_surface_is_unmigrated(tmp_path: Path) -> None:
+    """An upgraded vault silently skips index/hot writes until it is adopted,
+    so doctor has to surface it rather than letting sync stay a no-op."""
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault, migrated=False)
+    _write_config(home, vault)
+    _install_all_skills(home)
+
+    proc = _run(home, "doctor", "--json")
+
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "memory-surface")
+    assert check["status"] == "warn"
+    assert "memory migrate" in check["hint"]
+
+
+def test_doctor_passes_on_an_adopted_memory_surface(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+
+    proc = _run(home, "doctor", "--json")
+
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "memory-surface")
+    assert check["status"] == "pass"

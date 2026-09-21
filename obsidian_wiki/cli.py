@@ -454,6 +454,7 @@ def scaffold_vault(vault_path: Path) -> bool:
         index_md.write_text(
             "---\n"
             "title: Wiki Index\n"
+            "generated_by: obsidian-wiki memory index\n"
             "---\n\n"
             "# Wiki Index\n\n"
             f"*This index is automatically maintained. Last updated: {timestamp}*\n\n"
@@ -485,6 +486,7 @@ def scaffold_vault(vault_path: Path) -> bool:
             "---\n"
             "title: Hot Cache\n"
             f"updated: {timestamp}\n"
+            "generated_by: obsidian-wiki memory hot\n"
             "---\n\n"
             "# Hot Cache\n\n"
             "*A ~500-word semantic snapshot of recent activity. Updated after every major write operation.*\n\n"
@@ -839,6 +841,60 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
                 )
             else:
                 _doctor_add(checks, name="vault-core-files", status="pass", detail="core vault files present", hint="")
+
+            # Memory surface: an unmigrated vault silently skips index/hot
+            # writes on every sync, so it needs to be visible here.
+            try:
+                from obsidian_wiki import memory as _mem
+
+                mem_status = _mem.memory_status(vault)
+                if not mem_status["migrated"]:
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="warn",
+                        detail="index.md/hot.md predate the memory writer; sync skips them",
+                        hint="run: obsidian-wiki memory migrate   (preview first, then --apply)",
+                    )
+                # Only real drift is worth a warning. `changed` also flips on a
+                # cosmetic difference (spacing, ordering), and "index drift
+                # +0/-0" tells a reader nothing actionable.
+                elif (
+                    mem_status["index_drift"]["added"]
+                    or mem_status["index_drift"]["removed"]
+                    or mem_status["hot"]["over_budget"]
+                ):
+                    drift = mem_status["index_drift"]
+                    reasons = []
+                    if drift["added"] or drift["removed"]:
+                        reasons.append(f"index drift +{len(drift['added'])}/-{len(drift['removed'])}")
+                    if mem_status["hot"]["over_budget"]:
+                        reasons.append(f"hot.md {mem_status['hot']['words']}w over cap")
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="warn",
+                        detail="; ".join(reasons),
+                        hint="run: obsidian-wiki memory sync",
+                    )
+                else:
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="pass",
+                        detail=f"current — {mem_status['pages']} page(s), "
+                               f"{mem_status['hot']['words']}/{mem_status['hot']['max_words']} hot words, "
+                               f"{mem_status['todos']['open']} open thread(s)",
+                        hint="",
+                    )
+            except Exception as exc:  # doctor must never crash on one bad check
+                _doctor_add(
+                    checks,
+                    name="memory-surface",
+                    status="warn",
+                    detail=f"could not read the memory surface: {exc}",
+                    hint="run: obsidian-wiki memory status",
+                )
 
             manifest_path = vault / ".manifest.json"
             if manifest_path.exists():
@@ -2163,6 +2219,8 @@ def cmd_memory(args: argparse.Namespace) -> int:
                 f"index:    {'stale' if drift['stale'] else 'current'}"
                 + (f" (+{len(drift['added'])} / -{len(drift['removed'])})" if drift["stale"] else ""),
                 f"log:      {status['log_entries']} entries",
+                ("migrated: yes" if status["migrated"] else
+                 "migrated: NO — run `obsidian-wiki memory migrate` before index/hot writes"),
                 f"hot:      {status['hot']['words']}/{status['hot']['max_words']} words"
                 + ("  OVER BUDGET" if status["hot"]["over_budget"] else "")
                 + ("" if status["hot"]["generated"] else "  (hand-written, not yet generated)"),
@@ -2170,6 +2228,37 @@ def cmd_memory(args: argparse.Namespace) -> int:
                 f"todos:    {status['todos']['open']} open, {status['todos']['stale']} stale,"
                 f" {status['todos']['closed']} closed",
             ])
+
+        if action == "migrate":
+            if args.check or not args.apply:
+                preview = mem.migration_status(vault)
+                if preview["migrated"]:
+                    return emit(preview, ["already migrated — index.md and hot.md are generated"])
+                idx, hot = preview["index"], preview["hot"]
+                lines = [
+                    "This vault predates the memory writer. Migrating would:",
+                    "",
+                    f"  index.md   {idx['lines_before']} -> {idx['lines_after']} lines,"
+                    f" {idx['entries_added']} catalog entries appended",
+                ]
+                lines += [f"    keep, unchanged, above the generated catalog: {name}"
+                          for name in idx["sections_preserved"]]
+                lines.append(f"  hot.md     regenerates: {', '.join(hot['sections_regenerated']) or 'nothing'}")
+                lines.append(f"    Key Takeaways carried over: {'yes' if hot['takeaways_carried'] else 'no'}")
+                if hot["threads_to_seed"]:
+                    lines.append(f"    {len(hot['threads_to_seed'])} thread(s) converted to todos:")
+                    lines += [f"      - {t[:80]}" for t in hot["threads_to_seed"]]
+                lines += ["", "A timestamped backup is written to _archives/ first.",
+                          "Apply with: obsidian-wiki memory migrate --apply"]
+                emit(preview, lines)
+                return 0
+            result = mem.migrate(vault, link_format=link_format)
+            lines = [f"backed up to {result['backup_dir']}"] if result["backup"] else []
+            lines.append(f"index: {result['index']['total']} page(s), +{len(result['index']['added'])}")
+            lines.append(f"hot:   {result['hot']['words']} words")
+            if result["threads_seeded"]:
+                lines.append(f"todos: seeded {len(result['threads_seeded'])} thread(s) from hot.md")
+            return emit(result, lines)
 
         if action == "log":
             if not rest:
@@ -2222,33 +2311,59 @@ def cmd_memory(args: argparse.Namespace) -> int:
             return 0
 
         if action == "recap":
-            print(mem.build_recap(vault, max_words=args.max_words or 400, min_confidence=args.min_confidence), end="")
+            print(
+                mem.build_recap(
+                    vault,
+                    max_words=args.max_words or 400,
+                    min_confidence=args.min_confidence,
+                    project=args.project,
+                ),
+                end="",
+            )
             return 0
 
         if action == "sync":
             # The post-write call: one lock held across log, index, and hot, so
             # another writer cannot interleave between the three.
+            index = hot = None
+            skipped = ""
             with mem.memory_lock(vault):
                 line = (
                     mem.append_log(vault, args.verb, _memory_fields(args.field), lock=False)
                     if args.verb else ""
                 )
-                index = mem.rebuild_index(vault, link_format=link_format, lock=False)
-                hot = mem.rebuild_hot(
-                    vault,
-                    lock=False,
-                    takeaways=_memory_takeaways(args.takeaways),
-                    link_format=link_format,
-                    max_words=args.max_words,
-                )
+                try:
+                    index = mem.rebuild_index(vault, link_format=link_format, lock=False)
+                    hot = mem.rebuild_hot(
+                        vault,
+                        lock=False,
+                        takeaways=_memory_takeaways(args.takeaways),
+                        link_format=link_format,
+                        max_words=args.max_words,
+                    )
+                except mem.MemoryError_ as exc:
+                    # An unmigrated vault must not fail the whole ingest: the
+                    # log line already landed and is append-only. Say so loudly
+                    # instead, so it is not silently skipped forever.
+                    if exc.code != "unmigrated":
+                        raise
+                    skipped = str(exc)
+            if skipped:
+                print(f"warning: index.md and hot.md not updated — {skipped}", file=sys.stderr)
             payload = {
                 "log_line": line,
-                "index": {"total": index.total, "added": list(index.added), "removed": list(index.removed)},
-                "hot": {"words": hot.words, "trimmed": hot.trimmed},
+                "skipped": skipped,
+                "index": None if index is None else {
+                    "total": index.total, "added": list(index.added), "removed": list(index.removed),
+                },
+                "hot": None if hot is None else {"words": hot.words, "trimmed": hot.trimmed},
             }
             lines = [line] if line else []
-            lines.append(f"index: {index.total} page(s), +{len(index.added)} / -{len(index.removed)}")
-            lines.append(f"hot:   {hot.words} words" + (" (trimmed)" if hot.trimmed else ""))
+            if index is not None and hot is not None:
+                lines.append(f"index: {index.total} page(s), +{len(index.added)} / -{len(index.removed)}")
+                lines.append(f"hot:   {hot.words} words" + (" (trimmed)" if hot.trimmed else ""))
+            else:
+                lines.append("index/hot: skipped (run `obsidian-wiki memory migrate`)")
             return emit(payload, lines)
 
         if action == "profile":
@@ -2802,7 +2917,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mm.add_argument(
         "memory_action",
-        choices=["status", "log", "index", "hot", "recap", "sync", "profile", "todo"],
+        choices=["status", "log", "index", "hot", "recap", "sync", "migrate", "profile", "todo"],
         help="what to do",
     )
     mm.add_argument("rest", nargs="*", help="action arguments, e.g. `profile set KEY VALUE`")
@@ -2823,6 +2938,8 @@ def build_parser() -> argparse.ArgumentParser:
     mm.add_argument("--confidence", type=float, default=0.6, help="confidence for `profile set` (default: 0.6)")
     mm.add_argument("--source", default="conversation", help="source for `profile set`")
     mm.add_argument("--origin", help="originating page for `todo add`")
+    mm.add_argument("--project", help="scope `recap` to one project's threads and activity")
+    mm.add_argument("--apply", action="store_true", help="perform the migration (default is a preview)")
     mm.add_argument("--stale-days", type=int, default=30, help="open-todo staleness threshold (default: 30)")
     mm.add_argument("--all", action="store_true", help="include closed items in `todo list`")
     mm.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")

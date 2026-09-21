@@ -64,6 +64,16 @@ DEFAULT_ACTIVE_THREADS = 7
 DEFAULT_CONTRADICTIONS = 5
 DEFAULT_TODO_STALE_DAYS = 30
 
+#: Frontmatter marker proving a file is ours to regenerate. A vault whose
+#: index.md or hot.md predates this module is hand-curated: regenerating it
+#: would reorder or discard someone's work, so we refuse until `memory migrate`
+#: has run and taken a backup.
+GENERATED_MARKER = "obsidian-wiki memory"
+#: Raw log lines can be enormous (a research ingest records every page it made).
+#: Pasting them into a word-capped snapshot spends the whole budget on one line.
+HOT_FIELDS_PER_ENTRY = 3
+HOT_VALUE_CHARS = 60
+
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---(?:\r?\n|$)", re.DOTALL)
 _LOG_LINE_RE = re.compile(r"^-\s*\[(?P<ts>[^\]]+)\]\s+(?P<verb>[A-Z][A-Z0-9_-]*)\s*(?P<rest>.*)$")
 _FIELD_RE = re.compile(r"""(?P<key>[A-Za-z_][\w-]*)=(?P<value>"[^"]*"|'[^']*'|\S*)""")
@@ -176,6 +186,19 @@ def parse_frontmatter(frontmatter: str) -> dict:
         values[key] = _scalar(raw)
         i += 1
     return values
+
+
+def is_generated(path: Path) -> bool:
+    """True when *path* carries our ``generated_by`` marker.
+
+    Absence means a human or an older version of the framework wrote it, so it
+    is not ours to overwrite.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return True  # nothing to clobber
+    head = path.read_text(encoding="utf-8", errors="replace")[:2000]
+    return f"generated_by: {GENERATED_MARKER}" in head
 
 
 # --------------------------------------------------------------------------
@@ -403,7 +426,12 @@ def render_index(pages: Sequence, *, link_format: str = "wikilink", preamble: st
     by_category: dict = {}
     for page in pages:
         by_category.setdefault(page.category, []).append(page)
-    chunks = [preamble.rstrip("\n") if preamble.strip() else "---\ntitle: Wiki Index\n---\n\n# Wiki Index"]
+    chunks = [_ensure_index_marker(preamble.rstrip("\n"))]
+    # Sections the author wrote come first, in their original order. Putting
+    # the generated catalog above them reordered a curated document and pushed
+    # hand-written reference material below a wall of auto-generated entries.
+    if extra_sections.strip():
+        chunks.append(extra_sections.strip("\n"))
     for category in sorted(by_category, key=_category_sort_key):
         entries = sorted(by_category[category], key=lambda p: (p.title.casefold(), p.path))
         chunks.append(
@@ -412,9 +440,30 @@ def render_index(pages: Sequence, *, link_format: str = "wikilink", preamble: st
         )
     if not by_category:
         chunks.append("## Concepts\n\n*No pages yet. Use `wiki-ingest` to add your first source.*")
-    if extra_sections.strip():
-        chunks.append(extra_sections.strip("\n"))
     return "\n\n".join(chunks) + "\n"
+
+
+def _ensure_index_marker(preamble: str) -> str:
+    """Guarantee the preamble carries the ``generated_by`` marker.
+
+    Migration preserves a vault's own preamble verbatim, so the marker has to
+    be injected into it — otherwise the file stays unmarked, every later call
+    sees an unmigrated vault, and the guard refuses in perpetuity.
+    """
+    marker = f"generated_by: {GENERATED_MARKER} index"
+    if marker in preamble:
+        return preamble
+    match = _FRONTMATTER_RE.match(preamble + "\n")
+    if match:
+        frontmatter = match.group(1)
+        if re.search(r"^generated_by:", frontmatter, re.MULTILINE):
+            frontmatter = re.sub(r"^generated_by:.*$", marker, frontmatter, count=1, flags=re.MULTILINE)
+        else:
+            frontmatter = f"{frontmatter}\n{marker}"
+        return f"---\n{frontmatter}\n---" + preamble[match.end() - 1:].rstrip("\n")
+    body = preamble.lstrip("\n")
+    return f"---\ntitle: Wiki Index\n{marker}\n---\n\n{body}" if body else \
+        f"---\ntitle: Wiki Index\n{marker}\n---\n\n# Wiki Index"
 
 
 def _split_index(text: str) -> tuple:
@@ -440,6 +489,7 @@ def rebuild_index(
     link_format: str = "wikilink",
     write: bool = True,
     lock: bool = True,
+    force: bool = False,
 ) -> IndexResult:
     """Reconcile ``index.md`` against the pages actually on disk.
 
@@ -448,8 +498,14 @@ def rebuild_index(
     section survives, a stale page entry does not.
     """
     vault = _require_vault(vault)
-    pages = scan_pages(vault)
     index = vault / "index.md"
+    if write and not force and not is_generated(index):
+        raise MemoryError_(
+            "unmigrated",
+            "index.md was not written by this tool; run `obsidian-wiki memory migrate` "
+            "to review the change and take a backup first",
+        )
+    pages = scan_pages(vault)
     existing = index.read_text(encoding="utf-8") if index.is_file() else ""
     preamble, sections, _ = _split_index(existing)
 
@@ -795,8 +851,9 @@ _HOT_NOTE = (
 _TAKEAWAYS_PLACEHOLDER = "*None yet.*"
 
 
-def _section_body(text: str, heading: str) -> str:
-    pattern = re.compile(rf"^##\s+{re.escape(heading)}\s*$", re.MULTILINE | re.IGNORECASE)
+def _section_body(text: str, heading: str, *, prefix: bool = False) -> str:
+    suffix = r".*$" if prefix else r"\s*$"
+    pattern = re.compile(rf"^##\s+{re.escape(heading)}{suffix}", re.MULTILINE | re.IGNORECASE)
     match = pattern.search(text)
     if not match:
         return ""
@@ -839,8 +896,27 @@ class HotResult:
     text: str
 
 
+def summarize_log_entry(entry: LogEntry) -> str:
+    """One compact line for the hot cache.
+
+    A raw log line is unbounded: a research ingest records every page it
+    produced in a single ``note=`` field, which alone can exceed the whole
+    word budget. Keep the date, the verb, and the first few fields.
+    """
+    date = entry.timestamp.split("T")[0]
+    parts = []
+    for index, (key, value) in enumerate(entry.fields.items()):
+        if index >= HOT_FIELDS_PER_ENTRY:
+            parts.append("...")
+            break
+        if len(value) > HOT_VALUE_CHARS:
+            value = value[: HOT_VALUE_CHARS - 1] + "..."
+        parts.append(f"{key}={value}" if value else key)
+    return f"- [{date}] {entry.verb}" + (" " + " ".join(parts) if parts else "")
+
+
 def _recent_activity_lines(vault: Path, limit: int) -> list:
-    return [entry.raw for entry in read_log(vault, limit=limit)]
+    return [summarize_log_entry(entry) for entry in read_log(vault, limit=limit)]
 
 
 def _contradiction_lines(pages: Sequence, limit: int, link_format: str) -> list:
@@ -894,14 +970,16 @@ def build_hot(
 
     def _render(act: list, con: list, thr: list, take: str) -> str:
         thread_lines = [
-            f"- **{t.id}** {t.text}" + (f" — {t.origin}" if t.origin else "") + f" (touched {t.touched})"
+            f"- **{t.id}** {t.text if len(t.text) <= 110 else t.text[:109].rstrip() + '...'}"
+            + (f" — {t.origin}" if t.origin else "")
+            + f" (touched {t.touched})"
             for t in thr
         ]
         blocks = [
             "---\ntitle: Hot Cache\n"
             f"updated: {utc_now()}\n"
             f"pages: {len(pages)}\n"
-            "generated_by: obsidian-wiki memory hot\n---",
+            f"generated_by: {GENERATED_MARKER} hot\n---",
             "# Hot Cache",
             _HOT_NOTE,
             "## Recent Activity\n\n" + ("\n".join(act) if act else "*No logged operations yet.*"),
@@ -938,8 +1016,16 @@ def build_hot(
     )
 
 
-def rebuild_hot(vault: Path, *, write: bool = True, lock: bool = True, **kwargs) -> HotResult:
+def rebuild_hot(
+    vault: Path, *, write: bool = True, lock: bool = True, force: bool = False, **kwargs
+) -> HotResult:
     vault = _require_vault(vault)
+    if write and not force and not is_generated(vault / "hot.md"):
+        raise MemoryError_(
+            "unmigrated",
+            "hot.md was not written by this tool; run `obsidian-wiki memory migrate` "
+            "to review the change and take a backup first",
+        )
     if lock:
         with memory_lock(vault):
             result = build_hot(vault, **kwargs)
@@ -957,7 +1043,13 @@ def rebuild_hot(vault: Path, *, write: bool = True, lock: bool = True, **kwargs)
 # --------------------------------------------------------------------------
 
 
-def build_recap(vault: Path, *, max_words: int = 400, min_confidence: float = 0.0) -> str:
+def build_recap(
+    vault: Path,
+    *,
+    max_words: int = 400,
+    min_confidence: float = 0.0,
+    project: Optional[str] = None,
+) -> str:
     """Profile, open threads, and the newest activity as one injectable block.
 
     This is what a SessionStart or PreCompact hook feeds back into context: the
@@ -968,6 +1060,18 @@ def build_recap(vault: Path, *, max_words: int = 400, min_confidence: float = 0.
     facts = [f for f in load_profile(vault) if f.confidence >= min_confidence]
     todos = [t for t in load_todos(vault) if t.status == "open"]
     entries = read_log(vault, limit=5)
+
+    # Scoping keeps a session about project A from being handed project B's
+    # threads. Facts describe the person, so they stay; threads and activity
+    # are project-shaped. An unscoped thread is shown either way, and a filter
+    # that matches nothing falls back rather than claiming there is no history.
+    if project:
+        needle = project.strip().casefold()
+        scoped = [t for t in todos if needle in f"{t.origin} {t.text}".casefold()]
+        todos = scoped if scoped else todos
+        matched = [e for e in entries if needle in e.raw.casefold()]
+        entries = matched or read_log(vault, limit=3)
+
     stale = [t for t in todos if t.is_stale()]
 
     lines = ["# Vault memory", ""]
@@ -987,7 +1091,7 @@ def build_recap(vault: Path, *, max_words: int = 400, min_confidence: float = 0.
     if entries:
         lines.append("## Recent vault activity")
         lines.append("")
-        lines += [entry.raw for entry in entries]
+        lines += [summarize_log_entry(entry) for entry in entries]
         lines.append("")
     if not facts and not todos and not entries:
         lines.append("*No vault memory recorded yet.*")
@@ -1000,13 +1104,137 @@ def build_recap(vault: Path, *, max_words: int = 400, min_confidence: float = 0.
     return text
 
 
+# --------------------------------------------------------------------------
+# migration — adopting a vault that predates this module
+# --------------------------------------------------------------------------
+
+
+MIGRATION_BACKUP_DIR = "_archives"
+_BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+\.)\s+(.*)$")
+
+
+def extract_threads(hot_text: str) -> list:
+    """Open threads written as prose in a hand-maintained ``Active Threads``.
+
+    Migration would otherwise drop this outright: the generated section is
+    built from the todo table, which is empty on a vault that never had one.
+    Converting the bullets into real todos preserves the content *and* seeds
+    the index that keeps it alive.
+    """
+    body = _section_body(hot_text, "Active Threads", prefix=True)
+    threads = []
+    for line in body.splitlines():
+        match = _BULLET_RE.match(line)
+        if not match:
+            continue
+        text = match.group(1).strip()
+        text = re.sub(r"^\*\*(.+?)\*\*\s*[-—:]*\s*", r"\1: ", text).strip()
+        text = _MD_DECORATION_RE.sub("", text).strip()
+        if len(text) > 160:
+            text = text[:159].rstrip() + "..."
+        if text:
+            threads.append(text)
+    return threads
+
+
+def migration_status(vault: Path) -> dict:
+    """What adopting this vault would change, without changing anything.
+
+    Existing vaults have hand-curated memory files. Regenerating them silently
+    would reorder a document someone built on purpose and drop narrative the
+    generator cannot reconstruct, so adoption is explicit and backed up.
+    """
+    vault = _require_vault(vault)
+    index, hot = vault / "index.md", vault / "hot.md"
+    index_generated, hot_generated = is_generated(index), is_generated(hot)
+
+    preview = rebuild_index(vault, write=False, lock=False, force=True)
+    old_index = index.read_text(encoding="utf-8") if index.is_file() else ""
+    custom = [
+        heading for heading in _HEADING_RE.findall(preview.text)
+        if heading in _HEADING_RE.findall(old_index)
+    ]
+
+    hot_text = hot.read_text(encoding="utf-8") if hot.is_file() else ""
+    carried = _section_body(hot_text, "Key Takeaways")
+    dropped = [
+        name for name in ("Active Threads", "Recent Activity")
+        if _section_body(hot_text, name, prefix=True) and not hot_generated
+    ]
+    recoverable = extract_threads(hot_text) if not hot_generated else []
+
+    return {
+        "vault": str(vault),
+        "migrated": index_generated and hot_generated,
+        "index": {
+            "generated": index_generated,
+            "lines_before": len(old_index.splitlines()),
+            "lines_after": len(preview.text.splitlines()),
+            "entries_added": len(preview.added),
+            "sections_preserved": custom,
+        },
+        "hot": {
+            "generated": hot_generated,
+            "takeaways_carried": bool(carried.strip()) and carried.strip() != _TAKEAWAYS_PLACEHOLDER,
+            "sections_regenerated": dropped,
+            "threads_to_seed": recoverable,
+        },
+    }
+
+
+def migrate(vault: Path, *, link_format: str = "wikilink", backup: bool = True) -> dict:
+    """Adopt the memory files, taking a timestamped backup first.
+
+    The backup is the whole point: everything the generator cannot reconstruct
+    — a hand-written Active Threads narrative, a custom section's position — is
+    recoverable from it.
+    """
+    vault = _require_vault(vault)
+    status = migration_status(vault)
+    hot = vault / "hot.md"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    backup_dir = vault / MIGRATION_BACKUP_DIR / f"pre-memory-migration-{stamp}"
+    saved = []
+
+    with memory_lock(vault):
+        if backup:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            for name in ("index.md", "hot.md"):
+                source = vault / name
+                if source.is_file():
+                    atomic_write(backup_dir / name, source.read_text(encoding="utf-8"))
+                    saved.append(f"{MIGRATION_BACKUP_DIR}/{backup_dir.name}/{name}")
+        # Seed the todo table from the old prose before regenerating, so the
+        # rebuilt Active Threads section shows the same threads rather than
+        # "none". Only when the table is empty — never overwrite real todos.
+        seeded = []
+        if not load_todos(vault):
+            for text in extract_threads(
+                (vault / "hot.md").read_text(encoding="utf-8") if hot.is_file() else ""
+            ):
+                seeded.append(add_todo(vault, text, origin="migrated from hot.md", lock=False).id)
+
+        index = rebuild_index(vault, link_format=link_format, lock=False, force=True)
+        hot_result = rebuild_hot(vault, lock=False, force=True, link_format=link_format)
+
+    return {
+        "vault": str(vault),
+        "backup": saved,
+        "backup_dir": str(backup_dir) if saved else "",
+        "index": {"total": index.total, "added": list(index.added), "removed": list(index.removed)},
+        "hot": {"words": hot_result.words, "trimmed": hot_result.trimmed},
+        "threads_seeded": seeded,
+        "was_migrated": status["migrated"],
+    }
+
+
 def memory_status(vault: Path) -> dict:
     """Machine-readable health of the memory surface."""
     vault = _require_vault(vault)
     hot = vault / "hot.md"
     hot_text = hot.read_text(encoding="utf-8") if hot.is_file() else ""
     hot_values = parse_frontmatter(_split_frontmatter(hot_text)[0]) if hot_text else {}
-    index_drift = rebuild_index(vault, write=False, lock=False)
+    index_drift = rebuild_index(vault, write=False, lock=False, force=True)
     todos = load_todos(vault)
     return {
         "vault": str(vault),
@@ -1025,6 +1253,7 @@ def memory_status(vault: Path) -> dict:
             "over_budget": content_words(hot_text) > hot_max_words(),
             "generated": bool(hot_values.get("generated_by")),
         },
+        "migrated": is_generated(vault / "index.md") and is_generated(hot),
         "profile_facts": len(load_profile(vault)),
         "todos": {
             "open": sum(1 for t in todos if t.status == "open"),

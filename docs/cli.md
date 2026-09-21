@@ -280,6 +280,7 @@ For what the surface *is* — the generated-vs-yours split, the session hooks, t
 | `memory recap` | Print profile, open threads, and recent activity as one injectable block |
 | `memory profile list\|set\|forget` | Durable facts about the vault owner |
 | `memory todo list\|add\|done\|drop\|prune` | Open threads carried between sessions |
+| `memory migrate` | Adopt a vault whose memory files predate this writer |
 
 ```bash
 # After an ingest: one lock held across all three writes.
@@ -306,6 +307,28 @@ The word cap is enforced. It defaults to 500, overridable with `OBSIDIAN_HOT_MAX
 
 ![memory index --check as a CI gate](images/memory-check-gate.png)
 
+### Adopting an existing vault
+
+A vault created before this writer has hand-curated memory files: a custom `index.md` layout, a narrative `hot.md`. Regenerating those silently would reorder a document someone built on purpose and discard prose the generator cannot reconstruct.
+
+So it refuses. `index.md` and `hot.md` are only written when they carry a `generated_by` marker, and `memory sync` on an unmigrated vault writes the log line (append-only, always safe), skips the other two, and says so on stderr. A fresh vault from `setup` is born marked, so this only affects upgrades.
+
+```bash
+obsidian-wiki memory migrate            # preview — changes nothing
+obsidian-wiki memory migrate --apply    # back up, then adopt
+```
+
+![The migration preview](images/memory-migrate.png)
+
+The preview names every section it will keep, whether your Key Takeaways carry across, and which threads it can rescue. `--apply` writes a timestamped backup to `_archives/pre-memory-migration-<ts>/` first.
+
+Two things worth knowing:
+
+- **Your sections stay on top.** The generated catalog is appended *below* whatever you already had, in its original order.
+- **Narrative threads become real todos.** A hand-written `## Active Threads` list is parsed into the todo index before the rebuild, so the content survives as live entries instead of being replaced by "no open threads". Only when the todo table is empty — existing todos are never overwritten.
+
+`doctor` reports migration state, so an upgraded install surfaces it without anyone going looking.
+
 ### Owner profile and todo index
 
 Two tables under `_meta/`, both created empty by `setup`:
@@ -323,6 +346,8 @@ Staleness is **reported, never enforced**. An open item untouched for 30 days is
 ### Session injection
 
 `memory recap` is what the SessionStart hook (`wiki-session-recap.sh`) feeds into a fresh session, so the model starts with the owner profile and the open threads instead of having to remember to read `hot.md`.
+
+`--project <name>` scopes threads and activity to one project; the hook derives it from the git repo name. Facts about the owner are global and always shown. A filter that matches nothing falls back to the unscoped view rather than implying there is no history.
 
 The hook never breaks session startup: a missing vault, a missing install, an empty vault, or a slow filesystem all exit 0 with no output. Tune or disable it per session:
 

@@ -124,10 +124,11 @@ def write_page(
     )
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(front + content.rstrip() + "\n", encoding="utf-8")
-    log = VAULT / "log.md"
-    log.parent.mkdir(parents=True, exist_ok=True)
-    with log.open("a", encoding="utf-8") as handle:
-        handle.write(f"- {today} — wrote [[{title}]] via API ({rel})\n")
+    # Through the shared writer, so an API write is locked and parseable like
+    # every other one. Previously this appended its own ad-hoc format.
+    from obsidian_wiki import memory as mem
+
+    mem.append_log(VAULT, "API_WRITE", {"page": rel, "title": title})
     return {"path": rel, "created": created, "updated": today}
 
 
@@ -177,11 +178,107 @@ class PackRequest(BaseModel):
     metadata_only: bool = False
 
 
+class ProfileWrite(BaseModel):
+    action: str = "set"
+    key: str = ""
+    value: str = ""
+    confidence: float = 0.6
+    source: str = "agent"
+
+
+class TodoWrite(BaseModel):
+    action: str = "add"
+    text: str = ""
+    todo_id: str = ""
+    origin: str = ""
+
+
+class SyncRequest(BaseModel):
+    verb: str = "API_WRITE"
+    takeaways: str = ""
+    fields: dict[str, str] | None = None
+
+
+def memory_recap(project: str = "", max_words: int = 350, min_confidence: float = 0.0) -> dict[str, Any]:
+    """The owner profile, open threads, and recent activity as one block."""
+    from obsidian_wiki import memory as mem
+
+    return {
+        "recap": mem.build_recap(
+            VAULT, max_words=max_words, min_confidence=min_confidence, project=project or None
+        )
+    }
+
+
+def memory_profile(action: str = "list", key: str = "", value: str = "",
+                   confidence: float = 0.6, source: str = "agent") -> dict[str, Any]:
+    """Read or update durable facts about the vault owner."""
+    from obsidian_wiki import memory as mem
+
+    if action == "list":
+        return {"facts": [fact.__dict__ for fact in mem.load_profile(VAULT)]}
+    if action == "set":
+        if not key or not value:
+            raise HTTPException(400, "key and value are required for action='set'")
+        return {"fact": mem.set_fact(
+            VAULT, key, value, confidence=confidence, source=source
+        ).__dict__}
+    if action == "forget":
+        return {"removed": mem.forget_fact(VAULT, key)}
+    raise HTTPException(400, f"action must be list, set, or forget; got {action!r}")
+
+
+def memory_todo(action: str = "list", text: str = "", todo_id: str = "",
+                origin: str = "", include_closed: bool = False) -> dict[str, Any]:
+    """Read or update the threads carried between sessions."""
+    from obsidian_wiki import memory as mem
+
+    if action == "list":
+        todos = mem.load_todos(VAULT)
+        if not include_closed:
+            todos = [todo for todo in todos if todo.status == "open"]
+        return {"todos": [dict(todo.__dict__, stale=todo.is_stale()) for todo in todos]}
+    if action == "add":
+        if not text:
+            raise HTTPException(400, "text is required for action='add'")
+        return {"todo": mem.add_todo(VAULT, text, origin=origin).__dict__}
+    if action in ("done", "drop"):
+        if not todo_id:
+            raise HTTPException(400, f"todo_id is required for action={action!r}")
+        status = "done" if action == "done" else "dropped"
+        return {"todo": mem.set_todo_status(VAULT, todo_id, status).__dict__}
+    raise HTTPException(400, f"action must be list, add, done, or drop; got {action!r}")
+
+
+def memory_sync(verb: str = "API_WRITE", takeaways: str = "", **fields: str) -> dict[str, Any]:
+    """Reconcile the index and hot cache after writes, under one lock."""
+    from obsidian_wiki import memory as mem
+
+    try:
+        with mem.memory_lock(VAULT):
+            line = mem.append_log(VAULT, verb, fields, lock=False)
+            index = mem.rebuild_index(VAULT, lock=False)
+            hot = mem.rebuild_hot(VAULT, lock=False, takeaways=takeaways or None)
+    except mem.MemoryError_ as exc:
+        if exc.code == "unmigrated":
+            raise HTTPException(409, str(exc))
+        raise HTTPException(400, str(exc))
+    return {
+        "log_line": line,
+        "index": {"total": index.total, "added": list(index.added)},
+        "hot": {"words": hot.words},
+    }
+
+
 mcp = MCPServer("obsidian-wiki")
 mcp.tool(name="memory_search", description="Search the wiki. Returns ranked pages with summaries.")(search)
 mcp.tool(name="memory_read", description="Read one wiki page as markdown, by vault-relative path.")(read_page)
 mcp.tool(name="memory_write", description="Write a wiki page. Use category '_raw' for a rough capture.")(write_page)
 mcp.tool(name="memory_context_pack", description="Compile a token-bounded context pack on a topic.")(context_pack)
+mcp.tool(name="memory_recap", description="Owner profile, open threads, and recent activity — call at session start.")(memory_recap)
+mcp.tool(name="memory_profile", description="Read or update durable facts about the vault owner (list|set|forget).")(memory_profile)
+mcp.tool(name="memory_todo", description="Read or update threads carried between sessions (list|add|done|drop).")(memory_todo)
+mcp.tool(name="memory_sync", description="Reconcile index.md and hot.md after writes, under one lock.")(memory_sync)
 
 
 # Must be built before `mcp.session_manager` exists. Mounted at /mcp below, so
@@ -363,6 +460,39 @@ def staging() -> dict[str, Any]:
 
 
 _CONSOLE = Path(__file__).with_name("console.html")
+
+
+@app.get("/v1/memory/recap", dependencies=[Depends(require_key)])
+def http_recap(project: str = "", max_words: int = 350, min_confidence: float = 0.0) -> dict[str, Any]:
+    return memory_recap(project=project, max_words=max_words, min_confidence=min_confidence)
+
+
+@app.get("/v1/memory/profile", dependencies=[Depends(require_key)])
+def http_profile_list() -> dict[str, Any]:
+    return memory_profile("list")
+
+
+@app.post("/v1/memory/profile", dependencies=[Depends(require_key)])
+def http_profile_set(body: ProfileWrite) -> dict[str, Any]:
+    return memory_profile(
+        body.action, key=body.key, value=body.value,
+        confidence=body.confidence, source=body.source,
+    )
+
+
+@app.get("/v1/memory/todos", dependencies=[Depends(require_key)])
+def http_todo_list(include_closed: bool = False) -> dict[str, Any]:
+    return memory_todo("list", include_closed=include_closed)
+
+
+@app.post("/v1/memory/todos", dependencies=[Depends(require_key)])
+def http_todo_write(body: TodoWrite) -> dict[str, Any]:
+    return memory_todo(body.action, text=body.text, todo_id=body.todo_id, origin=body.origin)
+
+
+@app.post("/v1/memory/sync", dependencies=[Depends(require_key)])
+def http_memory_sync(body: SyncRequest) -> dict[str, Any]:
+    return memory_sync(verb=body.verb, takeaways=body.takeaways, **(body.fields or {}))
 
 
 @app.get("/ui", response_class=HTMLResponse)

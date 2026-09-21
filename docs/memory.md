@@ -49,6 +49,28 @@ This is the distinction that matters most in daily use.
 
 The word cap is real. It defaults to 500, overridable with `OBSIDIAN_HOT_MAX_WORDS`, and counts content only — frontmatter and the generated-file note do not spend the budget. Over budget, sections drop in increasing order of value: activity lines first, then contradictions, then threads, and the takeaways are truncated last, because they are the only part written on purpose.
 
+## Adopting an existing vault
+
+If your vault predates this writer, its memory files are hand-curated and **nothing overwrites them until you say so.**
+
+`index.md` and `hot.md` are written only when they carry a `generated_by` marker. Without it the guard refuses, and `memory sync` writes just the log line — append-only, always safe — then reports what it skipped. A vault created by `setup` is born marked, so this only affects upgrades.
+
+```bash
+obsidian-wiki memory migrate            # preview — changes nothing
+obsidian-wiki memory migrate --apply    # back up to _archives/, then adopt
+```
+
+![The migration preview](images/memory-migrate.png)
+
+What migration guarantees:
+
+- **A timestamped backup first**, under `_archives/pre-memory-migration-<ts>/`. Everything the generator cannot reconstruct is recoverable from it.
+- **Your sections keep their position.** The generated catalog is appended below them, in their original order. A custom table, a Quick Reference code block, a bespoke preamble — all preserved verbatim.
+- **Narrative threads become todos.** A hand-written `## Active Threads` list is parsed into the todo index before the rebuild, so that prose survives as live entries rather than being replaced by "no open threads". Skipped entirely if you already have todos.
+- **Key Takeaways carry across**, as they do on every rebuild.
+
+`obsidian-wiki doctor` reports migration state, so an upgraded install surfaces it on its own.
+
 ## Owner profile and todo index
 
 Two tables under `_meta/`, both created empty by `setup`.
@@ -66,6 +88,15 @@ Three rules worth knowing:
 - **Only record what the user actually told you.** A durable fact about a person should never be inferred from a document that was ingested — that is the document's content, and it belongs on a page.
 - **Confidence is the writer's own calibration**, not a measurement. Stated outright is around 0.9; inferred from one session's behaviour is around 0.5.
 - **Staleness is reported, never enforced.** An open thread untouched for 30 days is flagged in `memory todo list` and in the recap. Nothing closes it on your behalf.
+
+### Who writes them
+
+`wiki-capture` is the loop that keeps these alive. It proposes profile facts and open threads from a conversation under the same KEEP/SKIP discipline it already uses for pages, so the profile fills in as you work rather than needing hand-entry.
+
+Two rules it enforces, both worth repeating:
+
+- **Only what the user actually told you**, directly or by clear demonstration. A fact inferred from an ingested document is that document's content and belongs on a page.
+- **Stable, not incidental.** "Uses Postgres" is a fact. "Ran a migration today" is an event, and belongs in the log.
 
 ## Session lifecycle
 
@@ -87,6 +118,7 @@ Tune or disable per session:
 | `WIKI_RECAP_MAX_WORDS` | `350` | Word budget for the injected block |
 | `WIKI_RECAP_MIN_CONFIDENCE` | `0.0` | Drop profile facts below this confidence |
 | `WIKI_RECAP_TIMEOUT` | `10` | Seconds before the recap is abandoned |
+| `WIKI_RECAP_PROJECT` | *(auto)* | Override the scoped project (default: git repo name) |
 | `WIKI_STOP_CAPTURE` | *(on)* | `false` skips the end-of-session capture nudge |
 
 `HIVEMIND_CAPTURE=false` is the older spelling of `WIKI_STOP_CAPTURE=false` and is still honoured.
@@ -105,6 +137,19 @@ The injected block is framed as reference data, not instructions. It describes t
 ```
 
 `memory status --json` gives the same picture as a document: index drift, log size, hot-cache budget, profile and todo counts.
+
+## For remote agents
+
+The Dockerized server exposes the same surface, so an agent that reaches the vault over HTTP or MCP gets memory rather than just search.
+
+| MCP tool | REST | Purpose |
+|---|---|---|
+| `memory_recap` | `GET /v1/memory/recap` | Call at session start; takes `project` |
+| `memory_profile` | `GET`/`POST /v1/memory/profile` | `list` / `set` / `forget` |
+| `memory_todo` | `GET`/`POST /v1/memory/todos` | `list` / `add` / `done` / `drop` |
+| `memory_sync` | `POST /v1/memory/sync` | Reconcile after writes, under one lock |
+
+`memory_sync` returns **409** on an unmigrated vault rather than clobbering it, matching the CLI's refusal. Page writes through the API now go through the shared writer too, so they produce the same parseable log line as every other operation.
 
 ## For skill authors
 
