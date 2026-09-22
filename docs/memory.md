@@ -20,9 +20,7 @@ Now one code path handles all five files, serialised by the same advisory lock t
 After any write operation:
 
 ```bash
-obsidian-wiki memory sync --verb INGEST \
-  --field source="papers/attention.pdf" \
-  --field pages_created=3
+obsidian-wiki memory sync INGEST source="papers/attention.pdf" pages_created=3
 ```
 
 That appends the log line, reconciles the index against the pages actually on disk, and regenerates the hot cache — **all under one lock**, so another writer cannot interleave between the three and leave a snapshot describing a vault state that never existed.
@@ -104,11 +102,11 @@ Two rules it enforces, both worth repeating:
 
 Two hooks bracket a session. One injects memory at the start, the other captures it at the end.
 
-Register both with one command; it is idempotent and never touches your other hooks:
+`obsidian-wiki setup` registers both. To check them, or to wire them up after `setup --no-hooks`:
 
 ```bash
-obsidian-wiki hooks install
 obsidian-wiki hooks status
+obsidian-wiki hooks install
 ```
 
 ![Session lifecycle](images/memory-session-lifecycle.png)
@@ -167,7 +165,7 @@ The Dockerized server exposes the same surface, so an agent that reaches the vau
 If your skill writes to the vault, end it with `memory sync`. If it only reads, the **only** write you may perform is the log line:
 
 ```bash
-obsidian-wiki memory log QUERY --field query="how do transformers work" --field result_pages=4
+obsidian-wiki memory log QUERY query="how do transformers work" result_pages=4
 ```
 
 Do not touch `index.md`, `hot.md`, `_insights.md`, or `.manifest.json` from a read-only skill.

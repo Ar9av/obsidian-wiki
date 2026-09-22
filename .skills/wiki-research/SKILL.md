@@ -266,9 +266,9 @@ Check `index.md` for existing pages on the same topics — merge into existing p
 One locked call updates the index, the log, and the hot cache:
 
 ```bash
-obsidian-wiki memory sync --verb WIKI_RESEARCH \
-  --field topic="<topic>" --field rounds=<N> --field sources_fetched=<N> \
-  --field pages_created=<M> --field backends_used="<name,...|none>" \
+obsidian-wiki memory sync WIKI_RESEARCH \
+  topic="<topic>" rounds=<N> sources_fetched=<N> \
+  pages_created=<M> backends_used="<name,...|none>" \
   --takeaways "<the research topic and its core finding, in one line>"
 ```
 

@@ -411,14 +411,11 @@ Also update the `projects` section of the manifest:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb CLAUDE_HISTORY_INGEST \
-  --field projects=<projects> \
-  --field conversations=<conversations> \
-  --field desktop_sessions=<desktop_sessions> \
-  --field audit_logs=<audit_logs> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync CLAUDE_HISTORY_INGEST \
+  projects=<projects> conversations=<conversations> \
+  desktop_sessions=<desktop_sessions> audit_logs=<audit_logs> \
+  pages_updated=<pages_updated> pages_created=<pages_created> \
+  mode=<mode> \
   --takeaways "Ingested 5 Claude conversations across 2 projects; surfaced patterns in API design and testing strategy."
 ```
 

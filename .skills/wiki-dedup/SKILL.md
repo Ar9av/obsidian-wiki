@@ -263,14 +263,14 @@ After all merges, grep the vault for any remaining `[[secondary-slug]]` referenc
 One locked call writes the log line and reconciles the index and hot cache:
 
 ```bash
-obsidian-wiki memory sync --verb DEDUP \
-  --field mode=<audit|merge|auto-merge> --field pages_scanned=<N> --field pairs_found=<M> \
-  --field merged=<X> --field kept_separate=<Y> --field needs_review=<Z> \
-  --field wikilinks_rewritten=<W> \
+obsidian-wiki memory sync DEDUP \
+  mode=<audit|merge|auto-merge> pages_scanned=<N> pairs_found=<M> \
+  merged=<X> kept_separate=<Y> needs_review=<Z> \
+  wikilinks_rewritten=<W> \
   --takeaways "Merged N duplicate pairs; canonical pages updated."
 ```
 
-In audit mode (nothing merged) use `obsidian-wiki memory log DEDUP --field ...` instead — a read-only run must not rewrite the index or hot cache.
+In audit mode (nothing merged) use `obsidian-wiki memory log DEDUP ...` instead — a read-only run must not rewrite the index or hot cache.
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
 

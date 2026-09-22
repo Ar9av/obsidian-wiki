@@ -205,13 +205,10 @@ Add/update a top-level summary block:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb OPENCLAW_HISTORY_INGEST \
-  --field memory=<memory> \
-  --field daily_notes=<daily_notes> \
-  --field sessions=<sessions> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync OPENCLAW_HISTORY_INGEST \
+  memory=<memory> daily_notes=<daily_notes> sessions=<sessions> \
+  pages_updated=<pages_updated> pages_created=<pages_created> \
+  mode=<mode> \
   --takeaways "Ingested OpenClaw MEMORY.md and 14 daily notes; surfaced automation patterns and multi-agent coordination knowledge."
 ```
 

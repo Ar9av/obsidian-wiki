@@ -35,7 +35,9 @@ Commands other than `setup`, `info`, and `doctor` warn you when the install has 
 
 ### Session hooks
 
-Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture. They only take effect once registered in `~/.claude/settings.json`.
+Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture.
+
+**`setup` registers both for you.** Pass `--no-hooks` to skip. The commands below are for changing your mind later, or for checking what is wired up.
 
 | Command | What it does |
 |---|---|
@@ -44,8 +46,8 @@ Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart
 | `hooks status` | Registered? Bundled? Executable? Can the hook reach the package? Exit 1 if not |
 
 ```bash
-obsidian-wiki hooks install
-obsidian-wiki hooks status
+obsidian-wiki hooks status     # what is registered, and can the hooks reach the package?
+obsidian-wiki hooks install    # if you ran setup --no-hooks and changed your mind
 ```
 
 `hooks status` is the answer to "why is nothing being injected?". Both hooks exit silently on every failure so they can never break a session, which also means a missing registration or an unreachable package is invisible from inside one. `doctor` runs the same check. Set `WIKI_RECAP_DEBUG=1` to have the recap hook explain each silent exit on stderr.
@@ -293,7 +295,7 @@ For what the surface *is* — the generated-vs-yours split, the session hooks, t
 |---|---|
 | `memory status` | Index drift, log size, hot-cache budget, profile and todo counts |
 | `memory sync` | Log, index, and hot cache as one locked update — the post-write call |
-| `memory log VERB` | Append one parseable operation line to `log.md` |
+| `memory log VERB key=value` | Append one parseable operation line to `log.md` |
 | `memory index` | Reconcile `index.md` against the pages actually on disk |
 | `memory hot` | Regenerate `hot.md` within its word cap |
 | `memory recap` | Print profile, open threads, and recent activity as one injectable block |
@@ -303,11 +305,10 @@ For what the surface *is* — the generated-vs-yours split, the session hooks, t
 
 ```bash
 # After an ingest: one lock held across all three writes.
-obsidian-wiki memory sync --verb INGEST \
-  --field source=papers/attention.pdf --field pages_created=3
+obsidian-wiki memory sync INGEST source=papers/attention.pdf pages_created=3
 
 # Individually, when that is all you need.
-obsidian-wiki memory log LINT --field issues_found=2 --field orphans=1
+obsidian-wiki memory log LINT issues_found=2 orphans=1
 obsidian-wiki memory index
 obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric."
 

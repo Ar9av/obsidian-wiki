@@ -142,3 +142,28 @@ class HooksDocsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ShortFormDocsTest(unittest.TestCase):
+    """The flag form is still supported, but nothing should *teach* it."""
+
+    def test_no_skill_teaches_the_verbose_flag_form(self) -> None:
+        offenders = [
+            path.parent.name for path in SKILLS.glob("*/SKILL.md")
+            if "--field " in path.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [], f"still using --field: {offenders}")
+
+    def test_no_doc_teaches_the_verbose_flag_form(self) -> None:
+        offenders = [
+            page.name for page in DOCS.glob("*.md")
+            if "--field " in page.read_text(encoding="utf-8")
+        ]
+        self.assertEqual(offenders, [])
+
+    def test_the_quickstart_does_not_need_a_separate_hook_step(self) -> None:
+        """`setup` registers them, so the README must not add a third line."""
+        for name in ("README.md", "README_TW.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            quickstart = text.split("```bash", 1)[1].split("```", 1)[0]
+            self.assertNotIn("hooks install", quickstart, f"{name} quickstart has an extra step")

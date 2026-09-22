@@ -220,10 +220,9 @@ Add entries for any new pages created.
 One locked call, not three hand edits:
 
 ```bash
-obsidian-wiki memory sync --verb WIKI_UPDATE \
-  --field project=<project-name> \
-  --field pages_created=X --field pages_updated=Y \
-  --field source_repo=github.com/owner/<project-name> \
+obsidian-wiki memory sync WIKI_UPDATE project=<project-name>
+  pages_created=X pages_updated=Y \
+  source_repo=github.com/owner/<project-name> \
   --takeaways "Synced obsidian-wiki — wiki-capture and wiki-research added; the new capabilities are autonomous web research and conversation capture."
 ```
 

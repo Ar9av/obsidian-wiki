@@ -712,3 +712,55 @@ def test_migrate_records_adoption(vault: Path) -> None:
     mem.migrate(vault)
     assert mem.is_adopted(vault)
     assert mem.memory_status(vault)["migrated"] is True
+
+
+# --------------------------------------------------------------------------
+# the short form — a verb and bare key=value pairs
+# --------------------------------------------------------------------------
+
+
+def test_sync_takes_a_positional_verb_and_fields(vault: Path) -> None:
+    """The flag form ran to seven lines in the ingest skills."""
+    result = _cli("sync", "INGEST", "source=papers/attention.pdf", "pages_created=3",
+                  "--vault", str(vault))
+    assert result.returncode == 0, result.stderr
+    entry = mem.read_log(vault, verbs=["INGEST"])[-1]
+    assert entry.fields == {"source": "papers/attention.pdf", "pages_created": "3"}
+
+
+def test_log_takes_a_positional_verb_and_fields(vault: Path) -> None:
+    assert _cli("log", "LINT", "issues_found=2", "orphans=1", "--vault", str(vault)).returncode == 0
+    assert mem.read_log(vault, verbs=["LINT"])[-1].fields == {"issues_found": "2", "orphans": "1"}
+
+
+def test_the_old_flag_form_still_works(vault: Path) -> None:
+    """Back-compat: --verb/--field are documented as the older spelling."""
+    assert _cli("log", "--verb", "DEDUP", "--field", "merged=2", "--vault", str(vault)).returncode == 0
+    assert mem.read_log(vault, verbs=["DEDUP"])[-1].fields == {"merged": "2"}
+
+
+def test_both_forms_can_be_mixed(vault: Path) -> None:
+    _cli("log", "QUERY", "query=how do transformers work", "--field", "result_pages=4",
+         "--vault", str(vault))
+    entry = mem.read_log(vault, verbs=["QUERY"])[-1]
+    assert entry.fields == {"query": "how do transformers work", "result_pages": "4"}
+
+
+def test_a_value_may_contain_an_equals_sign(vault: Path) -> None:
+    _cli("log", "INGEST", "source=https://x.test/a?b=c", "--vault", str(vault))
+    assert mem.read_log(vault, verbs=["INGEST"])[-1].fields["source"] == "https://x.test/a?b=c"
+
+
+def test_sync_without_a_verb_still_reconciles(vault: Path) -> None:
+    """wiki-stage-commit's case: the log line was already written by the CLI."""
+    result = _cli("sync", "--takeaways", "Committed 3 staged pages.", "--vault", str(vault))
+    assert result.returncode == 0
+    assert mem.read_log(vault) == []
+    assert "Committed 3 staged pages." in (vault / "hot.md").read_text(encoding="utf-8")
+
+
+def test_a_bare_word_after_the_verb_is_a_clear_error(vault: Path) -> None:
+    result = _cli("sync", "INGEST", "oops", "--vault", str(vault))
+    assert result.returncode == 1
+    assert "expected key=value" in result.stderr
+    assert "INGEST" in result.stderr  # says which verb it already has

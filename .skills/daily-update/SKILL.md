@@ -111,7 +111,7 @@ Apply any FAILs before logging.
 
 Append to `$OBSIDIAN_VAULT_PATH/log.md`:
 ```
-obsidian-wiki memory log DAILY-UPDATE --field fresh=<N> --field stale=<N> --field missing=<N> --field index_added=<N> --field hot_refreshed=<true|false> --field lint=<ran|skipped>
+obsidian-wiki memory log DAILY-UPDATE fresh=<N> stale=<N> missing=<N> index_added=<N> hot_refreshed=<true|false> lint=<ran|skipped>
 ```
 
 **Step 7: Report to user**

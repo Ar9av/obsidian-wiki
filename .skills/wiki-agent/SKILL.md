@@ -258,10 +258,10 @@ Update `.manifest.json` for each session file processed:
 One locked call updates the log, the index, and the hot cache:
 
 ```bash
-obsidian-wiki memory sync --verb WIKI-AGENT \
-  --field agent=<agent> --field query="<query>" \
-  --field sessions_searched=<N> --field sessions_ingested=<M> \
-  --field pages_created=<X> --field pages_updated=<Y> \
+obsidian-wiki memory sync WIKI-AGENT \
+  agent=<agent> query="<query>" \
+  sessions_searched=<N> sessions_ingested=<M> \
+  pages_created=<X> pages_updated=<Y> \
   --takeaways "<one line: what was pulled in and what it changes>"
 ```
 

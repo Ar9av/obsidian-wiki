@@ -235,9 +235,9 @@ If `.manifest.json` doesn't exist, create it with the standard structure:
 One locked call. The index is reconciled from the pages now on disk, so every created or merged page lands under its category with the documented `( #tag)` spacing:
 
 ```bash
-obsidian-wiki memory sync --verb IMPORT \
-  --field source="<bundle path>" \
-  --field pages_created=<N> --field pages_skipped=<K> --field pages_merged=<M> \
+obsidian-wiki memory sync IMPORT \
+  source="<bundle path>" \
+  pages_created=<N> pages_skipped=<K> pages_merged=<M> \
   --takeaways "Imported <bundle>: <what it adds to the picture>"
 ```
 

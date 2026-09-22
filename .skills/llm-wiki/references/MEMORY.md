@@ -16,10 +16,7 @@ one of the two updates, and nothing enforced the documented ~500-word cap on
 After any write operation, close it out with a single command:
 
 ```bash
-obsidian-wiki memory sync --verb INGEST \
-  --field source="papers/attention.pdf" \
-  --field pages_created=3 \
-  --field pages_updated=12
+obsidian-wiki memory sync INGEST source="papers/attention.pdf" pages_created=3 pages_updated=12
 ```
 
 That appends the log line, reconciles `index.md` against the pages actually on
@@ -44,7 +41,7 @@ that file is generated, and hand edits to it are overwritten on the next
 rebuild. Pass your prose in:
 
 ```bash
-obsidian-wiki memory sync --verb INGEST --field source="…" \
+obsidian-wiki memory sync INGEST source="…" \
   --takeaways "Fowler's decomposition argument now anchors the microservices cluster."
 ```
 
@@ -60,7 +57,7 @@ contexts" is useful. "Created 3 files" is not.
 
 | Command | Use it when |
 |---|---|
-| `memory log VERB --field k=v` | You only need the log line (read-only skills) |
+| `memory log VERB k=v` | You only need the log line (read-only skills) |
 | `memory index` | You moved, renamed, or deleted pages outside a normal write |
 | `memory hot --takeaways "…"` | You want to update the narrative without an ingest |
 | `memory status` | Checking whether the surface is current before or after work |
@@ -105,7 +102,7 @@ If your skill only reads the vault, the *only* write you may perform is the log
 line:
 
 ```bash
-obsidian-wiki memory log QUERY --field query="how do transformers work" --field result_pages=4
+obsidian-wiki memory log QUERY query="how do transformers work" result_pages=4
 ```
 
 Do not touch `index.md`, `hot.md`, `_insights.md`, or `.manifest.json`.

@@ -196,11 +196,9 @@ Add/update a top-level project/session summary block:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb CODEX_HISTORY_INGEST \
-  --field sessions=<sessions> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync CODEX_HISTORY_INGEST \
+  sessions=<sessions> pages_updated=<pages_updated> \
+  pages_created=<pages_created> mode=<mode> \
   --takeaways "Ingested 12 Codex sessions; surfaced recurring patterns in CLI tooling and shell scripting."
 ```
 

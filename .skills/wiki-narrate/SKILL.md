@@ -90,9 +90,9 @@ After a narration attempt that reaches retrieval, append one `WIKI_NARRATE` even
 
 ```bash
 obsidian-wiki memory log WIKI_NARRATE \
-  --field topic="<topic>" --field voice=<voice> --field result_pages=<N> \
-  --field mode=<normal|filtered> --field saved=<true|false> \
-  --field outcome=<success|no_match|write_failed>
+  topic="<topic>" voice=<voice> result_pages=<N> \
+  mode=<normal|filtered> saved=<true|false> \
+  outcome=<success|no_match|write_failed>
 ```
 
 This is the **only** write a narration without `--save` may perform. Do not touch `index.md` or `hot.md` by hand.

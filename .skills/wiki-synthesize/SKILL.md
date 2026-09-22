@@ -153,8 +153,8 @@ Skipped (consider next time):
 One locked call updates the index, the log, and the hot cache:
 
 ```bash
-obsidian-wiki memory sync --verb WIKI_SYNTHESIZE \
-  --field pages_scanned=<N> --field synthesis_created=<M> --field candidates_skipped=<K> \
+obsidian-wiki memory sync WIKI_SYNTHESIZE \
+  pages_scanned=<N> synthesis_created=<M> candidates_skipped=<K> \
   --takeaways "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …"
 ```
 

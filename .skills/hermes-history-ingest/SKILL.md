@@ -187,12 +187,9 @@ Add/update a top-level summary block:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb HERMES_HISTORY_INGEST \
-  --field memories=<memories> \
-  --field sessions=<sessions> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync HERMES_HISTORY_INGEST \
+  memories=<memories> sessions=<sessions> pages_updated=<pages_updated> \
+  pages_created=<pages_created> mode=<mode> \
   --takeaways "Ingested 42 Hermes memories and 7 sessions; dominant themes: reasoning strategies, tool use patterns."
 ```
 

@@ -116,7 +116,7 @@ Every wiki has these files at its root:
 > **Write them with `obsidian-wiki memory`, never by hand.** `index.md`,
 > `log.md`, `hot.md`, and the `_meta/` tables share one advisory lock and are
 > written atomically; hand edits in a parallel run drop whichever write lands
-> second. `obsidian-wiki memory sync --verb <VERB> --field k=v` does all three
+> second. `obsidian-wiki memory sync <VERB> key=value` does all three
 > in one call. The full procedure — verbs, the `Key Takeaways` slot that stays
 > yours, the owner profile and todo index — is in
 > [`references/MEMORY.md`](references/MEMORY.md).

@@ -38,10 +38,9 @@
 ```bash
 pip install obsidian-wiki
 obsidian-wiki setup --vault ~/brain
-obsidian-wiki hooks install      # session 開始時注入記憶，結束時擷取發現
 ```
 
-第三行就是它從「筆記資料夾」變成「記憶系統」的關鍵：每個新 session 一開始就知道你是誰、有哪些事還沒做完。略過這行，其他功能仍然照常運作。
+這同時也會註冊兩個 session hook：每個新 session 一開始就知道你是誰、有哪些事還沒做完，結束時則會把值得留下的內容擷取起來。加上 `--no-hooks` 可以略過。
 
 使用 `uv` 或 `pipx`？`uv tool install obsidian-wiki` 與 `pipx install obsidian-wiki` 的效果相同。（不要用 `uvx`，原因見[安裝說明](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md#install-via-pip-uv-or-pipx-recommended)。）
 

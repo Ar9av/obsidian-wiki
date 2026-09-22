@@ -323,13 +323,10 @@ Also update the `projects` section of the manifest:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb COPILOT_HISTORY_INGEST \
-  --field projects=<projects> \
-  --field sessions=<sessions> \
-  --field checkpoints=<checkpoints> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync COPILOT_HISTORY_INGEST \
+  projects=<projects> sessions=<sessions> checkpoints=<checkpoints> \
+  pages_updated=<pages_updated> pages_created=<pages_created> \
+  mode=<mode> \
   --takeaways "Ingested 5 Copilot sessions across 2 projects; surfaced patterns in API design and testing strategy."
 ```
 

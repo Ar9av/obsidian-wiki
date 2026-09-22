@@ -327,8 +327,8 @@ cheap, locked, and are the whole point of capturing.
 One locked call updates all three:
 
 ```bash
-obsidian-wiki memory sync --verb CAPTURE \
-  --field type=<type> --field page="<path>" --field title="<title>" \
+obsidian-wiki memory sync CAPTURE \
+  type=<type> page="<path>" title="<title>" \
   --takeaways "<what this capture changes about the picture, if anything>"
 ```
 

@@ -162,3 +162,32 @@ def test_memory_and_hooks_commands_do_not_print_the_stale_install_nag(home: Path
                               capture_output=True, text=True, env=env)
         assert "setup has never been run" not in proc.stderr, args
         assert "Run: obsidian-wiki setup" not in proc.stderr, args
+
+
+def test_setup_registers_the_hooks_by_default(tmp_path: Path) -> None:
+    """Registration used to be a separate step people did not know about."""
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    proc = subprocess.run(
+        [sys.executable, "-m", "obsidian_wiki.cli", "setup",
+         "--vault", str(tmp_path / "brain"), "--project-only"],
+        capture_output=True, text=True, env=env, timeout=300,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "Session hooks:" in proc.stdout
+    assert all(entry.registered for entry in hk.status(home))
+
+
+def test_setup_honours_no_hooks(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {"HOME": str(home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    proc = subprocess.run(
+        [sys.executable, "-m", "obsidian_wiki.cli", "setup",
+         "--vault", str(tmp_path / "brain"), "--project-only", "--no-hooks"],
+        capture_output=True, text=True, env=env, timeout=300,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "skipped (--no-hooks)" in proc.stdout
+    assert not any(entry.registered for entry in hk.status(home))

@@ -1133,6 +1133,25 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if vault_path and Path(vault_path).expanduser().is_dir():
         sync_configured = _maybe_configure_sync(Path(vault_path).expanduser(), args.remote)
 
+    # Register the session hooks here rather than as a separate step someone
+    # has to know about. Without them the vault, the CLI and the MCP tools all
+    # work, but no memory is injected at session start — which is the whole
+    # point. Opt out with --no-hooks.
+    hooks_line = "skipped (--no-hooks)"
+    if not args.no_hooks:
+        try:
+            from obsidian_wiki import hooks as _hooks
+
+            outcome = _hooks.install()
+            registered = len(outcome["added"]) + len(outcome["already"])
+            hooks_line = f"{registered} registered"
+            if outcome["missing"]:
+                hooks_line += f", {len(outcome['missing'])} missing — reinstall obsidian-wiki"
+            elif not _hooks.reachability()["reachable"]:
+                hooks_line += " (not reachable — see `obsidian-wiki hooks status`)"
+        except Exception as exc:  # never fail setup over an optional extra
+            hooks_line = f"could not register ({exc}) — run `obsidian-wiki hooks install`"
+
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
@@ -1140,6 +1159,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")
+    print(f" Session hooks:    {hooks_line}")
     if sync_configured:
         print(" GitHub sync:      obsidian-wiki sync")
     print("\n Next steps:")
@@ -2215,6 +2235,29 @@ def _memory_fields(pairs: list) -> dict:
     return fields
 
 
+def _verb_and_fields(rest: list, verb_flag: str | None, field_flags: list) -> tuple:
+    """Read `VERB key=value ...` positionally, falling back to the flag form.
+
+    `--verb X --field a=1 --field b=2` is precise and unreadable; the six-field
+    calls the ingest skills make ran to seven lines. A bare verb and bare
+    key=value pairs say the same thing on one line. Both forms still work.
+    """
+    verb, fields = verb_flag, {}
+    for token in rest or []:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            fields[key.strip()] = value
+        elif verb is None:
+            verb = token
+        else:
+            raise ValueError(
+                f"unexpected argument {token!r} — expected key=value "
+                f"(the verb {verb!r} is already set)"
+            )
+    fields.update(_memory_fields(field_flags))
+    return verb, fields
+
+
 def _memory_takeaways(raw: str | None) -> str | None:
     """`-` reads the takeaway prose from stdin, so a skill can pipe it in."""
     if raw is None:
@@ -2300,10 +2343,11 @@ def cmd_memory(args: argparse.Namespace) -> int:
             return emit(result, lines)
 
         if action == "log":
-            if not rest:
-                print("error: memory log needs a VERB, e.g. `memory log INGEST --field source=x`", file=sys.stderr)
+            verb, fields = _verb_and_fields(rest, args.verb, args.field)
+            if not verb:
+                print("error: memory log needs a VERB, e.g. `memory log INGEST source=x`", file=sys.stderr)
                 return 1
-            line = mem.append_log(vault, rest[0], _memory_fields(args.field))
+            line = mem.append_log(vault, verb, fields)
             return emit({"line": line}, [line])
 
         if action == "index":
@@ -2364,13 +2408,11 @@ def cmd_memory(args: argparse.Namespace) -> int:
         if action == "sync":
             # The post-write call: one lock held across log, index, and hot, so
             # another writer cannot interleave between the three.
+            verb, fields = _verb_and_fields(rest, args.verb, args.field)
             index = hot = None
             skipped = ""
             with mem.memory_lock(vault):
-                line = (
-                    mem.append_log(vault, args.verb, _memory_fields(args.field), lock=False)
-                    if args.verb else ""
-                )
+                line = mem.append_log(vault, verb, fields, lock=False) if verb else ""
                 try:
                     index = mem.rebuild_index(vault, link_format=link_format, lock=False)
                     hot = mem.rebuild_hot(
@@ -3019,37 +3061,67 @@ def build_parser() -> argparse.ArgumentParser:
     mm = sub.add_parser(
         "memory",
         help="maintain the memory surface: log, index, hot cache, owner profile, todos",
+        usage="obsidian-wiki memory <action> [ARGS ...] [options]",
+        description="Maintain the vault's memory: index.md, log.md, hot.md, and the _meta/ tables.",
+        epilog="""examples:
+  memory status                                  is the surface current?
+  memory sync INGEST source=x.pdf pages=3        log + index + hot, one lock
+  memory sync                                    reconcile after writing pages
+  memory recap --project myapp                   what a new session should know
+  memory profile set stack "Python, FastAPI"     a durable fact about the owner
+  memory todo add "Ship the parser"              a thread for the next session
+  memory todo done t1                            close it
+  memory migrate                                 adopt a vault with curated files
+  memory index --check                           CI gate; exit 2 on drift
+
+`sync` and `log` take a VERB then bare key=value pairs. Values with spaces
+need quoting: query="how do transformers work".""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     mm.add_argument(
         "memory_action",
         choices=["status", "log", "index", "hot", "recap", "sync", "migrate", "profile", "todo"],
         help="what to do",
     )
-    mm.add_argument("rest", nargs="*", help="action arguments, e.g. `profile set KEY VALUE`")
-    mm.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
     mm.add_argument(
-        "--field",
-        action="append",
-        metavar="KEY=VALUE",
-        help="log field; repeatable (memory log / memory sync)",
+        "rest",
+        nargs="*",
+        metavar="ARGS",
+        help="sync/log: VERB then key=value pairs. profile: list|set KEY VALUE|forget KEY. "
+             "todo: list|add TEXT|done ID|drop ID|prune",
     )
-    mm.add_argument("--verb", help="log verb to append as part of `memory sync`")
-    mm.add_argument(
+    mm.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    mm.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    mm.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
+    mm_write = mm.add_argument_group("sync / hot")
+    mm_write.add_argument(
         "--takeaways",
         help="replace the Key Takeaways section; `-` reads it from stdin",
     )
-    mm.add_argument("--max-words", type=int, help="word cap for hot/recap (default: OBSIDIAN_HOT_MAX_WORDS or 500)")
-    mm.add_argument("--min-confidence", type=float, default=0.0, help="drop profile facts below this in `recap`")
-    mm.add_argument("--confidence", type=float, default=0.6, help="confidence for `profile set` (default: 0.6)")
-    mm.add_argument("--source", default="conversation", help="source for `profile set`")
-    mm.add_argument("--origin", help="originating page for `todo add`")
-    mm.add_argument("--project", help="scope `recap` to one project's threads and activity")
-    mm.add_argument("--apply", action="store_true", help="perform the migration (default is a preview)")
-    mm.add_argument("--stale-days", type=int, default=30, help="open-todo staleness threshold (default: 30)")
-    mm.add_argument("--all", action="store_true", help="include closed items in `todo list`")
-    mm.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")
-    mm.add_argument("--json", action="store_true", help="emit machine-readable JSON")
-    mm.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    mm_write.add_argument("--max-words", type=int, help="word cap for hot/recap (default: OBSIDIAN_HOT_MAX_WORDS or 500)")
+    mm_write.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")
+
+    mm_recap = mm.add_argument_group("recap")
+    mm_recap.add_argument("--project", help="scope to one project's threads and activity")
+    mm_recap.add_argument("--min-confidence", type=float, default=0.0, help="drop profile facts below this")
+
+    mm_profile = mm.add_argument_group("profile set")
+    mm_profile.add_argument("--confidence", type=float, default=0.6, help="how sure you are, 0..1 (default: 0.6)")
+    mm_profile.add_argument("--source", default="conversation", help="where the fact came from")
+
+    mm_todo = mm.add_argument_group("todo")
+    mm_todo.add_argument("--origin", help="originating page for `todo add`")
+    mm_todo.add_argument("--stale-days", type=int, default=30, help="staleness threshold (default: 30)")
+    mm_todo.add_argument("--all", action="store_true", help="include closed items in `todo list`")
+
+    mm_other = mm.add_argument_group("migrate / compatibility")
+    mm_other.add_argument("--apply", action="store_true", help="perform the migration (default is a preview)")
+    mm_other.add_argument("--verb", help="older form of the positional VERB")
+    mm_other.add_argument(
+        "--field", action="append", metavar="KEY=VALUE",
+        help="older form of a positional key=value; repeatable",
+    )
     mm.set_defaults(func=cmd_memory)
 
     cp = sub.add_parser(
@@ -3103,6 +3175,11 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
         "--copy",
         action="store_true",
         help="copy skill files instead of symlinking to the installed package",
+    )
+    sp.add_argument(
+        "--no-hooks",
+        action="store_true",
+        help="skip registering the SessionStart/Stop hooks in ~/.claude/settings.json",
     )
     sp.add_argument(
         "--remote",

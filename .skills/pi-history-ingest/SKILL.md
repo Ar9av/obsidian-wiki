@@ -260,11 +260,9 @@ Add/update a top-level summary block:
 Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
-obsidian-wiki memory sync --verb PI_HISTORY_INGEST \
-  --field sessions=<sessions> \
-  --field pages_updated=<pages_updated> \
-  --field pages_created=<pages_created> \
-  --field mode=<mode> \
+obsidian-wiki memory sync PI_HISTORY_INGEST \
+  sessions=<sessions> pages_updated=<pages_updated> \
+  pages_created=<pages_created> mode=<mode> \
   --takeaways "Ingested 12 Pi sessions across 3 projects; surfaced patterns in CLI tooling and API design."
 ```
 

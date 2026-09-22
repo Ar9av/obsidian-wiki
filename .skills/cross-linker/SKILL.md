@@ -261,10 +261,10 @@ To promote: move the page to `projects/<project-name>/references/` and update al
 One locked call updates the log and the hot cache (the index is unaffected — no pages were created):
 
 ```bash
-obsidian-wiki memory sync --verb CROSS_LINK \
-  --field pages_scanned=<N> --field links_added=<M> --field typed_relations_written=<T> \
-  --field pages_modified=<P> --field orphans_remaining=<Q> \
-  --field misc_affinity_updated=<R> --field promotion_candidates=<S> \
+obsidian-wiki memory sync CROSS_LINK \
+  pages_scanned=<N> links_added=<M> typed_relations_written=<T> \
+  pages_modified=<P> orphans_remaining=<Q> \
+  misc_affinity_updated=<R> promotion_candidates=<S> \
   --takeaways "Cross-linked 23 mentions across 12 pages; 2 orphans remain."
 ```
 
