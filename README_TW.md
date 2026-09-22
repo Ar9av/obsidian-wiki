@@ -101,6 +101,22 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
 
+## 用 Python 直接使用
+
+```python
+from obsidian_wiki import Memory
+
+memory = Memory("~/brain")
+memory.remember("stack", "Python, FastAPI", confidence=0.9)
+memory.add("選 Postgres 而不是 MySQL，是為了 partial index。")
+memory.search("postgres")
+memory.recap()                       # 在 session 開始時注入
+```
+
+不需要 API key、不需要 embedding 模型、不需要向量資料庫、不需要連網——vault 就是磁碟上的 markdown，所以 agent 記住的每件事你都能讀、能 grep、能 diff。`user_id` 會隔離「關於某個人」的記憶，知識本身則仍然共享。
+
+更多 → **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)**（英文）
+
 ## 它會跨 session 記住
 
 一個 session 開始時，vault 的記憶就已經在 context 裡了——你是誰、有哪些未完成的線索、最近改了什麼——並在結束時，趁 context 關閉前把值得留下的內容擷取起來。
@@ -172,6 +188,7 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 | **[CLI Reference](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/cli.md)** | 每一個 `obsidian-wiki` 子命令 |
 | **[Configuration](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/configuration.md)** | 設定變數、QMD 語意搜尋、`_raw/` 暫存區、GitHub 同步 |
 | **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)** | 四個匯入階段、vault 結構、我們在 Karpathy 模式上加了什麼 |
+| **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)** | `from obsidian_wiki import Memory`——把 vault 當成 agent 記憶使用 |
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | index、log、hot cache、擁有者檔案與待辦索引 |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | 建立在 agent session 歷史之上的主題圖譜 |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | 將網頁擷取進 vault，並用 vault 內容填寫網頁表單 |

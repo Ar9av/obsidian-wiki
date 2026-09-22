@@ -147,6 +147,18 @@ The injected block is framed as reference data, not instructions. It describes t
 
 `memory status --json` gives the same picture as a document: index drift, log size, hot-cache budget, profile and todo counts.
 
+## From Python
+
+```python
+from obsidian_wiki import Memory
+
+memory = Memory("~/brain", user_id="alice")
+memory.add("Postgres was chosen for partial indexes.")
+memory.recap()
+```
+
+`user_id` namespaces the profile and todo list so one vault can serve several people; pages stay shared. Full reference, and an honest comparison with the vector-store memory layers, in [Python API](python-api.md).
+
 ## For remote agents
 
 The Dockerized server exposes the same surface, so an agent that reaches the vault over HTTP or MCP gets memory rather than just search.

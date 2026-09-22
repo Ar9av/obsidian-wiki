@@ -40,6 +40,11 @@ from obsidian_wiki.cache import advisory_lock
 MEMORY_LOCK_NAME = ".memory.lock"
 PROFILE_REL = "_meta/profile.md"
 TODOS_REL = "_meta/todos.md"
+#: A scope name namespaces the *person-shaped* memory — the profile and the
+#: todo list — so one deployment can serve several users or agents. Knowledge
+#: pages stay shared: a vault is a shared brain, and only what it remembers
+#: *about someone* is per-someone.
+_SCOPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 #: Directories that hold staging, archives, or tool state rather than pages.
 SKIP_DIRS = frozenset({
@@ -205,6 +210,47 @@ def mark_adopted(vault: Path) -> None:
     index.md from ``_archives/`` — and ``memory migrate`` will ask again.
     """
     atomic_write(Path(vault) / ADOPTED_REL, f"adopted: {utc_now()}\nby: {GENERATED_MARKER}\n")
+
+
+def check_scope(scope: str) -> str:
+    """Validate a scope name. It becomes a filename, so it is never trusted.
+
+    In a server deployment the scope arrives as a ``user_id`` from a request,
+    which makes it exactly the sort of value that must not contain ``..`` or a
+    path separator.
+    """
+    scope = (scope or "").strip()
+    if not scope:
+        return ""
+    if not _SCOPE_RE.match(scope):
+        raise MemoryError_(
+            "bad_scope",
+            f"scope must be 1-64 chars of letters, digits, '.', '_' or '-': {scope!r}",
+        )
+    return scope
+
+
+def profile_path(vault: Path, scope: str = "") -> Path:
+    scope = check_scope(scope)
+    return Path(vault) / (f"_meta/profile.{scope}.md" if scope else PROFILE_REL)
+
+
+def todos_path(vault: Path, scope: str = "") -> Path:
+    scope = check_scope(scope)
+    return Path(vault) / (f"_meta/todos.{scope}.md" if scope else TODOS_REL)
+
+
+def list_scopes(vault: Path) -> list:
+    """Scope names that have a profile or a todo list in this vault."""
+    meta = Path(vault) / "_meta"
+    if not meta.is_dir():
+        return []
+    names = set()
+    for path in meta.glob("*.md"):
+        for prefix in ("profile.", "todos."):
+            if path.name.startswith(prefix) and path.name != f"{prefix}md":
+                names.add(path.name[len(prefix):-3])
+    return sorted(names)
 
 
 def is_generated(path: Path) -> bool:
@@ -627,8 +673,8 @@ table round-trips. Confidence is the writer's own calibration, not a measurement
 """
 
 
-def load_profile(vault: Path) -> list:
-    path = Path(vault) / PROFILE_REL
+def load_profile(vault: Path, scope: str = "") -> list:
+    path = profile_path(vault, scope)
     if not path.is_file():
         return []
     facts = []
@@ -660,6 +706,7 @@ def set_fact(
     *,
     confidence: float = 0.6,
     source: str = "conversation",
+    scope: str = "",
     lock: bool = True,
 ) -> Fact:
     """Add or replace one durable fact about the owner."""
@@ -672,9 +719,9 @@ def set_fact(
     fact = Fact(key, value.strip(), confidence, source.strip(), today())
 
     def _write() -> None:
-        facts = [f for f in load_profile(vault) if f.key.casefold() != key.casefold()]
+        facts = [f for f in load_profile(vault, scope) if f.key.casefold() != key.casefold()]
         facts.append(fact)
-        atomic_write(vault / PROFILE_REL, render_profile(facts))
+        atomic_write(profile_path(vault, scope), render_profile(facts))
 
     if lock:
         with memory_lock(vault):
@@ -684,15 +731,15 @@ def set_fact(
     return fact
 
 
-def forget_fact(vault: Path, key: str, *, lock: bool = True) -> bool:
+def forget_fact(vault: Path, key: str, *, scope: str = "", lock: bool = True) -> bool:
     vault = _require_vault(vault)
 
     def _write() -> bool:
-        facts = load_profile(vault)
+        facts = load_profile(vault, scope)
         kept = [f for f in facts if f.key.casefold() != key.strip().casefold()]
         if len(kept) == len(facts):
             return False
-        atomic_write(vault / PROFILE_REL, render_profile(kept))
+        atomic_write(profile_path(vault, scope), render_profile(kept))
         return True
 
     if lock:
@@ -748,8 +795,8 @@ safe to edit by hand — the table round-trips. An open item untouched for
 """
 
 
-def load_todos(vault: Path) -> list:
-    path = Path(vault) / TODOS_REL
+def load_todos(vault: Path, scope: str = "") -> list:
+    path = todos_path(vault, scope)
     if not path.is_file():
         return []
     todos = []
@@ -783,7 +830,7 @@ def _next_todo_id(todos: Sequence) -> str:
     return f"t{max((_todo_number(t.id) for t in todos), default=0) + 1}"
 
 
-def add_todo(vault: Path, text: str, *, origin: str = "", lock: bool = True) -> Todo:
+def add_todo(vault: Path, text: str, *, origin: str = "", scope: str = "", lock: bool = True) -> Todo:
     vault = _require_vault(vault)
     text = text.strip()
     if not text:
@@ -791,7 +838,7 @@ def add_todo(vault: Path, text: str, *, origin: str = "", lock: bool = True) -> 
     holder: list = []
 
     def _write() -> None:
-        todos = load_todos(vault)
+        todos = load_todos(vault, scope)
         existing = next((t for t in todos if t.text.casefold() == text.casefold() and t.status == "open"), None)
         if existing is not None:  # idempotent: re-adding an open thread just touches it
             todo = replace(existing, touched=today())
@@ -799,7 +846,7 @@ def add_todo(vault: Path, text: str, *, origin: str = "", lock: bool = True) -> 
         else:
             todo = Todo(_next_todo_id(todos), text, "open", origin.strip(), today(), today())
             todos.append(todo)
-        atomic_write(vault / TODOS_REL, render_todos(todos))
+        atomic_write(todos_path(vault, scope), render_todos(todos))
         holder.append(todo)
 
     if lock:
@@ -810,20 +857,20 @@ def add_todo(vault: Path, text: str, *, origin: str = "", lock: bool = True) -> 
     return holder[0]
 
 
-def set_todo_status(vault: Path, todo_id: str, status: str, *, lock: bool = True) -> Todo:
+def set_todo_status(vault: Path, todo_id: str, status: str, *, scope: str = "", lock: bool = True) -> Todo:
     vault = _require_vault(vault)
     if status not in TODO_STATUSES:
         raise MemoryError_("bad_status", f"status must be one of {', '.join(TODO_STATUSES)}")
     holder: list = []
 
     def _write() -> None:
-        todos = load_todos(vault)
+        todos = load_todos(vault, scope)
         match = next((t for t in todos if t.id.casefold() == todo_id.strip().casefold()), None)
         if match is None:
             raise MemoryError_("no_such_todo", f"no todo with id {todo_id!r}")
         updated = replace(match, status=status, touched=today())
         atomic_write(
-            vault / TODOS_REL,
+            todos_path(vault, scope),
             render_todos([updated if t.id == match.id else t for t in todos]),
         )
         holder.append(updated)
@@ -836,17 +883,17 @@ def set_todo_status(vault: Path, todo_id: str, status: str, *, lock: bool = True
     return holder[0]
 
 
-def prune_todos(vault: Path, *, lock: bool = True) -> int:
+def prune_todos(vault: Path, *, scope: str = "", lock: bool = True) -> int:
     """Drop closed items from the table. Returns how many were removed."""
     vault = _require_vault(vault)
     holder: list = []
 
     def _write() -> None:
-        todos = load_todos(vault)
+        todos = load_todos(vault, scope)
         kept = [t for t in todos if t.status == "open"]
         holder.append(len(todos) - len(kept))
         if len(kept) != len(todos):
-            atomic_write(vault / TODOS_REL, render_todos(kept))
+            atomic_write(todos_path(vault, scope), render_todos(kept))
 
     if lock:
         with memory_lock(vault):
@@ -1068,6 +1115,7 @@ def build_recap(
     max_words: int = 400,
     min_confidence: float = 0.0,
     project: Optional[str] = None,
+    scope: str = "",
 ) -> str:
     """Profile, open threads, and the newest activity as one injectable block.
 
@@ -1076,8 +1124,8 @@ def build_recap(
     separate file reads the model has to remember to make.
     """
     vault = _require_vault(vault)
-    facts = [f for f in load_profile(vault) if f.confidence >= min_confidence]
-    todos = [t for t in load_todos(vault) if t.status == "open"]
+    facts = [f for f in load_profile(vault, scope) if f.confidence >= min_confidence]
+    todos = [t for t in load_todos(vault, scope) if t.status == "open"]
     entries = read_log(vault, limit=5)
 
     # Scoping keeps a session about project A from being handed project B's

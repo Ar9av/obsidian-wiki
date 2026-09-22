@@ -54,6 +54,10 @@ Eight tools. Four for knowledge — `memory_search`, `memory_read`, `memory_writ
 
 `memory_recap` is the one to call at session start: it returns the owner profile, open threads, and recent activity as a single block, optionally scoped to a `project`.
 
+`memory_recap`, `memory_profile` and `memory_todo` all take a **`user_id`**, which namespaces that person's profile and todo list so one deployment can serve several people. Pages stay shared. A `user_id` becomes a filename, so it is validated as untrusted input — 1–64 characters of letters, digits, `.`, `_` or `-` — and anything else is a **400** rather than a filesystem touch.
+
+For in-process use, `from obsidian_wiki import Memory` skips the server entirely — see [Python API](python-api.md).
+
 ## REST
 
 Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
@@ -65,11 +69,11 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
-| `GET` | `/v1/memory/recap?project=&max_words=` | Owner profile, open threads, recent activity |
-| `GET` | `/v1/memory/profile` | Durable facts about the vault owner |
-| `POST` | `/v1/memory/profile` | `{action: set\|forget, key, value, confidence, source}` |
-| `GET` | `/v1/memory/todos?include_closed=` | Threads carried between sessions |
-| `POST` | `/v1/memory/todos` | `{action: add\|done\|drop, text, todo_id, origin}` |
+| `GET` | `/v1/memory/recap?project=&max_words=&user_id=` | Owner profile, open threads, recent activity |
+| `GET` | `/v1/memory/profile?user_id=` | Durable facts about a person |
+| `POST` | `/v1/memory/profile` | `{action: set\|forget, key, value, confidence, source, user_id}` |
+| `GET` | `/v1/memory/todos?include_closed=&user_id=` | Threads carried between sessions |
+| `POST` | `/v1/memory/todos` | `{action: add\|done\|drop, text, todo_id, origin, user_id}` |
 | `POST` | `/v1/memory/sync` | `{verb, takeaways, fields}` — reconcile index and hot cache |
 
 ```bash
@@ -107,7 +111,7 @@ Or point the vault at a git remote and use `obsidian-wiki sync` — see
 
 ## What this is not
 
-Single-tenant: one container serves one vault behind one key. No per-user isolation, no quotas, no
+Single-tenant: one container serves one vault behind one key. `user_id` separates *memory about people* within that vault, which is enough for a team sharing one brain; it is not per-user isolation and is not an authorization boundary — anyone with the key can read any scope. No per-user isolation, no quotas, no
 rate limiting, no billing. To serve several people, run a container per vault and put a reverse proxy
 in front. Terminate TLS at that proxy — the container speaks plain HTTP, and the API key is only as
 private as the connection carrying it.

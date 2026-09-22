@@ -167,3 +167,43 @@ class ShortFormDocsTest(unittest.TestCase):
             text = (ROOT / name).read_text(encoding="utf-8")
             quickstart = text.split("```bash", 1)[1].split("```", 1)[0]
             self.assertNotIn("hooks install", quickstart, f"{name} quickstart has an extra step")
+
+
+class PythonApiDocsTest(unittest.TestCase):
+    def test_the_page_exists_and_is_linked_from_both_readmes(self) -> None:
+        self.assertTrue((DOCS / "python-api.md").is_file())
+        for name in ("README.md", "README_TW.md"):
+            text = (ROOT / name).read_text(encoding="utf-8")
+            self.assertIn("docs/python-api.md", text, f"{name} does not link the Python API")
+
+    def test_the_documented_quickstart_actually_runs(self) -> None:
+        """A README snippet that does not execute is worse than none."""
+        import tempfile
+
+        from obsidian_wiki import Memory
+
+        with tempfile.TemporaryDirectory() as tmp:
+            memory = Memory(f"{tmp}/brain", create=True)
+            memory.remember("stack", "Python, FastAPI", confidence=0.9)
+            memory.add("Postgres was chosen over MySQL for partial indexes.")
+            # Exactly the query the README prints. The first draft documented
+            # "database choice", which shares no term with the page and so
+            # returned nothing — lexical retrieval, demonstrated by accident.
+            self.assertTrue(memory.search("postgres"), "the documented query must return a hit")
+            self.assertIn("stack", memory.recap())
+
+    def test_every_method_in_the_reference_tables_exists(self) -> None:
+        from obsidian_wiki import Memory
+
+        text = (DOCS / "python-api.md").read_text(encoding="utf-8")
+        documented = set(re.findall(r"^\| `(\w+)\(", text, re.MULTILINE))
+        self.assertTrue(documented, "no methods parsed out of the reference tables")
+        for name in documented:
+            self.assertTrue(hasattr(Memory, name), f"documented but missing: Memory.{name}")
+
+    def test_the_comparison_names_the_alternatives_and_the_weakness(self) -> None:
+        """Positioning has to be honest or it is marketing."""
+        text = (DOCS / "python-api.md").read_text(encoding="utf-8")
+        for competitor in ("mem0", "Zep", "Letta"):
+            self.assertIn(competitor, text)
+        self.assertIn("should_read_precision", text)  # names its own weak metric

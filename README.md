@@ -101,6 +101,22 @@ Open the vault in Obsidian and hit the graph view (Cmd/Ctrl+P → "Open graph vi
 
 Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
 
+## Use it from Python
+
+```python
+from obsidian_wiki import Memory
+
+memory = Memory("~/brain")
+memory.remember("stack", "Python, FastAPI", confidence=0.9)
+memory.add("Postgres was chosen over MySQL for partial indexes.")
+memory.search("postgres")
+memory.recap()                       # inject at session start
+```
+
+No API key, no embedding model, no vector store, no network — the vault is markdown on disk, so everything your agent remembers is readable, greppable and diffable. `user_id` scopes per-person memory while knowledge stays shared.
+
+More → **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)**
+
 ## It remembers between sessions
 
 A session starts with the vault's memory already in context — who you are, what threads are open, what changed recently — and ends by capturing anything reusable before the context closes.
@@ -186,6 +202,7 @@ Full data, per-run logs and the scaling measurements are in
 | **[CLI Reference](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/cli.md)** | Every `obsidian-wiki` subcommand |
 | **[Configuration](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/configuration.md)** | Config vars, QMD semantic search, `_raw/` staging, GitHub sync |
 | **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)** | The four ingest stages, vault structure, what we added to Karpathy's pattern |
+| **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)** | `from obsidian_wiki import Memory` — use a vault as agent memory |
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | The index, log, hot cache, owner profile, and todo index |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | Topic graph over your agent session history |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | Capture pages into the vault, and fill web forms from it |
