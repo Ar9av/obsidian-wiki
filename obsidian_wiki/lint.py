@@ -10,7 +10,8 @@ from typing import Any
 
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
-from obsidian_wiki.graph_analysis import okignore_patterns, okignored
+from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
+from obsidian_wiki.vault import iter_md, split_frontmatter
 from obsidian_wiki.temporal import (
     SUPERSEDED_FIELD,
     superseded_target,
@@ -24,13 +25,7 @@ from obsidian_wiki.trust import (
     validate_trust_metadata,
 )
 
-# Tool-owned directories, not vault content: dot-prefixed paths (`.venv`, `.git`)
-# are skipped wholesale by `_iter_pages`, and this list adds the non-hidden
-# equivalents (`venv/`, `node_modules/`).
-SKIP_DIRS = frozenset({
-    "_raw", "_archived", "_staging", "_archives", "_bootstrap", ".obsidian", ".git",
-    "venv", "node_modules", "__pycache__",
-})
+SKIP_DIRS = VAULT_SKIP_DIRS | {"_bootstrap"}
 REQUIRED_FRONTMATTER = (
     "title",
     "category",
@@ -53,7 +48,6 @@ ALLOWED_RELATIONSHIP_TYPES = frozenset(
     {"extends", "implements", "contradicts", "derived_from", "uses", "replaces", "related_to"}
 )
 
-_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
 _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
@@ -121,18 +115,6 @@ def _absolute_source_entries(frontmatter: str) -> list[str]:
 
 def _slug(text: str) -> str:
     return text.strip().lower().replace(" ", "-")
-
-
-def _iter_pages(vault: Path) -> list[Path]:
-    patterns = okignore_patterns(vault)
-    return [
-        path for path in vault.rglob("*.md")
-        if not any(
-            part in SKIP_DIRS or part.startswith(".")
-            for part in path.relative_to(vault).parts
-        )
-        and not okignored(path.relative_to(vault), patterns)
-    ]
 
 
 def _parse_frontmatter_values(frontmatter: str) -> dict[str, str]:
@@ -251,8 +233,7 @@ def _wikilink_page_target(raw: str) -> str | None:
 
 def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
-    front_match = _FRONTMATTER_RE.match(text)
-    frontmatter = front_match.group(1) if front_match else ""
+    frontmatter = split_frontmatter(text)[0]
     fields = set(_FIELD_RE.findall(frontmatter))
     values = _parse_frontmatter_values(frontmatter)
     relative = path.relative_to(vault)
@@ -305,7 +286,7 @@ def lint_vault(
         if required_trust_fields is not None
         else TRUST_REQUIRED_FRONTMATTER
     )
-    pages = [_parse_page(path, vault) for path in _iter_pages(vault)]
+    pages = [_parse_page(path, vault) for path in iter_md(vault, SKIP_DIRS)]
     slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for page in pages:
@@ -514,8 +495,7 @@ def lint_vault(
         "machine_path_sources": machine_path_sources,
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
-        # Sorted by page: `_iter_pages` order is filesystem order, and these
-        # findings get diffed between CI runs.
+        # Sorted by page: these findings get diffed between CI runs.
         "temporal_errors": sorted(temporal_errors, key=lambda item: item["page"]),
         "superseded_dangling": sorted(superseded_dangling, key=lambda item: item["page"]),
         "confidence_missing_fields": confidence_missing_fields,

@@ -34,7 +34,6 @@ Output JSON:
 
 from __future__ import annotations
 
-import fnmatch
 import hashlib
 import json
 import math
@@ -45,6 +44,9 @@ import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
+
+from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
+from obsidian_wiki.vault import iter_md, okignore_patterns, okignored, skipped_dir  # noqa: F401 (re-exported)
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +75,7 @@ def _page_slug(path: Path, root: Path) -> str:
 #: Directories that hold staging / archive / config material, not knowledge.
 #: Dot-prefixed paths (`.venv`, `.git`) are skipped wholesale by `is_wiki_page`;
 #: this list also covers the non-hidden equivalents (`venv/`, `node_modules/`).
-SKIP_DIRS = frozenset({
-    "_raw", "_archived", "_staging", "_archives", "_meta", "_readouts", ".obsidian",
-    ".git", "venv", "node_modules", "__pycache__",
-})
+SKIP_DIRS = VAULT_SKIP_DIRS | {"_meta", "_readouts"}
 
 #: Vault bookkeeping files at the vault ROOT. They link to (almost) every page,
 #: so leaving them in makes every pair of pages look ~2 hops apart and lets a
@@ -86,45 +85,13 @@ SKIP_DIRS = frozenset({
 SKIP_ROOT_FILES = frozenset({"index", "log", "hot", "_insights"})
 
 
-def okignore_patterns(vault: Path) -> list[str]:
-    """Patterns from the vault-root `.okignore` (gitignore syntax, subset)."""
-    try:
-        lines = (vault / ".okignore").read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return []
-    # ponytail: no `!` negation or `**`-specific semantics; add if a vault needs them.
-    return [
-        line.strip().rstrip("/") for line in lines
-        if line.strip() and not line.strip().startswith(("#", "!"))
-    ]
-
-
-def okignored(rel: Path, patterns: list[str]) -> bool:
-    """True if vault-relative `rel` is excluded by any `.okignore` pattern.
-
-    A pattern without a slash matches any path component (`_inbox`, `*.draft.md`);
-    one with a slash is anchored to the vault root and matches that path or
-    anything beneath it (`/drafts`, `notes/old`).
-    """
-    parts = rel.parts
-    prefixes = ["/".join(parts[: i + 1]) for i in range(len(parts))]
-    for pattern in patterns:
-        if "/" in pattern:
-            anchored = pattern.lstrip("/")
-            if any(fnmatch.fnmatchcase(prefix, anchored) for prefix in prefixes):
-                return True
-        elif any(fnmatch.fnmatchcase(part, pattern) for part in parts):
-            return True
-    return False
-
-
 def is_wiki_page(path: Path, vault: Path) -> bool:
     """True if `path` is a knowledge page of `vault` (not staging/bookkeeping)."""
     try:
         rel = path.relative_to(vault)
     except ValueError:
         return False
-    if any(part in SKIP_DIRS or part.startswith(".") for part in rel.parts):
+    if skipped_dir(rel, SKIP_DIRS):
         return False
     if len(rel.parts) == 1 and path.stem in SKIP_ROOT_FILES:
         return False
@@ -133,11 +100,7 @@ def is_wiki_page(path: Path, vault: Path) -> bool:
 
 def iter_pages(vault: Path) -> list[Path]:
     """All knowledge pages in the vault, in stable sorted order."""
-    patterns = okignore_patterns(vault)
-    return sorted(
-        p for p in vault.rglob("*.md")
-        if is_wiki_page(p, vault) and not okignored(p.relative_to(vault), patterns)
-    )
+    return [p for p in iter_md(vault, SKIP_DIRS) if is_wiki_page(p, vault)]
 
 
 def parse_vault_graph(vault: Path) -> tuple[dict[str, list[str]], dict[str, list[str]]]:

@@ -21,18 +21,13 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from obsidian_wiki.graph_analysis import okignore_patterns, okignored
+from obsidian_wiki.vault import FRONTMATTER_RE as _FRONTMATTER_RE
+from obsidian_wiki.vault import SKIP_DIRS, iter_md
 
 TRUST_LEDGER_RELATIVE_PATH = Path("_meta/trust-ledger.json")
 TRUST_LEDGER_SCHEMA_VERSION = 1
 TRUST_REVIEW_METHOD = "manual-lineage-and-claim-coverage-v1"
-# Tool-owned directories, not vault content: dot-prefixed paths (`.venv`, `.git`)
-# are skipped wholesale by `iter_trust_pages`, and this list adds the non-hidden
-# equivalents (`venv/`, `node_modules/`).
-TRUST_SKIP_DIRS = frozenset({
-    "_raw", "_archived", "_staging", "_archives", "_bootstrap", ".obsidian", ".git",
-    "venv", "node_modules", "__pycache__",
-})
+TRUST_SKIP_DIRS = SKIP_DIRS | {"_bootstrap"}
 TRUST_RESERVED_STEMS = frozenset({"index", "log", "hot", "_insights"})
 ALLOWED_LIFECYCLES = frozenset({"draft", "reviewed", "verified", "disputed", "archived"})
 # Transitions the llm-wiki state machine forbids outright: only ingest sets
@@ -58,7 +53,6 @@ _VOLATILE_CONFIDENCE_KEYS = (
     "lifecycle_reason",
     "superseded_by",
 )
-_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---(?:\n|$)", re.DOTALL)
 _TOP_LEVEL_FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):")
 
 
@@ -279,17 +273,8 @@ def iter_trust_pages(vault: Path) -> list[Path]:
     Honors the vault-root `.okignore`, so a vault can keep quarantined content
     (`_excluded/`, PII inboxes) out of the ledger without editing TRUST_SKIP_DIRS.
     """
-    patterns = okignore_patterns(vault)
-    pages: list[Path] = []
-    for path in vault.rglob("*.md"):
-        rel = path.relative_to(vault)
-        if any(part in TRUST_SKIP_DIRS or part.startswith(".") for part in rel.parts):
-            continue
-        if okignored(rel, patterns):
-            continue
-        if path.stem in TRUST_RESERVED_STEMS:
-            continue
-        pages.append(path)
+    pages = [p for p in iter_md(vault, TRUST_SKIP_DIRS) if p.stem not in TRUST_RESERVED_STEMS]
+    # Keyed on the posix string, not Path order: the ledger is diffed across runs.
     return sorted(pages, key=lambda item: item.relative_to(vault).as_posix())
 
 

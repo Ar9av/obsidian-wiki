@@ -36,6 +36,8 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from obsidian_wiki.cache import advisory_lock
+from obsidian_wiki.vault import FRONTMATTER_RE, iter_md, split_frontmatter
+from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 
 MEMORY_LOCK_NAME = ".memory.lock"
 PROFILE_REL = "_meta/profile.md"
@@ -47,10 +49,7 @@ TODOS_REL = "_meta/todos.md"
 _SCOPE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 #: Directories that hold staging, archives, or tool state rather than pages.
-SKIP_DIRS = frozenset({
-    "_raw", "_staging", "_archives", "_archived", "_readouts", "_meta",
-    ".obsidian", ".git", "venv", "node_modules", "__pycache__",
-})
+SKIP_DIRS = VAULT_SKIP_DIRS | {"_readouts", "_meta"}
 #: Root files that are the memory surface itself, not catalog entries.
 SKIP_FILES = frozenset({
     "index.md", "log.md", "hot.md", "_insights.md",
@@ -85,7 +84,6 @@ ADOPTED_REL = "_meta/.memory-adopted"
 HOT_FIELDS_PER_ENTRY = 3
 HOT_VALUE_CHARS = 60
 
-_FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---(?:\r?\n|$)", re.DOTALL)
 _LOG_LINE_RE = re.compile(r"^-\s*\[(?P<ts>[^\]]+)\]\s+(?P<verb>[A-Z][A-Z0-9_-]*)\s*(?P<rest>.*)$")
 _FIELD_RE = re.compile(r"""(?P<key>[A-Za-z_][\w-]*)=(?P<value>"[^"]*"|'[^']*'|\S*)""")
 _VERB_RE = re.compile(r"^[A-Z][A-Z0-9_-]*$")
@@ -150,11 +148,6 @@ def _require_vault(vault: Path) -> Path:
     if not vault.is_dir():
         raise MemoryError_("vault_not_found", f"vault not found: {vault}")
     return vault
-
-
-def _split_frontmatter(text: str) -> tuple[str, str]:
-    match = _FRONTMATTER_RE.match(text)
-    return (match.group(1), text[match.end():]) if match else ("", text)
 
 
 def _scalar(value: str) -> str:
@@ -412,7 +405,7 @@ def _contradicts_targets(values: dict) -> tuple:
 def page_from_path(path: Path, vault: Path) -> PageInfo:
     rel = path.relative_to(vault)
     text = path.read_text(encoding="utf-8", errors="replace")
-    frontmatter, body = _split_frontmatter(text)
+    frontmatter, body = split_frontmatter(text)
     values = parse_frontmatter(frontmatter)
     tags_raw = values.get("tags", [])
     if isinstance(tags_raw, str):
@@ -439,11 +432,8 @@ def scan_pages(vault: Path) -> list:
     """Every real wiki page, excluding staging, archives, and the memory files."""
     vault = _require_vault(vault)
     pages = []
-    for path in sorted(vault.rglob("*.md")):
-        rel = path.relative_to(vault)
-        if path.name in SKIP_FILES and len(rel.parts) == 1:
-            continue
-        if any(part in SKIP_DIRS or part.startswith(".") for part in rel.parts):
+    for path in iter_md(vault, SKIP_DIRS):
+        if path.name in SKIP_FILES and path.parent == vault:
             continue
         try:
             pages.append(page_from_path(path, vault))
@@ -518,7 +508,7 @@ def _ensure_index_marker(preamble: str) -> str:
     marker = f"generated_by: {GENERATED_MARKER} index"
     if marker in preamble:
         return preamble
-    match = _FRONTMATTER_RE.match(preamble + "\n")
+    match = FRONTMATTER_RE.match(preamble + "\n")
     if match:
         frontmatter = match.group(1)
         if re.search(r"^generated_by:", frontmatter, re.MULTILINE):
@@ -939,7 +929,7 @@ def content_words(text: str) -> int:
     and the "this file is generated" note against it put the floor within a few
     words of the cap, so trimming could spin without ever getting under budget.
     """
-    body = _split_frontmatter(text)[1].replace(_HOT_NOTE, "")
+    body = split_frontmatter(text)[1].replace(_HOT_NOTE, "")
     return len(body.split())
 
 
@@ -1302,7 +1292,7 @@ def memory_status(vault: Path) -> dict:
     vault = _require_vault(vault)
     hot = vault / "hot.md"
     hot_text = hot.read_text(encoding="utf-8") if hot.is_file() else ""
-    hot_values = parse_frontmatter(_split_frontmatter(hot_text)[0]) if hot_text else {}
+    hot_values = parse_frontmatter(split_frontmatter(hot_text)[0]) if hot_text else {}
     index_drift = rebuild_index(vault, write=False, lock=False, force=True)
     todos = load_todos(vault)
     return {
