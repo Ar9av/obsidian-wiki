@@ -875,6 +875,20 @@ def test_iter_trust_pages_skips_tool_owned_directories(tmp_path: Path) -> None:
     ]
 
 
+def test_iter_trust_pages_honors_okignore(tmp_path: Path) -> None:
+    """A vault-configured quarantine dir (`_excluded/`) stays out of the ledger."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    (vault / ".okignore").write_text("_excluded/\n", encoding="utf-8")
+    excluded = vault / "_excluded" / "pii.md"
+    excluded.parent.mkdir(parents=True, exist_ok=True)
+    excluded.write_text("plain text, no frontmatter\n", encoding="utf-8")
+
+    assert [page.relative_to(vault).as_posix() for page in iter_trust_pages(vault)] == [
+        "concepts/alpha.md"
+    ]
+
+
 def test_lint_flags_content_page_missing_trust_schema(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     page = _page(vault, "concepts/alpha.md")
