@@ -19,8 +19,14 @@ RECAP_TIMEOUT="${WIKI_RECAP_TIMEOUT:-10}"
 RECAP_MAX_WORDS="${WIKI_RECAP_MAX_WORDS:-350}"
 RECAP_MIN_CONFIDENCE="${WIKI_RECAP_MIN_CONFIDENCE:-0.0}"
 
+# Every silent exit goes through here; WIKI_RECAP_DEBUG=1 says why on stderr.
+quiet_exit() {
+  [[ "${WIKI_RECAP_DEBUG:-}" == 1 ]] && printf 'wiki-session-recap: %s\n' "$1" >&2
+  exit 0
+}
+
 case "${WIKI_SESSION_RECAP:-}" in
-  false|0|off|no) exit 0 ;;
+  false|0|off|no) quiet_exit "disabled by WIKI_SESSION_RECAP=$WIKI_SESSION_RECAP" ;;
 esac
 
 # --- resolve the vault, following the Config Resolution Protocol ------------
@@ -56,9 +62,9 @@ find_vault() {
   return 1
 }
 
-VAULT=$(find_vault) || exit 0
+VAULT=$(find_vault) || quiet_exit "no OBSIDIAN_VAULT_PATH in a .env above $PWD or in the global config"
 VAULT="${VAULT/#\~/$HOME}"
-[[ -d "$VAULT" ]] || exit 0
+[[ -d "$VAULT" ]] || quiet_exit "vault $VAULT is not a directory"
 
 # --- run the recap ---------------------------------------------------------
 # Prefer the installed console script; fall back to the module so a checkout
@@ -91,12 +97,12 @@ run_recap() {
   fi
 }
 
-RECAP=$(run_recap) || exit 0
-[[ -n "${RECAP//[[:space:]]/}" ]] || exit 0
+RECAP=$(run_recap) || quiet_exit "memory recap failed or timed out (no obsidian-wiki on PATH, or python3 cannot import obsidian_wiki?)"
+[[ -n "${RECAP//[[:space:]]/}" ]] || quiet_exit "memory recap printed nothing"
 
 # An empty vault produces this line; injecting it is pure noise.
 case "$RECAP" in
-  *"No vault memory recorded yet"*) exit 0 ;;
+  *"No vault memory recorded yet"*) quiet_exit "vault has no memory recorded yet" ;;
 esac
 
 cat <<EOF

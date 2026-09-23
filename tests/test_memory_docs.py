@@ -62,7 +62,7 @@ class MemoryDocsTest(unittest.TestCase):
             "WIKI_RECAP_MIN_CONFIDENCE",
             "WIKI_RECAP_TIMEOUT",
             "WIKI_RECAP_PROJECT",
-            "WIKI_RECAP_DEBUG",   # read only once /tmp/blocked-edits.py has been applied
+            "WIKI_RECAP_DEBUG",
         ):
             self.assertIn(variable, recap_hook, f"{variable} documented but unread")
 
