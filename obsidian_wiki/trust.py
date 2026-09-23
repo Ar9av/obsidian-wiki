@@ -21,6 +21,8 @@ from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from obsidian_wiki.graph_analysis import okignore_patterns, okignored
+
 TRUST_LEDGER_RELATIVE_PATH = Path("_meta/trust-ledger.json")
 TRUST_LEDGER_SCHEMA_VERSION = 1
 TRUST_REVIEW_METHOD = "manual-lineage-and-claim-coverage-v1"
@@ -272,11 +274,18 @@ def _parse_confidence(
 
 
 def iter_trust_pages(vault: Path) -> list[Path]:
-    """Return every non-reserved content page that must participate in trust review."""
+    """Return every non-reserved content page that must participate in trust review.
+
+    Honors the vault-root `.okignore`, so a vault can keep quarantined content
+    (`_excluded/`, PII inboxes) out of the ledger without editing TRUST_SKIP_DIRS.
+    """
+    patterns = okignore_patterns(vault)
     pages: list[Path] = []
     for path in vault.rglob("*.md"):
         rel = path.relative_to(vault)
         if any(part in TRUST_SKIP_DIRS or part.startswith(".") for part in rel.parts):
+            continue
+        if okignored(rel, patterns):
             continue
         if path.stem in TRUST_RESERVED_STEMS:
             continue
