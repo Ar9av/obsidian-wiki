@@ -1,0 +1,11 @@
+# Runs obsidian-wiki-daily-update.service at 9:00 AM daily.
+[Unit]
+Description=Run obsidian-wiki daily update at 9 AM
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+# Catch up on the next boot if the machine was off at 9 AM
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Daily wiki index update — called by launchd or directly.
+# Daily wiki index update — called by launchd, a systemd timer, cron, or directly.
 # Checks if any history sources are stale and writes vault-scoped state files
 # that the shell prompt reads on terminal open.
 #
