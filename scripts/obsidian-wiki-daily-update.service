@@ -1,0 +1,8 @@
+# systemd user unit — Linux counterpart of com.obsidian-wiki.daily-update.plist.
+# Installed by /daily-update setup mode, which substitutes OBSIDIAN_WIKI_REPO.
+[Unit]
+Description=obsidian-wiki daily update
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash OBSIDIAN_WIKI_REPO/scripts/daily-update.sh

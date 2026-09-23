@@ -28,6 +28,8 @@ WRITING_PROFILE_TEMPLATE = ROOT / ".skills" / "llm-wiki" / "references" / "WRITI
 REFERENCED_SCRIPTS = (
     "daily-update.sh",
     "com.obsidian-wiki.daily-update.plist",
+    "obsidian-wiki-daily-update.service",
+    "obsidian-wiki-daily-update.timer",
     "wiki-notify.sh",
 )
 

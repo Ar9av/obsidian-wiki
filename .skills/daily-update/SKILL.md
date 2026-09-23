@@ -3,7 +3,7 @@ name: daily-update
 description: >
   Run the daily wiki maintenance cycle: check all source freshness, update the index, and regenerate hot.md.
   Use this skill when the user says "/daily-update", "run the daily update", "update everything", "morning sync",
-  "refresh the wiki index", or when triggered by the launchd cron at 9 AM. Also use to set up or verify the
+  "refresh the wiki index", or when triggered by the scheduled 9 AM run (launchd, systemd timer, or cron). Also use to set up or verify the
   cron + terminal notification infrastructure for the first time ("set up the daily cron", "install the
   terminal notification", "how do I get the morning reminder?").
 ---
@@ -137,7 +137,9 @@ Walk the user through first-time setup:
 
 Check that `$OBSIDIAN_WIKI_REPO/scripts/daily-update.sh` exists and is executable. If not, point the user to it.
 
-**Step 2: Install launchd plist**
+**Step 2: Install the scheduler** — pick by platform (`uname -s`).
+
+macOS (`Darwin`) — launchd:
 
 ```bash
 # Replace placeholder in plist
@@ -148,6 +150,29 @@ sed "s|OBSIDIAN_WIKI_REPO|$OBSIDIAN_WIKI_REPO|g" \
 # Load it
 launchctl load "$HOME/Library/LaunchAgents/com.obsidian-wiki.daily-update.plist"
 ```
+
+Linux with systemd (`systemctl --user` works) — a user timer:
+
+```bash
+UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+mkdir -p "$UNIT_DIR"
+sed "s|OBSIDIAN_WIKI_REPO|$OBSIDIAN_WIKI_REPO|g" \
+  "$OBSIDIAN_WIKI_REPO/scripts/obsidian-wiki-daily-update.service" \
+  > "$UNIT_DIR/obsidian-wiki-daily-update.service"
+cp "$OBSIDIAN_WIKI_REPO/scripts/obsidian-wiki-daily-update.timer" "$UNIT_DIR/"
+systemctl --user daemon-reload
+systemctl --user enable --now obsidian-wiki-daily-update.timer
+```
+
+On a headless server, user timers only run while the user is logged in unless lingering is on — suggest `sudo loginctl enable-linger "$USER"`.
+
+Anything else (no systemd, containers, WSL without systemd) — crontab. Append this line via `crontab -e`, skipping it if an `obsidian-wiki` daily-update line is already there:
+
+```cron
+0 9 * * * /bin/bash "$OBSIDIAN_WIKI_REPO/scripts/daily-update.sh" >> /tmp/obsidian-wiki-daily.log 2>&1
+```
+
+Write the literal repo path in place of `$OBSIDIAN_WIKI_REPO` — cron does not load your shell env.
 
 **Step 3: Install terminal notification (optional)**
 
@@ -190,12 +215,12 @@ This initializes `$STATE_DIR/.last_update` so the terminal notification works im
 **Step 5: Confirm**
 
 Tell the user:
-- The cron runs daily at 9 AM (or on next login if missed)
+- The scheduler runs daily at 9 AM (launchd and the systemd timer catch up on the next login/boot if missed; plain cron does not)
 - `wiki-lint` health checks run on the `LINT_SCHEDULE` cadence (default `weekly`) as part of that cycle — set `LINT_SCHEDULE=daily` or `manual` in `.env` to change it
 - Terminal notifications appear when the wiki is >20 hours stale
 - State is stored in `<global config dir>/state/<vault-id>/` (XDG-style `~/.config/obsidian-wiki` by default, or the legacy `~/.obsidian-wiki` if that already exists) — supports multiple vaults independently
 - They can run `/daily-update` anytime to force a sync
-- Logs go to `/tmp/obsidian-wiki-daily.log`
+- Logs go to `/tmp/obsidian-wiki-daily.log` (launchd, cron) or `journalctl --user -u obsidian-wiki-daily-update` (systemd)
 
 ## QMD Refresh After Vault Writes
 
