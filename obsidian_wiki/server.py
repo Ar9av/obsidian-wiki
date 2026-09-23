@@ -31,6 +31,7 @@ from obsidian_wiki.graphrag import query as graph_query
 from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.sync import _git
+from obsidian_wiki.vault import iter_md
 
 VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")).expanduser()
 API_KEY = os.environ.get("WIKI_API_KEY", "")
@@ -383,10 +384,7 @@ def _git_status() -> dict[str, Any]:
 
 def status() -> dict[str, Any]:
     """Operational snapshot: page counts, staging/raw depth, source freshness."""
-    pages = [
-        p for p in VAULT.rglob("*.md")
-        if not p.relative_to(VAULT).parts[0].startswith("_")
-    ]
+    pages = [p for p in iter_md(VAULT) if not p.relative_to(VAULT).parts[0].startswith("_")]
     categories: dict[str, int] = {}
     for page in pages:
         parts = page.relative_to(VAULT).parts
