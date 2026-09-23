@@ -74,8 +74,34 @@ def _write(path: Path, data: dict) -> None:
         raise
 
 
+def _bin_dir() -> Optional[Path]:
+    """The directory holding the interpreter that is installing the hooks.
+
+    Deliberately *not* resolved: a venv's ``bin/python3`` is a symlink to the
+    system interpreter, so resolving it hands back ``/usr/bin`` and pins the
+    PATH to an install that does not have the package. The unresolved path is
+    the venv, which is the one that does.
+    """
+    candidate = Path(sys.executable).parent
+    return candidate if candidate.is_dir() else None
+
+
 def _command_for(script: Path) -> str:
-    return f"bash {script}"
+    """The shell command to register.
+
+    A venv, pipx or `uv tool` install puts ``obsidian-wiki`` somewhere that is
+    not on the PATH a hook inherits, and the system ``python3`` cannot import
+    the package either. The hook then registers fine and silently does nothing
+    — which is the worst outcome, because a hook that fails quietly is
+    invisible from inside a session.
+
+    So pin the installing interpreter's bin directory onto the front of PATH.
+    The hook's own resolution (console script, then ``python3 -m``) then finds
+    the right install without needing to know about venvs.
+    """
+    bin_dir = _bin_dir()
+    prefix = f'PATH="{bin_dir}:$PATH" ' if bin_dir else ""
+    return f"{prefix}bash {script}"
 
 
 def _registered_commands(data: dict, event: str) -> list:
@@ -190,8 +216,12 @@ def reachability() -> dict:
     ``python3 -m obsidian_wiki.cli``. If neither works it exits silently by
     design — safe, but invisible — so this is the one place that says so.
     """
-    on_path = shutil.which("obsidian-wiki")
-    python3 = shutil.which("python3")
+    # Look where the registered command will look: the installing
+    # interpreter's bin directory first, then the ambient PATH.
+    bin_dir = _bin_dir()
+    search = f"{bin_dir}:{os.environ.get('PATH', '')}" if bin_dir else os.environ.get("PATH", "")
+    on_path = shutil.which("obsidian-wiki", path=search)
+    python3 = shutil.which("python3", path=search)
     importable = False
     if python3:
         try:

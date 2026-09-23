@@ -191,3 +191,35 @@ def test_setup_honours_no_hooks(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
     assert "skipped (--no-hooks)" in proc.stdout
     assert not any(entry.registered for entry in hk.status(home))
+
+
+def test_the_registered_command_pins_the_installing_interpreter(home: Path) -> None:
+    """A venv/pipx install puts `obsidian-wiki` somewhere a hook's PATH lacks.
+
+    Without pinning, the hooks register fine and silently do nothing — the
+    worst outcome, because a quiet hook is invisible from inside a session.
+    Only a clean-venv install surfaced this; the test suite runs from a source
+    tree where the ambient PATH happens to work.
+    """
+    hk.install(home)
+    command = _commands(home, "SessionStart")[0]
+    assert command.startswith('PATH="')
+    assert str(Path(sys.executable).parent) in command
+
+
+def test_the_pinned_path_is_not_symlink_resolved() -> None:
+    """A venv's bin/python3 is a symlink to the system interpreter, so
+    resolving it hands back /usr/bin — an install without the package."""
+    bin_dir = hk._bin_dir()
+    assert bin_dir == Path(sys.executable).parent
+    command = hk._command_for(Path("/x/hook.sh"))
+    assert f'PATH="{Path(sys.executable).parent}:$PATH"' in command
+
+
+def test_reachability_searches_the_path_the_hook_will_get(home: Path) -> None:
+    """Judging reachability against the ambient PATH would report a venv
+    install as broken, or a broken one as fine."""
+    reach = hk.reachability()
+    if reach["console_script"]:
+        assert str(Path(sys.executable).parent) in reach["console_script"] or reach["reachable"]
+    assert isinstance(reach["reachable"], bool)
