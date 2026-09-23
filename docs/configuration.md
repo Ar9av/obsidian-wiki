@@ -216,7 +216,7 @@ Verify with `obsidian-wiki doctor --project .` — the `code-understanding.codeg
 
 ## `_raw/` staging directory
 
-`_raw/` is a staging area inside your vault for unprocessed captures — rough notes, clipboard pastes, quick voice-memo transcripts. Drop files there and the next `wiki-ingest` run promotes them to proper wiki pages and removes the originals, so nothing is processed twice.
+`_raw/` is a staging area inside your vault for unprocessed captures — rough notes, clipboard pastes, quick voice-memo transcripts. Drop files there and the next `wiki-ingest` run promotes them to proper wiki pages and moves the originals into `_raw/_archived/`, so nothing is processed twice and the draft is never lost.
 
 The fastest way to feed it during a live coding session:
 
