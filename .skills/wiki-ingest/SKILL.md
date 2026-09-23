@@ -479,28 +479,26 @@ Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
 If the manifest doesn't exist yet, create it with `version: 1`.
 
-**`index.md`** — Add entries for any new pages, update summaries for modified pages.
+**`index.md`, `log.md`, `hot.md`** — one command, not three hand edits:
 
-**`log.md`** — Append an entry:
+```bash
+obsidian-wiki memory sync INGEST source="path/to/source"
+  pages_created=N pages_updated=M \
+  mode=append \
+  --takeaways "Fowler's decomposition argument now anchors the microservices cluster."
 ```
-- [TIMESTAMP] INGEST source="path/to/source" pages_updated=N pages_created=M mode=append|full
-```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from template below if missing). Rewrite the **Recent Activity** section to reflect what you just ingested — keep it to the last 3 operations max. Update **Key Takeaways** and **Active Threads** if the content materially shifted them. Update the `updated` timestamp.
+This appends the log line, reconciles `index.md` against the pages on disk, and
+regenerates `hot.md` — all under one advisory lock, so a parallel ingest agent
+cannot drop your update. Never hand-edit those three files: concurrent wholesale
+rewrites are exactly what this replaces.
 
-Write the *conceptual* change, not a file list. Example: "Ingested Fowler's microservices article — 3 new concept pages on service decomposition, API gateway, bounded contexts."
+`--takeaways` is the one part that is yours to write; everything else in
+`hot.md` is generated. Write the *conceptual* change, not a file list. Omit the
+flag and the previous takeaways carry across unchanged. Use `--takeaways -` to
+pipe multi-line prose in on stdin.
 
-hot.md template (use if the file doesn't exist):
-```markdown
----
-title: Hot Cache
-updated: TIMESTAMP
----
-## Recent Activity
-## Active Threads
-## Key Takeaways
-## Flagged Contradictions
-```
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ### Step 8: Refresh QMD Wiki Index (optional — requires `QMD_WIKI_COLLECTION`)
 

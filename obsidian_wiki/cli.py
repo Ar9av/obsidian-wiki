@@ -432,6 +432,7 @@ VAULT_SUBDIRS = (
     "_archives",
     "_raw",
     "_staging",
+    "_meta",
     ".obsidian",
 )
 
@@ -453,6 +454,7 @@ def scaffold_vault(vault_path: Path) -> bool:
         index_md.write_text(
             "---\n"
             "title: Wiki Index\n"
+            "generated_by: obsidian-wiki memory index\n"
             "---\n\n"
             "# Wiki Index\n\n"
             f"*This index is automatically maintained. Last updated: {timestamp}*\n\n"
@@ -484,6 +486,7 @@ def scaffold_vault(vault_path: Path) -> bool:
             "---\n"
             "title: Hot Cache\n"
             f"updated: {timestamp}\n"
+            "generated_by: obsidian-wiki memory hot\n"
             "---\n\n"
             "# Hot Cache\n\n"
             "*A ~500-word semantic snapshot of recent activity. Updated after every major write operation.*\n\n"
@@ -497,6 +500,25 @@ def scaffold_vault(vault_path: Path) -> bool:
             "*None yet.*\n",
             encoding="utf-8",
         )
+
+    # The owner profile and todo index are part of the memory surface: seed
+    # them empty so they are discoverable in Obsidian before the first write.
+    from obsidian_wiki.memory import (
+        PROFILE_REL,
+        TODOS_REL,
+        render_profile,
+        render_todos,
+    )
+
+    for relative, render in ((PROFILE_REL, render_profile), (TODOS_REL, render_todos)):
+        target = vault_path / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(render([]), encoding="utf-8")
+    from obsidian_wiki.memory import is_adopted, mark_adopted
+
+    if not is_adopted(vault_path):
+        mark_adopted(vault_path)
 
     manifest_json = vault_path / ".manifest.json"
     if not manifest_json.exists():
@@ -824,6 +846,95 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
             else:
                 _doctor_add(checks, name="vault-core-files", status="pass", detail="core vault files present", hint="")
 
+            # Memory surface: an unmigrated vault silently skips index/hot
+            # writes on every sync, so it needs to be visible here.
+            try:
+                from obsidian_wiki import memory as _mem
+
+                mem_status = _mem.memory_status(vault)
+                if not mem_status["migrated"]:
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="warn",
+                        detail="index.md/hot.md predate the memory writer; sync skips them",
+                        hint="run: obsidian-wiki memory migrate   (preview first, then --apply)",
+                    )
+                # Only real drift is worth a warning. `changed` also flips on a
+                # cosmetic difference (spacing, ordering), and "index drift
+                # +0/-0" tells a reader nothing actionable.
+                elif (
+                    mem_status["index_drift"]["added"]
+                    or mem_status["index_drift"]["removed"]
+                    or mem_status["hot"]["over_budget"]
+                ):
+                    drift = mem_status["index_drift"]
+                    reasons = []
+                    if drift["added"] or drift["removed"]:
+                        reasons.append(f"index drift +{len(drift['added'])}/-{len(drift['removed'])}")
+                    if mem_status["hot"]["over_budget"]:
+                        reasons.append(f"hot.md {mem_status['hot']['words']}w over cap")
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="warn",
+                        detail="; ".join(reasons),
+                        hint="run: obsidian-wiki memory sync",
+                    )
+                else:
+                    _doctor_add(
+                        checks,
+                        name="memory-surface",
+                        status="pass",
+                        detail=f"current — {mem_status['pages']} page(s), "
+                               f"{mem_status['hot']['words']}/{mem_status['hot']['max_words']} hot words, "
+                               f"{mem_status['todos']['open']} open thread(s)",
+                        hint="",
+                    )
+            except Exception as exc:  # doctor must never crash on one bad check
+                _doctor_add(
+                    checks,
+                    name="memory-surface",
+                    status="warn",
+                    detail=f"could not read the memory surface: {exc}",
+                    hint="run: obsidian-wiki memory status",
+                )
+
+            # Session hooks: unregistered means the headline feature — memory
+            # injected at session start — silently never happens.
+            try:
+                from obsidian_wiki import hooks as _hk
+
+                entries = _hk.status()
+                reach = _hk.reachability()
+                unregistered = [e.script for e in entries if not e.registered]
+                if unregistered:
+                    # The hooks are optional, so an install that never asked
+                    # for them is not misconfigured — but it also has no
+                    # session-start memory, and that is worth one visible line.
+                    _doctor_add(
+                        checks, name="session-hooks", status="info",
+                        detail="not registered (optional): " + ", ".join(unregistered)
+                               + " — no memory is injected at session start",
+                        hint="run: obsidian-wiki hooks install",
+                    )
+                elif not reach["reachable"]:
+                    _doctor_add(
+                        checks, name="session-hooks", status="warn",
+                        detail="registered, but hooks cannot reach the package and will exit silently",
+                        hint=reach["hint"],
+                    )
+                else:
+                    _doctor_add(
+                        checks, name="session-hooks", status="pass",
+                        detail="SessionStart and Stop hooks registered and reachable", hint="",
+                    )
+            except Exception as exc:
+                _doctor_add(
+                    checks, name="session-hooks", status="warn",
+                    detail=f"could not inspect hooks: {exc}", hint="run: obsidian-wiki hooks status",
+                )
+
             manifest_path = vault / ".manifest.json"
             if manifest_path.exists():
                 try:
@@ -1022,6 +1133,25 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if vault_path and Path(vault_path).expanduser().is_dir():
         sync_configured = _maybe_configure_sync(Path(vault_path).expanduser(), args.remote)
 
+    # Register the session hooks here rather than as a separate step someone
+    # has to know about. Without them the vault, the CLI and the MCP tools all
+    # work, but no memory is injected at session start — which is the whole
+    # point. Opt out with --no-hooks.
+    hooks_line = "skipped (--no-hooks)"
+    if not args.no_hooks:
+        try:
+            from obsidian_wiki import hooks as _hooks
+
+            outcome = _hooks.install()
+            registered = len(outcome["added"]) + len(outcome["already"])
+            hooks_line = f"{registered} registered"
+            if outcome["missing"]:
+                hooks_line += f", {len(outcome['missing'])} missing — reinstall obsidian-wiki"
+            elif not _hooks.reachability()["reachable"]:
+                hooks_line += " (not reachable — see `obsidian-wiki hooks status`)"
+        except Exception as exc:  # never fail setup over an optional extra
+            hooks_line = f"could not register ({exc}) — run `obsidian-wiki hooks install`"
+
     n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
@@ -1029,6 +1159,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")
+    print(f" Session hooks:    {hooks_line}")
     if sync_configured:
         print(" GitHub sync:      obsidian-wiki sync")
     print("\n Next steps:")
@@ -2094,6 +2225,356 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 1 if report["status"] == "fail" else 0
 
 
+def _memory_fields(pairs: list) -> dict:
+    fields: dict[str, str] = {}
+    for pair in pairs or []:
+        if "=" not in pair:
+            raise ValueError(f"--field expects key=value, got {pair!r}")
+        key, value = pair.split("=", 1)
+        fields[key.strip()] = value
+    return fields
+
+
+def _verb_and_fields(rest: list, verb_flag: str | None, field_flags: list) -> tuple:
+    """Read `VERB key=value ...` positionally, falling back to the flag form.
+
+    `--verb X --field a=1 --field b=2` is precise and unreadable; the six-field
+    calls the ingest skills make ran to seven lines. A bare verb and bare
+    key=value pairs say the same thing on one line. Both forms still work.
+    """
+    verb, fields = verb_flag, {}
+    for token in rest or []:
+        if "=" in token:
+            key, value = token.split("=", 1)
+            fields[key.strip()] = value
+        elif verb is None:
+            verb = token
+        else:
+            raise ValueError(
+                f"unexpected argument {token!r} — expected key=value "
+                f"(the verb {verb!r} is already set)"
+            )
+    fields.update(_memory_fields(field_flags))
+    return verb, fields
+
+
+def _memory_takeaways(raw: str | None) -> str | None:
+    """`-` reads the takeaway prose from stdin, so a skill can pipe it in."""
+    if raw is None:
+        return None
+    return sys.stdin.read().strip() if raw == "-" else raw
+
+
+def cmd_memory(args: argparse.Namespace) -> int:
+    """Maintain the vault memory surface: log, index, hot cache, profile, todos.
+
+    One code path for files that fifteen skills used to each rewrite from prose,
+    all of it under a single advisory lock so a parallel writer cannot drop an
+    update. `--check` reports drift and exits 2 without writing, for CI.
+    """
+    from obsidian_wiki import memory as mem
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault, config, _source = context
+    link_format = (config.get("OBSIDIAN_LINK_FORMAT") or _read_config_value("OBSIDIAN_LINK_FORMAT") or "wikilink").strip()
+    rest = list(args.rest or [])
+
+    def emit(payload: dict, lines: list) -> int:
+        if args.json:
+            print(json.dumps(payload, indent=2 if args.pretty else None))
+        else:
+            for line in lines:
+                print(line)
+        return 0
+
+    try:
+        action = args.memory_action
+
+        if action == "status":
+            status = mem.memory_status(vault)
+            drift = status["index_drift"]
+            return emit(status, [
+                f"vault:    {status['vault']}",
+                f"pages:    {status['pages']}",
+                f"index:    {'stale' if drift['stale'] else 'current'}"
+                + (f" (+{len(drift['added'])} / -{len(drift['removed'])})" if drift["stale"] else ""),
+                f"log:      {status['log_entries']} entries",
+                ("migrated: yes" if status["migrated"] else
+                 "migrated: NO — run `obsidian-wiki memory migrate` before index/hot writes"),
+                f"hot:      {status['hot']['words']}/{status['hot']['max_words']} words"
+                + ("  OVER BUDGET" if status["hot"]["over_budget"] else "")
+                + ("" if status["hot"]["generated"] else "  (hand-written, not yet generated)"),
+                f"profile:  {status['profile_facts']} fact(s)",
+                f"todos:    {status['todos']['open']} open, {status['todos']['stale']} stale,"
+                f" {status['todos']['closed']} closed",
+            ])
+
+        if action == "migrate":
+            if args.check or not args.apply:
+                preview = mem.migration_status(vault)
+                if preview["migrated"]:
+                    return emit(preview, ["already migrated — index.md and hot.md are generated"])
+                idx, hot = preview["index"], preview["hot"]
+                lines = [
+                    "This vault predates the memory writer. Migrating would:",
+                    "",
+                    f"  index.md   {idx['lines_before']} -> {idx['lines_after']} lines,"
+                    f" {idx['entries_added']} catalog entries appended",
+                ]
+                lines += [f"    keep, unchanged, above the generated catalog: {name}"
+                          for name in idx["sections_preserved"]]
+                lines.append(f"  hot.md     regenerates: {', '.join(hot['sections_regenerated']) or 'nothing'}")
+                lines.append(f"    Key Takeaways carried over: {'yes' if hot['takeaways_carried'] else 'no'}")
+                if hot["threads_to_seed"]:
+                    lines.append(f"    {len(hot['threads_to_seed'])} thread(s) converted to todos:")
+                    lines += [f"      - {t[:80]}" for t in hot["threads_to_seed"]]
+                lines += ["", "A timestamped backup is written to _archives/ first.",
+                          "Apply with: obsidian-wiki memory migrate --apply"]
+                emit(preview, lines)
+                return 0
+            result = mem.migrate(vault, link_format=link_format)
+            lines = [f"backed up to {result['backup_dir']}"] if result["backup"] else []
+            lines.append(f"index: {result['index']['total']} page(s), +{len(result['index']['added'])}")
+            lines.append(f"hot:   {result['hot']['words']} words")
+            if result["threads_seeded"]:
+                lines.append(f"todos: seeded {len(result['threads_seeded'])} thread(s) from hot.md")
+            return emit(result, lines)
+
+        if action == "log":
+            verb, fields = _verb_and_fields(rest, args.verb, args.field)
+            if not verb:
+                print("error: memory log needs a VERB, e.g. `memory log INGEST source=x`", file=sys.stderr)
+                return 1
+            line = mem.append_log(vault, verb, fields)
+            return emit({"line": line}, [line])
+
+        if action == "index":
+            result = mem.rebuild_index(vault, link_format=link_format, write=not args.check)
+            payload = {
+                "total": result.total,
+                "added": list(result.added),
+                "removed": list(result.removed),
+                "changed": result.changed,
+                "written": result.changed and not args.check,
+            }
+            lines = [
+                f"{result.total} page(s); "
+                + (f"+{len(result.added)} / -{len(result.removed)}" if result.changed else "no drift")
+            ]
+            lines += [f"  + {path}" for path in result.added]
+            lines += [f"  - {path}" for path in result.removed]
+            emit(payload, lines)
+            return 2 if (args.check and result.changed) else 0
+
+        if action == "hot":
+            result = mem.rebuild_hot(
+                vault,
+                write=not args.check,
+                takeaways=_memory_takeaways(args.takeaways),
+                link_format=link_format,
+                max_words=args.max_words,
+            )
+            payload = {
+                "words": result.words,
+                "max_words": args.max_words or mem.hot_max_words(),
+                "trimmed": result.trimmed,
+                "activity": result.activity,
+                "threads": result.threads,
+                "contradictions": result.contradictions,
+                "written": not args.check,
+            }
+            emit(payload, [
+                f"hot.md {'would be ' if args.check else ''}rebuilt: {result.words} words"
+                + (" (trimmed to fit)" if result.trimmed else ""),
+                f"  {result.activity} activity, {result.threads} thread(s),"
+                f" {result.contradictions} contradiction(s)",
+            ])
+            return 0
+
+        if action == "recap":
+            print(
+                mem.build_recap(
+                    vault,
+                    max_words=args.max_words or 400,
+                    min_confidence=args.min_confidence,
+                    project=args.project,
+                ),
+                end="",
+            )
+            return 0
+
+        if action == "sync":
+            # The post-write call: one lock held across log, index, and hot, so
+            # another writer cannot interleave between the three.
+            verb, fields = _verb_and_fields(rest, args.verb, args.field)
+            index = hot = None
+            skipped = ""
+            with mem.memory_lock(vault):
+                line = mem.append_log(vault, verb, fields, lock=False) if verb else ""
+                try:
+                    index = mem.rebuild_index(vault, link_format=link_format, lock=False)
+                    hot = mem.rebuild_hot(
+                        vault,
+                        lock=False,
+                        takeaways=_memory_takeaways(args.takeaways),
+                        link_format=link_format,
+                        max_words=args.max_words,
+                    )
+                except mem.MemoryError_ as exc:
+                    # An unmigrated vault must not fail the whole ingest: the
+                    # log line already landed and is append-only. Say so loudly
+                    # instead, so it is not silently skipped forever.
+                    if exc.code != "unmigrated":
+                        raise
+                    skipped = str(exc)
+            if skipped:
+                print(f"warning: index.md and hot.md not updated — {skipped}", file=sys.stderr)
+            payload = {
+                "log_line": line,
+                "skipped": skipped,
+                "index": None if index is None else {
+                    "total": index.total, "added": list(index.added), "removed": list(index.removed),
+                },
+                "hot": None if hot is None else {"words": hot.words, "trimmed": hot.trimmed},
+            }
+            lines = [line] if line else []
+            if index is not None and hot is not None:
+                lines.append(f"index: {index.total} page(s), +{len(index.added)} / -{len(index.removed)}")
+                lines.append(f"hot:   {hot.words} words" + (" (trimmed)" if hot.trimmed else ""))
+            else:
+                lines.append("index/hot: skipped (run `obsidian-wiki memory migrate`)")
+            return emit(payload, lines)
+
+        if action == "profile":
+            sub_action = rest[0] if rest else "list"
+            if sub_action == "list":
+                facts = mem.load_profile(vault)
+                return emit(
+                    {"facts": [f.__dict__ for f in facts]},
+                    [f"{f.key}: {f.value}  ({f.confidence:.2f}, {f.source}, {f.updated})" for f in facts]
+                    or ["no profile facts recorded"],
+                )
+            if sub_action == "set":
+                if len(rest) < 3:
+                    print("error: memory profile set KEY VALUE", file=sys.stderr)
+                    return 1
+                fact = mem.set_fact(
+                    vault, rest[1], " ".join(rest[2:]),
+                    confidence=args.confidence, source=args.source,
+                )
+                return emit({"fact": fact.__dict__}, [f"set {fact.key}: {fact.value} ({fact.confidence:.2f})"])
+            if sub_action == "forget":
+                if len(rest) < 2:
+                    print("error: memory profile forget KEY", file=sys.stderr)
+                    return 1
+                removed = mem.forget_fact(vault, rest[1])
+                emit({"removed": removed, "key": rest[1]},
+                     [f"forgot {rest[1]}" if removed else f"no such fact: {rest[1]}"])
+                return 0 if removed else 1
+            print(f"error: memory profile takes list|set|forget, got {sub_action!r}", file=sys.stderr)
+            return 1
+
+        if action == "todo":
+            sub_action = rest[0] if rest else "list"
+            if sub_action == "list":
+                todos = mem.load_todos(vault)
+                shown = todos if args.all else [t for t in todos if t.status == "open"]
+                return emit(
+                    {"todos": [dict(t.__dict__, stale=t.is_stale(days=args.stale_days)) for t in shown]},
+                    [
+                        f"[{t.status:7}] {t.id:4} {t.text}"
+                        + (f"  ({t.origin})" if t.origin else "")
+                        + ("  STALE" if t.is_stale(days=args.stale_days) else "")
+                        for t in shown
+                    ] or ["no todos recorded"],
+                )
+            if sub_action == "add":
+                if len(rest) < 2:
+                    print("error: memory todo add TEXT", file=sys.stderr)
+                    return 1
+                todo = mem.add_todo(vault, " ".join(rest[1:]), origin=args.origin or "")
+                return emit({"todo": todo.__dict__}, [f"{todo.id}: {todo.text}"])
+            if sub_action in ("done", "drop"):
+                if len(rest) < 2:
+                    print(f"error: memory todo {sub_action} ID", file=sys.stderr)
+                    return 1
+                status = "done" if sub_action == "done" else "dropped"
+                todo = mem.set_todo_status(vault, rest[1], status)
+                return emit({"todo": todo.__dict__}, [f"{todo.id} -> {todo.status}"])
+            if sub_action == "prune":
+                removed = mem.prune_todos(vault)
+                return emit({"pruned": removed}, [f"pruned {removed} closed item(s)"])
+            print(f"error: memory todo takes list|add|done|drop|prune, got {sub_action!r}", file=sys.stderr)
+            return 1
+
+        print(f"error: unknown memory action {action!r}", file=sys.stderr)
+        return 1
+    except mem.MemoryError_ as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_hooks(args: argparse.Namespace) -> int:
+    """Register, remove, or inspect the Claude Code session hooks.
+
+    Replaces the prose procedure in `wiki-setup` that asked the agent to
+    hand-merge JSON — and covered only the Stop hook, so a pip install never
+    got session-start memory injection.
+    """
+    from obsidian_wiki import hooks as hk
+
+    try:
+        if args.hooks_action == "install":
+            result = hk.install(only=args.only)
+            lines = [f"settings: {result['settings']}"]
+            lines += [f"  + registered {name}" for name in result["added"]]
+            lines += [f"  = already registered {name}" for name in result["already"]]
+            lines += [f"  ! not bundled: {name} (reinstall obsidian-wiki)" for name in result["missing"]]
+            reach = hk.reachability()
+            if not reach["reachable"]:
+                lines.append(f"  ! hooks would exit silently: {reach['hint']}")
+            payload = {**result, "reachability": reach}
+            rc = 1 if result["missing"] else 0
+        elif args.hooks_action == "uninstall":
+            result = hk.uninstall(only=args.only)
+            lines = [f"settings: {result['settings']}"]
+            lines += [f"  - removed {name}" for name in result["removed"]] or ["  nothing to remove"]
+            payload, rc = result, 0
+        else:
+            entries = hk.status()
+            reach = hk.reachability()
+            lines = []
+            for entry in entries:
+                healthy = entry.registered and entry.bundled and entry.executable
+                detail = ("registered" if entry.registered else "NOT registered")
+                if not entry.bundled:
+                    detail += ", script not bundled"
+                elif not entry.executable:
+                    detail += ", not executable"
+                lines.append(f"{'ok ' if healthy else '-- '}{entry.event:13} {entry.script:24} {detail}")
+            if reach["reachable"]:
+                lines.append("ok  reachable      " + (reach["console_script"] or "python3 -m obsidian_wiki.cli"))
+            else:
+                lines.append(f"--  NOT reachable  {reach['hint']}")
+            payload = {"hooks": [e.__dict__ for e in entries], "reachability": reach}
+            rc = 0 if all(e.registered for e in entries) and reach["reachable"] else 1
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps(payload, indent=2 if args.pretty else None))
+    else:
+        for line in lines:
+            print(line)
+    return rc
+
+
 def cmd_context_pack(args: argparse.Namespace) -> int:
     from obsidian_wiki.context_pack import ContextError, build_context_pack, render_markdown
 
@@ -2567,6 +3048,82 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ev.set_defaults(func=cmd_eval)
 
+    hk = sub.add_parser(
+        "hooks",
+        help="register the SessionStart (memory recap) and Stop (capture) hooks for Claude Code",
+    )
+    hk.add_argument("hooks_action", choices=["install", "uninstall", "status"], help="what to do")
+    hk.add_argument("--only", choices=["SessionStart", "Stop"], help="act on one hook only")
+    hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    hk.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    hk.set_defaults(func=cmd_hooks)
+
+    mm = sub.add_parser(
+        "memory",
+        help="maintain the memory surface: log, index, hot cache, owner profile, todos",
+        usage="obsidian-wiki memory <action> [ARGS ...] [options]",
+        description="Maintain the vault's memory: index.md, log.md, hot.md, and the _meta/ tables.",
+        epilog="""examples:
+  memory status                                  is the surface current?
+  memory sync INGEST source=x.pdf pages=3        log + index + hot, one lock
+  memory sync                                    reconcile after writing pages
+  memory recap --project myapp                   what a new session should know
+  memory profile set stack "Python, FastAPI"     a durable fact about the owner
+  memory todo add "Ship the parser"              a thread for the next session
+  memory todo done t1                            close it
+  memory migrate                                 adopt a vault with curated files
+  memory index --check                           CI gate; exit 2 on drift
+
+`sync` and `log` take a VERB then bare key=value pairs. Values with spaces
+need quoting: query="how do transformers work".""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    mm.add_argument(
+        "memory_action",
+        choices=["status", "log", "index", "hot", "recap", "sync", "migrate", "profile", "todo"],
+        help="what to do",
+    )
+    mm.add_argument(
+        "rest",
+        nargs="*",
+        metavar="ARGS",
+        help="sync/log: VERB then key=value pairs. profile: list|set KEY VALUE|forget KEY. "
+             "todo: list|add TEXT|done ID|drop ID|prune",
+    )
+    mm.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    mm.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    mm.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+
+    mm_write = mm.add_argument_group("sync / hot")
+    mm_write.add_argument(
+        "--takeaways",
+        help="replace the Key Takeaways section; `-` reads it from stdin",
+    )
+    mm_write.add_argument("--max-words", type=int, help="word cap for hot/recap (default: OBSIDIAN_HOT_MAX_WORDS or 500)")
+    mm_write.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")
+
+    mm_recap = mm.add_argument_group("recap")
+    mm_recap.add_argument("--project", help="scope to one project's threads and activity")
+    mm_recap.add_argument("--min-confidence", type=float, default=0.0, help="drop profile facts below this")
+
+    mm_profile = mm.add_argument_group("profile set")
+    mm_profile.add_argument("--confidence", type=float, default=0.6, help="how sure you are, 0..1 (default: 0.6)")
+    mm_profile.add_argument("--source", default="conversation", help="where the fact came from")
+
+    mm_todo = mm.add_argument_group("todo")
+    mm_todo.add_argument("--origin", help="originating page for `todo add`")
+    mm_todo.add_argument("--stale-days", type=int, default=30, help="staleness threshold (default: 30)")
+    mm_todo.add_argument("--all", action="store_true", help="include closed items in `todo list`")
+
+    mm_other = mm.add_argument_group("migrate / compatibility")
+    mm_other.add_argument("--apply", action="store_true", help="perform the migration (default is a preview)")
+    mm_other.add_argument("--verb", help="older form of the positional VERB")
+    mm_other.add_argument(
+        "--field", action="append", metavar="KEY=VALUE",
+        help="older form of a positional key=value; repeatable",
+    )
+    mm.set_defaults(func=cmd_memory)
+
     cp = sub.add_parser(
         "context-pack",
         aliases=["context"],
@@ -2620,6 +3177,11 @@ def _add_setup_args(sp: argparse.ArgumentParser) -> None:
         help="copy skill files instead of symlinking to the installed package",
     )
     sp.add_argument(
+        "--no-hooks",
+        action="store_true",
+        help="skip registering the SessionStart/Stop hooks in ~/.claude/settings.json",
+    )
+    sp.add_argument(
         "--remote",
         metavar="URL",
         help="GitHub (or any git host) repo URL for vault sync — skips the interactive "
@@ -2652,7 +3214,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     # Warn about stale installs on every command except `setup` (which fixes it)
     # and `info` (which calls _check_stale itself with richer output).
-    if getattr(args, "command", None) not in ("setup", "info", "doctor", None):
+    # `memory` runs from the SessionStart hook and from every write skill, and
+    # `hooks` is what fixes the thing the nag is about; nagging there is noise.
+    if getattr(args, "command", None) not in ("setup", "info", "doctor", "memory", "hooks", None):
         _check_stale()
     try:
         return args.func(args)

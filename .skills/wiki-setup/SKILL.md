@@ -328,7 +328,8 @@ inconclusive sessions are skipped automatically.
    end of any session where you write files or run ≥ 4 shell commands."
 
 **To uninstall later:** remove the hook entry from `~/.claude/settings.json` or set
-`HIVEMIND_CAPTURE=false` in your shell to skip capture for a single session.
+`WIKI_STOP_CAPTURE=false` in your shell to skip capture for a single session
+(`HIVEMIND_CAPTURE=false` is still honoured).
 
 ## Optional: Configure GitHub Sync
 

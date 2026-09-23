@@ -33,6 +33,27 @@ obsidian-wiki doctor --strict          # exit non-zero on warnings too
 
 Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
 
+### Session hooks
+
+Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture.
+
+**`setup` registers both for you.** Pass `--no-hooks` to skip. The commands below are for changing your mind later, or for checking what is wired up.
+
+| Command | What it does |
+|---|---|
+| `hooks install` | Register both hooks; idempotent, appends without touching your other hooks |
+| `hooks uninstall` | Remove our entries and nothing else |
+| `hooks status` | Registered? Bundled? Executable? Can the hook reach the package? Exit 1 if not |
+
+```bash
+obsidian-wiki hooks status     # what is registered, and can the hooks reach the package?
+obsidian-wiki hooks install    # if you ran setup --no-hooks and changed your mind
+```
+
+`hooks status` is the answer to "why is nothing being injected?". Both hooks exit silently on every failure so they can never break a session, which also means a missing registration or an unreachable package is invisible from inside one. `doctor` runs the same check. Set `WIKI_RECAP_DEBUG=1` to have the recap hook explain each silent exit on stderr.
+
+A malformed `settings.json` is refused rather than overwritten.
+
 ### Upgrading the framework
 
 `doctor` never checks for new releases. To upgrade, use your installer
@@ -259,6 +280,103 @@ obsidian-wiki sessions-name --from names.json      # or - for stdin
 ```
 
 `sessions-name` takes a JSON array of `{"id": N, "name": "...", "summary": "..."}`. The `/session-brain` skill generates this for you.
+
+## Memory surface
+
+`index.md`, `log.md`, `hot.md`, and the two `_meta/` tables are the vault's memory. They used to be maintained by prose: fifteen-odd skills each restated "append to the log, add the new pages to the index, rewrite the hot cache" in their own words, rewrote the files wholesale, and took no lock. Two skills running in parallel silently dropped one of the two updates, and nothing enforced the documented ~500-word cap on the hot cache.
+
+These commands are that work as one code path, serialised by the same advisory lock the manifest uses and written atomically.
+
+For what the surface *is* — the generated-vs-yours split, the session hooks, the design decisions — see **[Memory Surface](memory.md)**. This section is the command reference.
+
+![The memory commands in a terminal](images/memory-cli-session.png)
+
+| Command | What it does |
+|---|---|
+| `memory status` | Index drift, log size, hot-cache budget, profile and todo counts |
+| `memory sync` | Log, index, and hot cache as one locked update — the post-write call |
+| `memory log VERB key=value` | Append one parseable operation line to `log.md` |
+| `memory index` | Reconcile `index.md` against the pages actually on disk |
+| `memory hot` | Regenerate `hot.md` within its word cap |
+| `memory recap` | Print profile, open threads, and recent activity as one injectable block |
+| `memory profile list\|set\|forget` | Durable facts about the vault owner |
+| `memory todo list\|add\|done\|drop\|prune` | Open threads carried between sessions |
+| `memory migrate` | Adopt a vault whose memory files predate this writer |
+
+```bash
+# After an ingest: one lock held across all three writes.
+obsidian-wiki memory sync INGEST source=papers/attention.pdf pages_created=3
+
+# Individually, when that is all you need.
+obsidian-wiki memory log LINT issues_found=2 orphans=1
+obsidian-wiki memory index
+obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric."
+
+obsidian-wiki memory status --json
+```
+
+### What is generated and what is yours
+
+`index.md` is **reconciled**, not overwritten. One section per category is regenerated from disk, and the preamble plus any section whose heading is not a category is preserved verbatim — a hand-written "Reading queue" section survives, a stale entry for a deleted page does not.
+
+`hot.md` is generated except for `## Key Takeaways`, which is the one slot a model writes on purpose. It carries across every rebuild unless `--takeaways` replaces it; `--takeaways -` reads the prose from stdin.
+
+The word cap is enforced. It defaults to 500, overridable with `OBSIDIAN_HOT_MAX_WORDS`, and counts content only — frontmatter and the generated-file note do not spend the budget. Over budget, sections are dropped in increasing order of value: activity lines first, then contradictions, then threads, and the takeaways are truncated last.
+
+`--check` reports drift and exits **2** without writing, so a CI job can fail on a stale index without a bot committing to the vault. Exit 1 stays reserved for bad input, so a caller can tell the two apart.
+
+![memory index --check as a CI gate](images/memory-check-gate.png)
+
+### Adopting an existing vault
+
+A vault created before this writer has hand-curated memory files: a custom `index.md` layout, a narrative `hot.md`. Regenerating those silently would reorder a document someone built on purpose and discard prose the generator cannot reconstruct.
+
+So it refuses. `index.md` and `hot.md` are only written when they carry a `generated_by` marker, and `memory sync` on an unmigrated vault writes the log line (append-only, always safe), skips the other two, and says so on stderr. A fresh vault from `setup` is born marked, so this only affects upgrades.
+
+```bash
+obsidian-wiki memory migrate            # preview — changes nothing
+obsidian-wiki memory migrate --apply    # back up, then adopt
+```
+
+![The migration preview](images/memory-migrate.png)
+
+The preview names every section it will keep, whether your Key Takeaways carry across, and which threads it can rescue. `--apply` writes a timestamped backup to `_archives/pre-memory-migration-<ts>/` first.
+
+Two things worth knowing:
+
+- **Your sections stay on top.** The generated catalog is appended *below* whatever you already had, in its original order.
+- **Narrative threads become real todos.** A hand-written `## Active Threads` list is parsed into the todo index before the rebuild, so the content survives as live entries instead of being replaced by "no open threads". Only when the todo table is empty — existing todos are never overwritten.
+
+`doctor` reports migration state, so an upgraded install surfaces it without anyone going looking.
+
+### Owner profile and todo index
+
+Two tables under `_meta/`, both created empty by `setup`:
+
+```bash
+obsidian-wiki memory profile set stack "Python, FastAPI, Postgres" --confidence 0.85
+obsidian-wiki memory todo add "Persist the retrieval index" --origin projects/obsidian-wiki.md
+obsidian-wiki memory todo done t1
+```
+
+They are markdown tables so Obsidian renders them and a human can edit them in place; the parser round-trips hand edits, including values containing a literal `|`. Confidence is the writer's own calibration, not a measurement. Re-adding an open thread with the same text touches it rather than duplicating it.
+
+Staleness is **reported, never enforced**. An open item untouched for 30 days is flagged by `memory todo list` and in `memory recap`; nothing closes it on your behalf.
+
+### Session injection
+
+`memory recap` is what the SessionStart hook (`wiki-session-recap.sh`) feeds into a fresh session, so the model starts with the owner profile and the open threads instead of having to remember to read `hot.md`.
+
+`--project <name>` scopes threads and activity to one project; the hook derives it from the git repo name. Facts about the owner are global and always shown. A filter that matches nothing falls back to the unscoped view rather than implying there is no history.
+
+The hook never breaks session startup: a missing vault, a missing install, an empty vault, or a slow filesystem all exit 0 with no output. Tune or disable it per session:
+
+| Variable | Default | Effect |
+|---|---|---|
+| `WIKI_SESSION_RECAP` | *(on)* | `false` skips injection for this session |
+| `WIKI_RECAP_MAX_WORDS` | `350` | Word budget for the injected block |
+| `WIKI_RECAP_MIN_CONFIDENCE` | `0.0` | Drop profile facts below this confidence |
+| `WIKI_RECAP_TIMEOUT` | `10` | Seconds before the recap is abandoned |
 
 ## Staged writes
 

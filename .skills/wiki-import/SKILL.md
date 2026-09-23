@@ -230,29 +230,20 @@ If `.manifest.json` doesn't exist, create it with the standard structure:
 }
 ```
 
-### `index.md`
+### `index.md`, `log.md`, and `hot.md`
 
-For each **created** or **merged** page:
-- Add or update the entry under its category section using the format:
-  `- [[<id>]] — <summary or title> ( #tag1 #tag2)`
-  (Note: space before `(` — `description ( #tag)` not `description(#tag)`)
+One locked call. The index is reconciled from the pages now on disk, so every created or merged page lands under its category with the documented `( #tag)` spacing:
 
-Keep categories sorted alphabetically. Create the category section if it doesn't exist.
-
-### `log.md`
-
-Append one line:
-```
-- [<ISO timestamp>] IMPORT source="<graph.json path>" pages_created=<N> pages_skipped=<K> pages_merged=<M>
+```bash
+obsidian-wiki memory sync IMPORT \
+  source="<bundle path>" \
+  pages_created=<N> pages_skipped=<K> pages_merged=<M> \
+  --takeaways "Imported <bundle>: <what it adds to the picture>"
 ```
 
-### `hot.md`
+Omit `--takeaways` if the import does not shift the overall picture; the previous takeaways carry across. Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
 
-Rewrite the **Recent Activity** section to include this import as the latest entry:
-```
-- [<timestamp>] IMPORT from <graph.json path> — created X, merged Z pages
-```
-Update the `updated:` frontmatter timestamp. Leave other hot.md sections (Active Threads, Key Takeaways) intact unless they reference pages that were just created — in which case add brief mentions.
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Step 6: Print Summary
 

@@ -38,11 +38,21 @@ Compare each source in `.manifest.json` against its file's modification time. Cl
 
 **Step 2: Index refresh**
 
-Read `$OBSIDIAN_VAULT_PATH/index.md`. If any pages in the vault are missing from the index (or vice versa), update the index. Use `find $OBSIDIAN_VAULT_PATH -name "*.md" -not -path "*/_*"` to enumerate vault pages, then reconcile against the index.
+```bash
+obsidian-wiki memory index --vault "$OBSIDIAN_VAULT_PATH"
+```
+
+This reconciles `index.md` against the pages on disk under the memory lock — missing entries added, entries for deleted pages removed, the owner's own sections left untouched. Note `added`/`removed` from the output for the log line in Step 6. Do not enumerate pages with `find` and edit the index by hand.
 
 **Step 3: hot.md update**
 
-Read `hot.md`. If it's >48h old based on its `updated:` frontmatter, regenerate it: read the 10 most recently modified wiki pages and write a fresh ~500-word semantic snapshot of what the wiki covers. This keeps the next session's context warm without a full vault crawl.
+```bash
+obsidian-wiki memory hot --vault "$OBSIDIAN_VAULT_PATH"
+```
+
+Recent Activity, Active Threads, and Flagged Contradictions are regenerated from the log, the todo index, and page frontmatter; `## Key Takeaways` carries across unchanged. If the takeaways are older than ~48h *and* the vault has changed materially since, refresh them: read the 10 most recently updated pages and pass a fresh ~500-word snapshot with `--takeaways -` on stdin. Otherwise leave them — a rebuild without new takeaways is cheap and correct.
+
+If either command reports the vault is **unmigrated**, stop and tell the user to run `obsidian-wiki memory migrate` (preview) then `--apply`; do not fall back to hand-editing.
 
 **Step 4: Write state**
 
@@ -101,7 +111,7 @@ Apply any FAILs before logging.
 
 Append to `$OBSIDIAN_VAULT_PATH/log.md`:
 ```
-- [TIMESTAMP] DAILY-UPDATE fresh=N stale=N missing=N index_added=N hot_refreshed=true|false lint=ran|skipped
+obsidian-wiki memory log DAILY-UPDATE fresh=<N> stale=<N> missing=<N> index_added=<N> hot_refreshed=<true|false> lint=<ran|skipped>
 ```
 
 **Step 7: Report to user**

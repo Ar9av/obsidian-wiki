@@ -57,8 +57,33 @@ The deterministic `lint`, `trust-record`, and `trust-check` commands use the sam
 | `OBSIDIAN_LINK_FORMAT` | `wikilink` → `[[concepts/foo]]`, or `markdown` → `` [text](path.md) ``. Affects future writes only — existing content is never migrated | `wikilink` |
 | `OBSIDIAN_RAW_DIR` | Staging directory inside the vault for unprocessed drafts | `_raw` |
 | `LINT_SCHEDULE` | Health-check frequency: `daily` \| `weekly` \| `manual` | `weekly` |
+| `OBSIDIAN_HOT_MAX_WORDS` | Enforced word cap for the generated `hot.md` (content only) | `500` |
 
 Local git repo clones work in `OBSIDIAN_SOURCES_DIR` (public or private, any host). Clone locally, then add the path. Repo directories are auto-detected via a `.git` folder and enumerated with `git ls-files`, so whatever the repo's own `.gitignore` excludes — `node_modules`, build output, venvs, secrets — is skipped automatically rather than relying on a hardcoded skip-list.
+
+## Session hooks
+
+![Session lifecycle](images/memory-session-lifecycle.png)
+
+Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks install`; check them with `hooks status` or `doctor`. `wiki-session-recap.sh` runs at SessionStart and injects the owner profile, open threads, and recent vault activity. `wiki-stop-capture.sh` runs at Stop and nudges a quick capture when the session changed anything.
+
+| Variable | What it does | Default |
+|---|---|---|
+| `WIKI_SESSION_RECAP` | `false` skips recap injection for this session | *(on)* |
+| `WIKI_RECAP_MAX_WORDS` | Word budget for the injected block | `350` |
+| `WIKI_RECAP_MIN_CONFIDENCE` | Drop profile facts below this confidence | `0.0` |
+| `WIKI_RECAP_TIMEOUT` | Seconds before the recap is abandoned | `10` |
+| `WIKI_RECAP_PROJECT` | Override the project the recap is scoped to (default: git repo name) | *(auto)* |
+| `WIKI_RECAP_DEBUG` | `1` makes the recap hook explain each silent exit on stderr | *(off)* |
+| `WIKI_STOP_CAPTURE` | `false` skips the end-of-session capture nudge | *(on)* |
+| `WIKI_STOP_REARM_SECONDS` | Elapsed time before the capture nudge can fire again | `21600` |
+| `WIKI_STOP_REARM_EDITS` | New edits required before the nudge can fire again | `10` |
+
+`HIVEMIND_CAPTURE=false` is the older spelling of `WIKI_STOP_CAPTURE=false` and is still honoured.
+
+Neither hook can fail a session. Every error path — no vault configured, package not importable, vault directory missing, filesystem slow — exits 0 without output.
+
+See [Memory Surface](memory.md#session-lifecycle) for what the recap contains and how it is framed.
 
 ## History ingest
 

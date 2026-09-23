@@ -408,13 +408,24 @@ Also update the `projects` section of the manifest:
 
 ### Create journal entry + update special files
 
-Update `index.md` and `log.md` per the standard process:
+Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
-```
-- [TIMESTAMP] CLAUDE_HISTORY_INGEST projects=N conversations=M desktop_sessions=D audit_logs=A pages_updated=X pages_created=Y mode=append|full
+```bash
+obsidian-wiki memory sync CLAUDE_HISTORY_INGEST \
+  projects=<projects> conversations=<conversations> \
+  desktop_sessions=<desktop_sessions> audit_logs=<audit_logs> \
+  pages_updated=<pages_updated> pages_created=<pages_created> \
+  mode=<mode> \
+  --takeaways "Ingested 5 Claude conversations across 2 projects; surfaced patterns in API design and testing strategy."
 ```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary — e.g. "Ingested 5 Claude conversations across 2 projects; surfaced patterns in API design and testing strategy." Keep the last 3 operations. Update **Active Threads** if any ongoing project is now better understood. **Update the `updated:` field in the frontmatter** to the current timestamp — this is easy to forget; the body edit and the frontmatter bump must both happen.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update. `--takeaways` is the one-line conceptual summary that used to go in Recent Activity;
+omit it to leave the previous takeaways untouched.
+
+If an ongoing project is now better understood, record the thread so the next
+session picks it up: `obsidian-wiki memory todo add "<thread>" --origin projects/<name>.md`.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Privacy
 

@@ -193,13 +193,19 @@ Add/update a top-level project/session summary block:
 
 ### Update special files
 
-Update `index.md` and `log.md`:
+Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
-```
-- [TIMESTAMP] CODEX_HISTORY_INGEST sessions=N pages_updated=X pages_created=Y mode=append|full
+```bash
+obsidian-wiki memory sync CODEX_HISTORY_INGEST \
+  sessions=<sessions> pages_updated=<pages_updated> \
+  pages_created=<pages_created> mode=<mode> \
+  --takeaways "Ingested 12 Codex sessions; surfaced recurring patterns in CLI tooling and shell scripting."
 ```
 
-**`hot.md`** — Read `$OBSIDIAN_VAULT_PATH/hot.md` (create from the template in `wiki-ingest` if missing). Update **Recent Activity** with a one-line summary — e.g. "Ingested 12 Codex sessions; surfaced recurring patterns in CLI tooling and shell scripting." Keep the last 3 operations. Update `updated` timestamp.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update. `--takeaways` is the one-line conceptual summary that used to go in Recent Activity;
+omit it to leave the previous takeaways untouched.
+
+See `.skills/llm-wiki/references/MEMORY.md` for the full procedure.
 
 ## Privacy and Compliance
 

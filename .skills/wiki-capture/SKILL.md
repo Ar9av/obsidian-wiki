@@ -272,16 +272,69 @@ Body structure by type:
 
 Every note must link to at least 2 existing wiki pages. Search `index.md` before writing. If fewer than 2 related pages exist, create minimal stubs for the most important concepts referenced.
 
+## Step 5b: Update the Owner Profile and Todo Index
+
+The memory surface is only as good as what gets written into it. This is the step
+that keeps it alive — without it the profile stays empty and the session recap has
+nothing to inject.
+
+**Durable facts about the person.** If the conversation revealed something stable
+about how the user works — their stack, their conventions, their constraints,
+their timezone — record it:
+
+```bash
+obsidian-wiki memory profile set <key> "<value>" --confidence 0.85 --source "session:<date>"
+```
+
+Apply the same KEEP/SKIP discipline as Step 1, and one extra rule that matters more:
+
+- **Only what the user actually told you**, directly or by clear demonstration.
+  Never infer a durable fact about a person from a document that was ingested —
+  that is the document's content and belongs on a page, not in their profile.
+- **Stable, not incidental.** "Uses Postgres" is a fact. "Ran a migration today"
+  is an event; that belongs in the log.
+- **Calibrate the confidence.** Stated outright is ~0.9. Demonstrated repeatedly
+  is ~0.75. Inferred from one session's behaviour is ~0.5 — and if you are below
+  0.5, do not write it at all.
+- **Correct, don't duplicate.** `profile set` replaces an existing key, so
+  updating a changed fact is the same command.
+
+**Open threads.** If the conversation left work unfinished, record it so the next
+session picks it up:
+
+```bash
+obsidian-wiki memory todo add "<the open thread>" --origin "<page or project>"
+```
+
+Re-adding an open thread with the same text touches it rather than duplicating,
+so this is safe to call when you are unsure whether it already exists. If the
+conversation *closed* a thread that is already listed, close it:
+
+```bash
+obsidian-wiki memory todo list --vault "$OBSIDIAN_VAULT_PATH"
+obsidian-wiki memory todo done <id>
+```
+
+Never close a thread the user did not actually finish. Staleness is reported by
+the tooling; it is not your job to tidy the list.
+
+**In quick mode**, do this step but skip Step 6 — profile and todo writes are
+cheap, locked, and are the whole point of capturing.
+
 ## Step 6: Update Tracking Files
 
-**`index.md`** — Add the new page under its category section.
 
-**`log.md`** — Append:
-```
-- [TIMESTAMP] CAPTURE type=<type> page="<path>" title="<title>"
+One locked call updates all three:
+
+```bash
+obsidian-wiki memory sync CAPTURE \
+  type=<type> page="<path>" title="<title>" \
+  --takeaways "<what this capture changes about the picture, if anything>"
 ```
 
-**`hot.md`** — Update **Recent Activity** with what was just captured. Update **Key Takeaways** if the note introduced something worth flagging. Update `updated` timestamp.
+Never hand-edit `index.md`, `log.md`, or `hot.md` — see
+`.skills/llm-wiki/references/MEMORY.md`. Omit `--takeaways` when the capture
+does not shift the overall picture; the previous takeaways carry across.
 
 ## Step 7: Confirm to User
 
