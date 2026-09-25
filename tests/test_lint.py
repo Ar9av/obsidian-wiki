@@ -322,6 +322,35 @@ def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
     assert "concepts/alpha.md" in data["findings"]["missing_summaries"]
 
 
+def test_lint_cli_strict_ignores_snapshot_mismatch_alone(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+    _write_archive_and_manifest(vault)
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    proc = _run(home, "lint", "--json", "--strict")
+    data = json.loads(proc.stdout)
+    assert data["status"] == "warn"
+    assert data["findings"]["snapshot_mismatch"]
+    assert proc.returncode == 0
+
+
+def test_lint_cli_strict_still_fails_other_warnings(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", summary=None)
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger)
+    proc = _run(home, "lint", "--json", "--strict")
+    assert proc.returncode == 1
+    assert json.loads(proc.stdout)["findings"]["missing_summaries"]
+
+
 def test_lint_vault_legacy_pages_without_trust_schema_warn_by_default(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md", include_trust_fields=False)

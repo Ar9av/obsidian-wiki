@@ -1869,7 +1869,13 @@ def cmd_lint(args: argparse.Namespace) -> int:
             print(json.dumps(report))
     else:
         _print_lint(report)
-    if report["status"] == "fail" or (args.strict and report["status"] == "warn"):
+    findings = report["findings"]
+    strict_relevant = any(
+        items
+        for name, items in findings.items()
+        if name != "snapshot_mismatch" and items
+    )
+    if report["status"] == "fail" or (args.strict and strict_relevant):
         return 1
     return 0
 
