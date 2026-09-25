@@ -31,6 +31,10 @@ Pass the effective schema to deterministic checks explicitly. For example, add e
 
 Schema precedence is CLI flags > resolved environment/config values > framework defaults; lifecycle and relationship extensions remain additive. Strip every override before use. An explicitly configured empty or whitespace-only value—and any empty comma-separated list entry—fails closed; never treat it as a valid lifecycle, relationship type, required field, or authority locator. Remove the variable instead when defaults are intended.
 
+When `obsidian-wiki` is on PATH, prefer `obsidian-wiki lint "$OBSIDIAN_VAULT_PATH" --json` (with the same schema override flags as above) and fold the JSON `findings` into the health report. If the CLI is unavailable, keep the grep-based checks below — do not require the binary.
+
+If the JSON report includes `findings.snapshot_mismatch`, list those pages in the report. Missing or drifted `snapshots:` is **not** missing required frontmatter (section 3 still covers only title, category, tags, sources, created, updated). Do not rewrite `sources:` to fix snapshot drift. `wiki-lint --consolidate` does not apply fixes for this finding.
+
 ## Lint Checks
 
 Run these checks in order. Report findings as you go.
