@@ -95,3 +95,52 @@ def resolve_source_key(
     if (vault / candidate).is_file() and "_archived" in candidate.parts:
         return candidate.as_posix()
     return None
+
+
+def parse_snapshots_field(raw: str) -> list[str]:
+    if not raw.strip():
+        return []
+    lines = raw.splitlines()
+    inline = lines[0].strip()
+    entries: list[str] = []
+    if inline.startswith("["):
+        entries.extend(inline.strip("[]").split(","))
+    elif inline:
+        entries.append(inline)
+    entries.extend(
+        line.strip()[1:] for line in lines[1:] if line.strip().startswith("-")
+    )
+    result: list[str] = []
+    seen: set[str] = set()
+    for entry in entries:
+        value = unwrap_snapshot_value(entry)
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        result.append(value)
+    return result
+
+
+def expected_snapshots_for_page(
+    vault: Path,
+    page: str,
+    sources: Any,
+    *,
+    inverted: dict[str, list[str]] | None = None,
+    url_index: dict[str, list[str]] | None = None,
+) -> list[str]:
+    mapping = inverted if inverted is not None else invert_pages(sources)
+    keys = mapping.get(page) or []
+    need_urls = any(k.startswith("url:") for k in keys)
+    index = url_index
+    if index is None and need_urls:
+        index = clip_url_index(vault)
+    expected: list[str] = []
+    seen: set[str] = set()
+    for key in keys:
+        resolved = resolve_source_key(vault, key, url_index=index)
+        if not resolved or resolved in seen:
+            continue
+        seen.add(resolved)
+        expected.append(resolved)
+    return expected

@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from obsidian_wiki.provenance import invert_pages, resolve_source_key, unwrap_snapshot_value
+from obsidian_wiki.provenance import (
+    expected_snapshots_for_page,
+    invert_pages,
+    parse_snapshots_field,
+    resolve_source_key,
+    unwrap_snapshot_value,
+)
 
 
 def test_invert_unions_pages_produced_and_pages_created() -> None:
@@ -70,3 +76,25 @@ def test_resolve_agent_key_is_none(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     vault.mkdir()
     assert resolve_source_key(vault, "agent:claude/abc") is None
+
+
+def test_expected_snapshots_skips_unresolvable_keys(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    (vault / "_raw" / "_archived").mkdir(parents=True)
+    (vault / "_raw" / "_archived" / "a.md").write_text("x\n", encoding="utf-8")
+    sources = {
+        "_raw/_archived/a.md": {"pages_produced": ["concepts/foo.md"]},
+        "url:https://no-clip.example/": {"pages_produced": ["concepts/foo.md"]},
+        "agent:claude/abc": {"pages_produced": ["concepts/foo.md"]},
+    }
+    assert expected_snapshots_for_page(vault, "concepts/foo.md", sources) == [
+        "_raw/_archived/a.md"
+    ]
+
+
+def test_parse_snapshots_block_list() -> None:
+    raw = "\n  - [[_raw/_archived/a.md]]\n  - _raw/_archived/b.md\n"
+    assert parse_snapshots_field(raw) == [
+        "_raw/_archived/a.md",
+        "_raw/_archived/b.md",
+    ]
