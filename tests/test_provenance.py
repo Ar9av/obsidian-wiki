@@ -98,3 +98,15 @@ def test_parse_snapshots_block_list() -> None:
         "_raw/_archived/a.md",
         "_raw/_archived/b.md",
     ]
+
+
+def test_invert_ten_thousand_keys() -> None:
+    sources = {
+        f"_raw/_archived/doc-{i}.md": {
+            "pages_produced": [f"concepts/p{i % 50}.md"]
+        }
+        for i in range(10_000)
+    }
+    idx = invert_pages(sources)
+    assert len(idx) == 50
+    assert len(idx["concepts/p0.md"]) == 200
