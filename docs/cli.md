@@ -65,7 +65,7 @@ then re-run `obsidian-wiki setup`.
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, `snapshot_mismatch` (a warning when optional `snapshots:` does not match the ledger invert — the page is reported, never rewritten, and `--strict` does not promote it), and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
 | `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash
@@ -101,6 +101,20 @@ while titles differ (`"Vector Search"` and `"vector-search"` slug to the same st
 
 The check warns. A vault carrying a collision moves from `pass` to `warn`, which leaves
 `obsidian-wiki lint` at exit 0 and takes `obsidian-wiki lint --strict` to exit 1.
+
+### Snapshot provenance (`snapshots:`)
+
+`sources:` names the upstream inputs a page was distilled from — URLs, repo paths, agent logs,
+portable file keys. Optional `snapshots:` is separate: when present, it lists the archived
+files under `_raw/_archived/` (vault-relative) that the manifest says this page came from.
+
+Lint inverts `.manifest.json` — unioning each source's `pages_produced` and `pages_created`,
+resolving keys to those archive paths — and compares the set to `snapshots:` on the page.
+Values written as `"[[wikilinks]]"` are unwrapped before comparison. When the invert is
+non-empty and the field is missing or differs, `snapshot_mismatch` reports the page with
+expected vs actual path lists. It warns only; nothing rewrites frontmatter, and
+`obsidian-wiki lint --strict` does not promote this finding to exit 1. There is no
+`--apply` flag for it in this cut.
 
 ### Lifecycle transition checking
 
