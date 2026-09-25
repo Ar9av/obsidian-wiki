@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from obsidian_wiki.provenance import invert_pages, unwrap_snapshot_value
+from obsidian_wiki.provenance import invert_pages, resolve_source_key, unwrap_snapshot_value
 
 
 def test_invert_unions_pages_produced_and_pages_created() -> None:
@@ -37,3 +37,36 @@ def test_unwrap_wikilink_and_quotes() -> None:
         "_raw/_archived/Old English.md"
     )
     assert unwrap_snapshot_value('"_raw/_archived/a.md"') == "_raw/_archived/a.md"
+
+
+def test_resolve_stale_raw_to_archived(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    archived = vault / "_raw" / "_archived" / "notes.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("# notes\n", encoding="utf-8")
+    assert resolve_source_key(vault, "_raw/notes.md") == "_raw/_archived/notes.md"
+
+
+def test_resolve_url_unique_clip(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    clip = vault / "_raw" / "_archived" / "clip.md"
+    clip.parent.mkdir(parents=True)
+    clip.write_text("---\nurl: https://example.com/x\n---\n", encoding="utf-8")
+    assert resolve_source_key(vault, "url:https://example.com/x") == (
+        "_raw/_archived/clip.md"
+    )
+
+
+def test_resolve_url_ambiguous_returns_none(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    arch = vault / "_raw" / "_archived"
+    arch.mkdir(parents=True)
+    (arch / "a.md").write_text("---\nurl: https://dup.example/\n---\n", encoding="utf-8")
+    (arch / "b.md").write_text("---\nurl: https://dup.example/\n---\n", encoding="utf-8")
+    assert resolve_source_key(vault, "url:https://dup.example/") is None
+
+
+def test_resolve_agent_key_is_none(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    assert resolve_source_key(vault, "agent:claude/abc") is None
