@@ -227,8 +227,16 @@ Things that are unresolved or need more sources.
 
 ## Sources
 
-- [[references/attention-is-all-you-need]] — Original paper
+- [[_raw/_archived/example-clip.md]] — snapshot this page was distilled from
 ```
+
+**Sources section (required, last body section).** Every wiki page ends with `## Sources`. Entries must be clickable in Obsidian:
+
+- **Local snapshot** (raw ingest, dropped PDFs/images, Web Clipper files, anything that landed in `_raw/` and was archived): `[[_raw/_archived/<filename>]]`. YAML `sources:` uses the same vault-relative path. Do not link the webpage recorded in clipping frontmatter — that URL is mutable origin metadata.
+- **Fetched URL** (`/ingest-url` with no saved snapshot): a markdown link to the canonical URL, and YAML `sources:` as `url:<canonical-url>`.
+- Do not mix those up. A clip of a page is not an ingest-from-URL.
+
+Related wiki pages stay in **Related** / `relationships:`, not in Sources.
 
 **Parser-safe scalars.** Write free-text frontmatter values — at minimum `title` and `summary` — with folded scalar syntax (`>-`) as shown above: a bare scalar containing `: ` (colon + space), `#`, or quotes breaks YAML parsing, and Obsidian then reports "Invalid properties" and hides the frontmatter. Keep the value indented on the line(s) following `title: >-` / `summary: >-`.
 
@@ -292,7 +300,8 @@ Typed `[[wikilinks]]` to neighbouring work.
 
 ## Sources
 
-- Clickable canonical link, e.g. <https://arxiv.org/abs/XXXX.XXXXX>
+- [[_raw/_archived/paper.pdf]] — snapshot distilled (if a local PDF/clip was ingested)
+- <https://arxiv.org/abs/XXXX.XXXXX> — only if this ingest fetched the URL and there is no local snapshot
 ````
 
 A Mermaid diagram reconstructed from the paper's prose is a synthesis, not a transcription — treat it as `^[inferred]` when the interpretation is non-trivial.
