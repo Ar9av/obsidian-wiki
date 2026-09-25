@@ -8,8 +8,15 @@ from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
+from obsidian_wiki.cache import _iter_entries, _load_manifest
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
+from obsidian_wiki.provenance import (
+    clip_url_index,
+    expected_snapshots_for_page,
+    invert_pages,
+    parse_snapshots_field,
+)
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 from obsidian_wiki.vault import iter_md, split_frontmatter
 from obsidian_wiki.temporal import (
@@ -259,6 +266,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "links": links,
         "relationships": _parse_relationships(frontmatter),
         "absolute_sources": _absolute_source_entries(frontmatter),
+        "snapshots": parse_snapshots_field(_frontmatter_field_block(frontmatter, "snapshots")),
         "values": values,
     }
 
@@ -378,6 +386,36 @@ def lint_vault(
         if outgoing == 0 and incoming.get(page["slug"], 0) == 0:
             orphan_pages.append(page["path"])
 
+    manifest_sources = _load_manifest(vault)
+    inverted = invert_pages(manifest_sources)
+    need_urls = any(
+        (key or "").startswith("url:") for key, _ in _iter_entries(manifest_sources)
+    )
+    url_index = clip_url_index(vault) if need_urls else None
+    snapshot_mismatch = []
+    for page in pages:
+        if page["slug"] in RESERVED_PAGE_STEMS:
+            continue
+        expected = expected_snapshots_for_page(
+            vault,
+            page["path"],
+            manifest_sources,
+            inverted=inverted,
+            url_index=url_index,
+        )
+        if not expected:
+            continue
+        actual = page["snapshots"]
+        if set(expected) != set(actual):
+            snapshot_mismatch.append(
+                {
+                    "page": page["path"],
+                    "expected": sorted(expected),
+                    "actual": sorted(actual),
+                }
+            )
+    snapshot_mismatch.sort(key=lambda item: item["page"])
+
     typed_relationship_issues: list[dict[str, Any]] = []
     for page in pages:
         for index, relationship in enumerate(page["relationships"]):
@@ -493,6 +531,7 @@ def lint_vault(
         "duplicate_stems": duplicate_stems,
         "missing_summaries": sorted(missing_summaries),
         "machine_path_sources": machine_path_sources,
+        "snapshot_mismatch": snapshot_mismatch,
         "orphan_pages": sorted(orphan_pages),
         "typed_relationship_issues": typed_relationship_issues,
         # Sorted by page: these findings get diffed between CI runs.
@@ -549,6 +588,7 @@ def lint_vault(
                 "duplicate_stems",
                 "missing_summaries",
                 "machine_path_sources",
+                "snapshot_mismatch",
                 "orphan_pages",
                 "typed_relationship_issues",
                 "superseded_dangling",
