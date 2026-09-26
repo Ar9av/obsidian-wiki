@@ -45,6 +45,53 @@ def _cli(*args: str) -> subprocess.CompletedProcess:
 
 
 # --------------------------------------------------------------------------
+# frontmatter
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("indicator", [">", ">-", ">+", "|", "|-", "|+", ">2", ">-2", ">+2", "|2", "|-2", "|+2"])
+def test_frontmatter_folds_block_scalars(indicator: str) -> None:
+    values = mem.parse_frontmatter(
+        f"title: {indicator}\n  A sample\n  page title\n"
+        f"summary: {indicator}\n\n  First line: details\n  \n  second line\n\n"
+        "tags: [example, test]\nupdated: 2026-09-26\n"
+    )
+    assert values == {
+        "title": "A sample page title",
+        "summary": "First line: details second line",
+        "tags": ["example", "test"],
+        "updated": "2026-09-26",
+    }
+
+
+@pytest.mark.parametrize("indent", [" ", "  ", "    ", "\t"])
+def test_frontmatter_block_scalar_at_end_of_input(indent: str) -> None:
+    assert mem.parse_frontmatter(f"summary: >-\n{indent}Last field") == {"summary": "Last field"}
+
+
+@pytest.mark.parametrize("ending", ["", "\n", "\n  \n\n", "\ntags: [test]\n"])
+def test_frontmatter_empty_block_scalar(ending: str) -> None:
+    values = mem.parse_frontmatter("summary: >-" + ending)
+    assert values["summary"] == ""
+    if "tags:" in ending:
+        assert values["tags"] == ["test"]
+
+
+def test_frontmatter_preserves_inline_scalars_and_lists() -> None:
+    assert mem.parse_frontmatter(
+        'title: ">-"\nsummary: > not a block scalar\n'
+        'tags: [one, "two"]\nsources:\n  - first.md\n  - second.md\n'
+        'relationships:\n  - target: "[[concepts/example]]"\n    type: contradicts\n'
+    ) == {
+        "title": ">-",
+        "summary": "> not a block scalar",
+        "tags": ["one", "two"],
+        "sources": ["first.md", "second.md"],
+        "relationships": ['target: "[[concepts/example]]"', "type: contradicts"],
+    }
+
+
+# --------------------------------------------------------------------------
 # log.md
 # --------------------------------------------------------------------------
 
@@ -454,6 +501,31 @@ def test_cli_index_check_exits_two_on_drift(vault: Path) -> None:
     drifted = _cli("index", "--check", "--vault", str(vault))
     assert drifted.returncode == 2
     assert "concepts/rag" in drifted.stdout
+
+
+@pytest.mark.parametrize("command", ["index", "sync"])
+@pytest.mark.parametrize("link_format", ["markdown", "wikilink"])
+def test_cli_indexes_block_scalar_titles_and_summaries(
+    vault: Path, command: str, link_format: str, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_dir = vault / ".config" / "obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f"OBSIDIAN_LINK_FORMAT={link_format}\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(vault))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(config_dir.parent))
+    _page(
+        vault, "concepts/block-scalars.md",
+        title=">-\n  A sample\n  page title",
+        summary="|-\n  A summary\n  spanning two lines.",
+        tags="[example]",
+    )
+    result = _cli(command, "--vault", str(vault))
+    assert result.returncode == 0, result.stderr
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    link = "[A sample page title](concepts/block-scalars.md)" if link_format == "markdown" else "[[concepts/block-scalars]]"
+    assert f"- {link} — A summary spanning two lines. ( #example)" in text
+    assert ">-" not in text and "|-" not in text
+    assert _cli("index", "--check", "--vault", str(vault)).returncode == 0
 
 
 def test_cli_rejects_a_malformed_field(vault: Path) -> None:

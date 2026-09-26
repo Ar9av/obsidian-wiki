@@ -91,6 +91,7 @@ _TAG_RE = re.compile(r"#[\w/-]+")
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _MD_DECORATION_RE = re.compile(r"[*_`]|^\s*[-*+]\s+|^\s*>\s?|^#{1,6}\s+")
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
+_BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 #: Split a table row on unescaped pipes only — `\|` is a literal in a cell.
 _CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
 
@@ -158,7 +159,11 @@ def _scalar(value: str) -> str:
 
 
 def parse_frontmatter(frontmatter: str) -> dict:
-    """Scalars, inline lists, and block lists — enough of YAML for page headers."""
+    """Scalars (including blocks), inline lists, and block lists for page headers.
+
+    Fold both literal and folded blocks to one line, as in graphrag, since
+    memory surfaces use titles and summaries as single-line previews.
+    """
     values: dict = {}
     lines = frontmatter.splitlines()
     i = 0
@@ -172,6 +177,17 @@ def parse_frontmatter(frontmatter: str) -> dict:
         if raw.startswith("[") and raw.endswith("]"):
             values[key] = [_scalar(part) for part in raw[1:-1].split(",") if part.strip()]
             i += 1
+            continue
+        if _BLOCK_SCALAR_RE.match(raw):
+            block_lines = []
+            j = i + 1
+            while j < len(lines) and (lines[j].startswith((" ", "\t")) or not lines[j].strip()):
+                stripped = lines[j].strip()
+                if stripped:
+                    block_lines.append(stripped)
+                j += 1
+            values[key] = " ".join(block_lines).strip()
+            i = j
             continue
         if not raw:
             block: list = []
