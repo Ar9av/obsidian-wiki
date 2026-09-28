@@ -26,7 +26,9 @@ def format_snapshots_block(paths: list[str]) -> str:
         if not inner or inner in seen:
             continue
         seen.add(inner)
-        lines.append(f"  - [[{inner}]]")
+        # Quote so YAML does not parse `[[path]]` as a nested flow sequence.
+        # Unquoted items render as orange non-links in Obsidian Properties.
+        lines.append(f'  - "[[{inner}]]"')
     return "\n".join(lines)
 
 

@@ -1966,7 +1966,7 @@ def cmd_snapshots_apply(args: argparse.Namespace) -> int:
         print(page.relative_to(vault).as_posix())
         for item in expected:
             inner = item[:-3] if item.lower().endswith(".md") else item
-            print(f"  - [[{inner}]]")
+            print(f'  - "[[{inner}]]"')
     if not args.apply:
         return 0
     written: list[str] = []

@@ -132,6 +132,8 @@ writes nothing.
 `snapshots apply --from-json FILE|-` reads `findings.snapshot_mismatch` from lint JSON.
 Without `--apply` it prints the pages and `snapshots:` that would be written and exits 0.
 `--apply` replaces each listed page's `snapshots:` with that row's `expected` set.
+Each list item is written as a quoted wikilink (`- "[[_raw/_archived/foo]]"`) so YAML
+does not treat `[[` as nested arrays and Obsidian Properties can render clickable links.
 Changing those bytes stales trust fingerprints on reviewed pages; the command does not
 call `trust-record`.
 
