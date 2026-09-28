@@ -42,11 +42,6 @@ _TIER_RE = re.compile(r"^tier:\s*(\w+)", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
 _MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
 
-# A bare `>`, `>-`, `>+`, `|`, `|-`, `|+` (optionally followed by an indent
-# indicator digit) marks a YAML block scalar — the real value lives on the
-# following indented lines, not on this line.
-_BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
-
 from obsidian_wiki.graph_analysis import (  # noqa: E402
     SKIP_DIRS,
     SKIP_ROOT_FILES,
@@ -54,6 +49,7 @@ from obsidian_wiki.graph_analysis import (  # noqa: E402
     iter_pages,
     shortest_path,
 )
+from obsidian_wiki.vault import BLOCK_SCALAR_RE  # noqa: E402
 from obsidian_wiki.temporal import is_current, parse_date, superseded_target  # noqa: E402
 
 __all__ = ["SKIP_DIRS", "SKIP_ROOT_FILES", "build_index", "classify_query",
@@ -78,7 +74,7 @@ def _extract_scalar(front: str, key: str) -> str:
         if not m:
             continue
         rest = m.group(1).strip()
-        if not rest or _BLOCK_SCALAR_RE.match(rest):
+        if not rest or BLOCK_SCALAR_RE.match(rest):
             block_lines = []
             for cont in lines[i + 1:]:
                 if cont.strip() == "":

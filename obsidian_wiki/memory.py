@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from obsidian_wiki.cache import advisory_lock
-from obsidian_wiki.vault import FRONTMATTER_RE, iter_md, split_frontmatter
+from obsidian_wiki.vault import BLOCK_SCALAR_RE, FRONTMATTER_RE, iter_md, split_frontmatter
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 
 MEMORY_LOCK_NAME = ".memory.lock"
@@ -158,7 +158,11 @@ def _scalar(value: str) -> str:
 
 
 def parse_frontmatter(frontmatter: str) -> dict:
-    """Scalars, inline lists, and block lists — enough of YAML for page headers."""
+    """Scalars (including blocks), inline lists, and block lists for page headers.
+
+    Fold both literal and folded blocks to one line, as in graphrag, since
+    memory surfaces use titles and summaries as single-line previews.
+    """
     values: dict = {}
     lines = frontmatter.splitlines()
     i = 0
@@ -172,6 +176,17 @@ def parse_frontmatter(frontmatter: str) -> dict:
         if raw.startswith("[") and raw.endswith("]"):
             values[key] = [_scalar(part) for part in raw[1:-1].split(",") if part.strip()]
             i += 1
+            continue
+        if BLOCK_SCALAR_RE.match(raw):
+            block_lines = []
+            j = i + 1
+            while j < len(lines) and (lines[j].startswith((" ", "\t")) or not lines[j].strip()):
+                stripped = lines[j].strip()
+                if stripped:
+                    block_lines.append(stripped)
+                j += 1
+            values[key] = " ".join(block_lines).strip()
+            i = j
             continue
         if not raw:
             block: list = []
