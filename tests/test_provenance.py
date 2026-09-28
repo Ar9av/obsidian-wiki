@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from obsidian_wiki.provenance import (
+    archive_wikilink_relpath,
     expected_snapshots_for_page,
     invert_pages,
     parse_snapshots_field,
+    prefer_archive_write_path,
     resolve_source_key,
     unwrap_snapshot_value,
 )
@@ -110,3 +112,55 @@ def test_invert_ten_thousand_keys() -> None:
     idx = invert_pages(sources)
     assert len(idx) == 50
     assert len(idx["concepts/p0.md"]) == 200
+
+
+def test_prefer_keeps_nested_archived_when_flat_namesake_exists(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    nested = vault / "_raw" / "_archived" / "topic" / "clip.md"
+    flat = vault / "_raw" / "_archived" / "clip.md"
+    nested.parent.mkdir(parents=True)
+    nested.write_text("nested\n", encoding="utf-8")
+    flat.write_text("flat\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "_raw/_archived/topic/clip.md") == (
+        "_raw/_archived/topic/clip.md"
+    )
+
+
+def test_prefer_stale_raw_uses_flat_archived_basename(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    archived = vault / "_raw" / "_archived" / "notes.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("x\n", encoding="utf-8")
+    (vault / "_raw").mkdir(exist_ok=True)
+    (vault / "_raw" / "notes.md").write_text("staging\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "_raw/notes.md") == "_raw/_archived/notes.md"
+
+
+def test_prefer_missing_returns_none(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    assert prefer_archive_write_path(vault, "_raw/_archived/ghost.md") is None
+
+
+def test_archive_wikilink_relpath_existing_and_missing(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    clip = vault / "_raw" / "_archived" / "foo.md"
+    clip.parent.mkdir(parents=True)
+    clip.write_text("x\n", encoding="utf-8")
+    assert archive_wikilink_relpath(vault, "_raw/_archived/foo") == (
+        "_raw/_archived/foo.md"
+    )
+    assert archive_wikilink_relpath(vault, "_raw/_archived/foo.md") == (
+        "_raw/_archived/foo.md"
+    )
+    assert archive_wikilink_relpath(vault, "concepts/foo") is None
+    missing = archive_wikilink_relpath(vault, "_raw/_archived/missing")
+    assert missing == "_raw/_archived/missing.md"
+
+
+def test_prefer_live_staging_without_archive_returns_staging(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    staging = vault / "_raw" / "notes.md"
+    staging.parent.mkdir(parents=True)
+    staging.write_text("staging\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "_raw/notes.md") == "_raw/notes.md"

@@ -144,3 +144,34 @@ def expected_snapshots_for_page(
         seen.add(resolved)
         expected.append(resolved)
     return expected
+
+
+def prefer_archive_write_path(vault: Path, rel: str) -> str | None:
+    """Vault-relative archive path to store, or None if nothing exists on disk."""
+    rel = rel.strip().replace("\\", "/")
+    candidate = Path(rel)
+    if "_archived" in candidate.parts:
+        if (vault / candidate).is_file():
+            return candidate.as_posix()
+        return None
+    archived_rel = Path("_raw") / "_archived" / candidate.name
+    if (vault / archived_rel).is_file():
+        return archived_rel.as_posix()
+    if (vault / candidate).is_file():
+        return candidate.as_posix()
+    return None
+
+
+def archive_wikilink_relpath(vault: Path, inner: str) -> str | None:
+    """Normalise a wikilink inner to `_raw/_archived/…`.md if archive-shaped.
+
+    Does not require the file to exist. Returns None when the inner is not
+    under `_raw/_archived/`.
+    """
+    value = unwrap_snapshot_value(inner)
+    if not value:
+        return None
+    parts = Path(value).parts
+    if len(parts) < 3 or parts[0] != "_raw" or parts[1] != "_archived":
+        return None
+    return value if value.lower().endswith(".md") else f"{value}.md"
