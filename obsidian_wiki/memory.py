@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from obsidian_wiki.cache import advisory_lock
-from obsidian_wiki.vault import FRONTMATTER_RE, iter_md, split_frontmatter
+from obsidian_wiki.vault import BLOCK_SCALAR_RE, FRONTMATTER_RE, iter_md, split_frontmatter
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 
 MEMORY_LOCK_NAME = ".memory.lock"
@@ -91,7 +91,6 @@ _TAG_RE = re.compile(r"#[\w/-]+")
 _HEADING_RE = re.compile(r"^##\s+(.+?)\s*$", re.MULTILINE)
 _MD_DECORATION_RE = re.compile(r"[*_`]|^\s*[-*+]\s+|^\s*>\s?|^#{1,6}\s+")
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
-_BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 #: Split a table row on unescaped pipes only — `\|` is a literal in a cell.
 _CELL_SPLIT_RE = re.compile(r"(?<!\\)\|")
 
@@ -178,7 +177,7 @@ def parse_frontmatter(frontmatter: str) -> dict:
             values[key] = [_scalar(part) for part in raw[1:-1].split(",") if part.strip()]
             i += 1
             continue
-        if _BLOCK_SCALAR_RE.match(raw):
+        if BLOCK_SCALAR_RE.match(raw):
             block_lines = []
             j = i + 1
             while j < len(lines) and (lines[j].startswith((" ", "\t")) or not lines[j].strip()):

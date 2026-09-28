@@ -22,6 +22,10 @@ SKIP_DIRS = frozenset({
 
 #: CRLF-tolerant so a vault edited on Windows parses the same as one from Unix.
 FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---(?:\r?\n|$)", re.DOTALL)
+# A bare `>`, `>-`, `>+`, `|`, `|-`, `|+` (optionally followed by an indent
+# indicator digit) marks a YAML block scalar — the real value lives on the
+# following indented lines, not on this line.
+BLOCK_SCALAR_RE = re.compile(r"^[>|][+-]?\d*$")
 
 
 def split_frontmatter(text: str) -> tuple[str, str]:
