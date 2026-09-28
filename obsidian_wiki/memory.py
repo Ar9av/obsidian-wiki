@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Iterable, Optional, Sequence
 
 from obsidian_wiki.cache import advisory_lock
+from obsidian_wiki.provenance import archive_wikilink_relpath
 from obsidian_wiki.vault import BLOCK_SCALAR_RE, FRONTMATTER_RE, iter_md, split_frontmatter
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 
@@ -599,6 +600,8 @@ def rebuild_index(
     for heading, body in sections.items():
         if heading in categories:
             for match in _WIKILINK_RE.finditer(body):
+                if archive_wikilink_relpath(vault, match.group(1)) is not None:
+                    continue
                 listed.add(match.group(1).strip())
             for line in body.splitlines():
                 md = re.match(r"^-\s*\[[^\]]*\]\(([^)]+)\)", line.strip())

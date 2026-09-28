@@ -45,6 +45,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from obsidian_wiki.provenance import archive_wikilink_relpath
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 from obsidian_wiki.vault import iter_md, okignore_patterns, okignored, skipped_dir  # noqa: F401 (re-exported)
 
@@ -134,6 +135,8 @@ def parse_vault_graph(vault: Path) -> tuple[dict[str, list[str]], dict[str, list
 
         # Wikilinks
         for link in _WIKILINK_RE.findall(text):
+            if archive_wikilink_relpath(vault, link) is not None:
+                continue
             target = _slug(link.split("/")[-1])
             if target and target != src and target in known_slugs:
                 outgoing[src].append(target)

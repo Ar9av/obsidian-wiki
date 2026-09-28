@@ -49,6 +49,7 @@ from obsidian_wiki.graph_analysis import (  # noqa: E402
     iter_pages,
     shortest_path,
 )
+from obsidian_wiki.provenance import archive_wikilink_relpath  # noqa: E402
 from obsidian_wiki.vault import BLOCK_SCALAR_RE  # noqa: E402
 from obsidian_wiki.temporal import is_current, parse_date, superseded_target  # noqa: E402
 
@@ -165,6 +166,8 @@ def build_index(vault: Path) -> dict[str, dict]:
             continue
 
         for link in _WIKILINK_RE.findall(text):
+            if archive_wikilink_relpath(vault, link) is not None:
+                continue
             target = _slug(link.split("/")[-1])
             if target and target != slug and target in known:
                 pages[slug]["out_links"].append(target)
