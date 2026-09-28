@@ -195,6 +195,21 @@ def test_index_drops_a_stale_section_when_its_category_empties(vault: Path) -> N
     assert "## Entities" in text
 
 
+def test_index_drops_a_stale_uncategorized_section_and_reports_the_removal(vault: Path) -> None:
+    """`_heading_for(None)` renders "Uncategorized", but that heading was never
+    in the generated-heading set, so a root-level page's stale entry survived
+    as if hand-written and the removal never showed up in `removed`."""
+    _page(vault, "loose-note.md", title="Loose Note")
+    mem.rebuild_index(vault)
+    (vault / "loose-note.md").unlink()
+
+    result = mem.rebuild_index(vault)
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    assert "## Uncategorized" not in text
+    assert "loose-note" not in text
+    assert result.removed == ("loose-note",)
+
+
 def test_index_check_mode_reports_drift_without_writing(vault: Path) -> None:
     mem.rebuild_index(vault)
     before = (vault / "index.md").read_text(encoding="utf-8")

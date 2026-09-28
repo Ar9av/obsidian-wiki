@@ -585,6 +585,7 @@ def rebuild_index(
     # the last page in a category left its stale section behind, preserved as
     # though a human had written it.
     categories = {_heading_for(name).casefold() for name in CATEGORY_ORDER}
+    categories.add(_heading_for("").casefold())
     categories |= {_heading_for(page.category).casefold() for page in pages}
     categories |= {
         _heading_for(child.name).casefold()
