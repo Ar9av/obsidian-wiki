@@ -1490,9 +1490,12 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
 
 def cmd_cache_update(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import stored_key, update_source
+    from obsidian_wiki.provenance import prefer_archive_write_path
     vault = Path(args.vault).expanduser().resolve()
     source = _resolve_source_arg(vault, args.source)
-    if not source.exists():
+    rel = stored_key(source, vault) or args.source
+    preferred = None if args.key else prefer_archive_write_path(vault, rel)
+    if not source.exists() and preferred is None:
         tried = " and ".join(str(c) for c in _source_candidates(vault, args.source))
         print(f"error: source {args.source} does not exist (tried {tried})",
               file=sys.stderr)
@@ -1500,9 +1503,10 @@ def cmd_cache_update(args: argparse.Namespace) -> int:
     _note_source_ambiguity(vault, args.source, source)
     pages = args.pages or []
     h = update_source(vault, source, pages_produced=pages, key=args.key)
+    stored = args.key or preferred or stored_key(source, vault) or str(source)
     print(json.dumps({
-        "path": str(source),
-        "key": args.key or stored_key(source, vault) or str(source),
+        "path": str(source if source.exists() else vault / (preferred or rel)),
+        "key": stored,
         "content_hash": h,
     }))
     return 0

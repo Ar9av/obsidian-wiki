@@ -142,6 +142,26 @@ def test_top_level_keys_preserved(vault, raw_file):
 
 # Non-file keys (URLs / pseudo-paths) must not be flagged missing -----------
 
+def test_list_manifest_rekeys_stale_raw_to_archived(vault):
+    staging = vault / "_raw" / "foo.md"
+    archived = vault / "_raw" / "_archived" / "foo.md"
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    staging.parent.mkdir(parents=True, exist_ok=True)
+    staging.write_text("staging-bytes\n", encoding="utf-8")
+    archived.write_text("archived-bytes\n", encoding="utf-8")
+    _write_list_manifest(
+        vault,
+        [{"path": "_raw/foo.md", "content_hash": "sha256:old", "source_type": "document"}],
+    )
+    h = update_source(vault, staging)
+    assert h == compute_hash(archived)
+    entries = _load_raw(vault)["sources"]
+    assert isinstance(entries, list)
+    paths = [e.get("path") for e in entries]
+    assert paths == ["_raw/_archived/foo.md"]
+    assert entries[0]["source_type"] == "document"
+
+
 def test_url_source_key_not_flagged_missing(vault):
     _write_list_manifest(
         vault,

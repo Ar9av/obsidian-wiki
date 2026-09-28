@@ -470,11 +470,9 @@ def update_source(
     warning is written to stderr, because that entry is not portable across
     machines.
     """
-    # Hash outside the lock — hashing a large source tree can take seconds and
-    # nothing else in the manifest depends on it.
-    current_hash = compute_hash(source_path)
     now = datetime.now(timezone.utc).isoformat()
     explicit_key = key is not None
+    hash_path = source_path
     if explicit_key:
         new_key = key
     else:
@@ -488,7 +486,16 @@ def update_source(
                 file=sys.stderr,
             )
         else:
-            new_key = derived
+            from obsidian_wiki.provenance import prefer_archive_write_path
+            preferred = prefer_archive_write_path(vault, derived)
+            if preferred is not None:
+                new_key = preferred
+                hash_path = vault / preferred
+            else:
+                new_key = derived
+    # Hash outside the lock — hashing a large source tree can take seconds and
+    # nothing else in the manifest depends on it.
+    current_hash = compute_hash(hash_path)
 
     with manifest_lock(vault):
         return _update_source_locked(
@@ -520,8 +527,11 @@ def _update_source_locked(
         if target is None:
             target = {"path": new_key}
             sources.append(target)
-        elif explicit_key and target.get("path") != new_key:
-            # An explicit key is authoritative: re-key the matched entry.
+        elif target.get("path") != new_key and (
+            explicit_key or _rekey_stale_raw_to_archive(target.get("path"), new_key)
+        ):
+            # Explicit --key is authoritative; otherwise only stale
+            # ``_raw/<name>.md`` keys move onto ``_raw/_archived/…``.
             target["path"] = new_key
         target["content_hash"] = _format_hash(target.get("content_hash"), current_hash)
         target["last_ingested"] = now
@@ -535,10 +545,11 @@ def _update_source_locked(
             if _same_source(existing_key, source_path, vault):
                 match_key = existing_key
                 break
-        if match_key is not None and explicit_key and match_key != new_key:
-            # Explicit key wins: move the entry rather than updating the legacy
-            # key in place, so a skill can record repo:/url: identity for a
-            # source the manifest previously tracked by path.
+        if match_key is not None and match_key != new_key and (
+            explicit_key or _rekey_stale_raw_to_archive(match_key, new_key)
+        ):
+            # Explicit key wins; otherwise only stale ``_raw/<name>.md`` keys
+            # move onto ``_raw/_archived/…`` so other portable keys stay put.
             moved = sources.pop(match_key)
             existing = sources.get(new_key)
             if isinstance(existing, dict):
@@ -559,6 +570,20 @@ def _update_source_locked(
     manifest["sources"] = sources
     _write_manifest(vault, manifest)
     return current_hash
+
+
+def _rekey_stale_raw_to_archive(old_key: str | None, new_key: str) -> bool:
+    if not old_key:
+        return False
+    old = Path(old_key)
+    new = Path(new_key)
+    return (
+        old.parts[:1] == ("_raw",)
+        and "_archived" not in old.parts
+        and len(new.parts) >= 3
+        and new.parts[0] == "_raw"
+        and new.parts[1] == "_archived"
+    )
 
 
 def hash_file(path: Path) -> str:
