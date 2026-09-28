@@ -119,3 +119,27 @@ def test_snapshots_set_rejects_staging_path_without_archive(tmp_path: Path) -> N
     assert proc.returncode != 0
     assert page.read_text(encoding="utf-8") == before
     assert "snapshots:" not in before
+
+
+def test_snapshots_set_rejects_page_paths_that_escape_vault(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    (vault / "_raw" / "_archived").mkdir(parents=True)
+    (vault / "_raw" / "_archived" / "a.md").write_text("a\n", encoding="utf-8")
+    page = vault / "concepts" / "alpha.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("---\ntitle: alpha\nsources: [manual]\n---\n# alpha\n", encoding="utf-8")
+    before = page.read_text(encoding="utf-8")
+    outside = tmp_path / "outside.md"
+    outside.write_text("---\ntitle: outside\nsources: [manual]\n---\n# outside\n", encoding="utf-8")
+    outside_before = outside.read_text(encoding="utf-8")
+    via_dotdot = _run(
+        home, "snapshots", "set", "../outside.md", "--archive", "_raw/_archived/a.md",
+    )
+    assert via_dotdot.returncode != 0
+    assert page.read_text(encoding="utf-8") == before
+    assert outside.read_text(encoding="utf-8") == outside_before
+    via_abs = _run(
+        home, "snapshots", "set", str(page), "--archive", "_raw/_archived/a.md",
+    )
+    assert via_abs.returncode != 0
+    assert page.read_text(encoding="utf-8") == before

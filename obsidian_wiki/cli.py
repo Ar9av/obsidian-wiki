@@ -1901,7 +1901,16 @@ def cmd_snapshots_set(args: argparse.Namespace) -> int:
     if context is None:
         return 1
     vault, _, _ = context
+    candidate = Path(args.page)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        print(f"error: page not found: {args.page}", file=sys.stderr)
+        return 1
     page = vault / args.page
+    try:
+        page.resolve().relative_to(vault.resolve())
+    except ValueError:
+        print(f"error: page not found: {args.page}", file=sys.stderr)
+        return 1
     if not page.is_file():
         print(f"error: page not found: {args.page}", file=sys.stderr)
         return 1
