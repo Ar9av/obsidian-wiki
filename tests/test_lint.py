@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from obsidian_wiki.lint import lint_vault
+from obsidian_wiki.lint import _parse_page, lint_vault
 from obsidian_wiki.trust import build_trust_ledger, write_trust_ledger
 
 
@@ -1113,6 +1113,9 @@ def test_lint_archive_wikilink_does_not_attach_to_concept_slug(tmp_path: Path) -
     )
     ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
     write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    parsed = _parse_page(vault / "concepts/alpha.md", vault)
+    assert "attention" not in parsed["links"]
+    assert "beta" in parsed["links"]
     report = lint_vault(vault)
     assert report["findings"]["broken_links"] == []
     assert not any(
