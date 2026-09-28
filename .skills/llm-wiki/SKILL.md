@@ -232,7 +232,7 @@ Things that are unresolved or need more sources.
 
 **Sources section (required, last body section).** Every wiki page ends with `## Sources`. Entries must be clickable in Obsidian:
 
-- **Local snapshot** (raw ingest, dropped PDFs/images, Web Clipper files, anything that landed in `_raw/` and was archived): `[[_raw/_archived/<filename>]]`. YAML `sources:` uses the same vault-relative path. Do not link the webpage recorded in clipping frontmatter — that URL is mutable origin metadata.
+- **Local snapshot** (raw ingest, dropped PDFs/images, Web Clipper files, anything that landed in `_raw/` and was archived): `[[_raw/_archived/<filename>]]` in the body **Sources** section. YAML `sources:` stays origin keys (`url:`, `agent:`, repo paths, …), **not** the archive path. After moving a file to `_raw/_archived/`, run `obsidian-wiki snapshots set <page> --archive _raw/_archived/<filename>` then `obsidian-wiki cache-update` on that **archived** path. The snapshots CLI does not touch the body. Do not link the webpage recorded in clipping frontmatter — that URL is mutable origin metadata.
 - **Fetched URL** (`/ingest-url` with no saved snapshot): a markdown link to the canonical URL, and YAML `sources:` as `url:<canonical-url>`.
 - Do not mix those up. A clip of a page is not an ingest-from-URL.
 

@@ -112,9 +112,28 @@ Lint inverts `.manifest.json` — unioning each source's `pages_produced` and `p
 resolving keys to those archive paths — and compares the set to `snapshots:` on the page.
 Values written as `"[[wikilinks]]"` are unwrapped before comparison. When the invert is
 non-empty and the field is missing or differs, `snapshot_mismatch` reports the page with
-expected vs actual path lists. It warns only; nothing rewrites frontmatter, and
-`obsidian-wiki lint --strict` does not promote this finding to exit 1. There is no
-`--apply` flag for it in this cut.
+expected vs actual path lists. It warns only; lint never rewrites frontmatter, and
+`obsidian-wiki lint --strict` does not promote this finding to exit 1.
+
+Write `snapshots:` with the snapshots CLI:
+
+```bash
+obsidian-wiki snapshots set concepts/attention.md --archive _raw/_archived/paper.pdf
+obsidian-wiki snapshots apply --from-json lint.json          # dry-run: preview, no writes
+obsidian-wiki snapshots apply --from-json lint.json --apply  # write
+```
+
+`snapshots set PAGE --archive …` unions the given archive paths into the page's current
+`snapshots:` (prior archives stay). Every `--archive` argument must resolve to an
+existing file under `_raw/_archived/` (nested dirs are fine). A missing archive, or a
+staging-only `_raw/<name>.md` with no archive beside it, fails the whole command and
+writes nothing.
+
+`snapshots apply --from-json FILE|-` reads `findings.snapshot_mismatch` from lint JSON.
+Without `--apply` it prints the pages and `snapshots:` that would be written and exits 0.
+`--apply` replaces each listed page's `snapshots:` with that row's `expected` set.
+Changing those bytes stales trust fingerprints on reviewed pages; the command does not
+call `trust-record`.
 
 ### Lifecycle transition checking
 
@@ -465,7 +484,7 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
 | `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable` |
-| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME` |
+| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME`. If `_raw/_archived/<basename>` exists, that is the stored key and the file that is hashed — even when you pass a staging `_raw/<name>.md` path |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
 | `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. `--backend` beats the resolved `CODE_UNDERSTANDING_*` config (env → project `.env` → global config). Used by wiki-update Step 3b. |

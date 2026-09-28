@@ -33,7 +33,7 @@ Schema precedence is CLI flags > resolved environment/config values > framework 
 
 When `obsidian-wiki` is on PATH, prefer `obsidian-wiki lint "$OBSIDIAN_VAULT_PATH" --json` (with the same schema override flags as above) and fold the JSON `findings` into the health report. If the CLI is unavailable, keep the grep-based checks below — do not require the binary.
 
-If the JSON report includes `findings.snapshot_mismatch`, list those pages in the report. Missing or drifted `snapshots:` is **not** missing required frontmatter (section 3 still covers only title, category, tags, sources, created, updated). Do not rewrite `sources:` to fix snapshot drift. `wiki-lint --consolidate` does not apply fixes for this finding.
+If the JSON report includes `findings.snapshot_mismatch`, list those pages in the report. Missing or drifted `snapshots:` is **not** missing required frontmatter (section 3 still covers only title, category, tags, sources, created, updated). Do not rewrite `sources:` to fix snapshot drift. Run `obsidian-wiki snapshots apply --from-json <lint.json>` (dry-run), show the preview, and pass `--apply` only after explicit user confirmation. `wiki-lint --consolidate` still does not apply this finding.
 
 ## Lint Checks
 
@@ -500,7 +500,7 @@ Triggered by `wiki-lint --consolidate`. Switches from report-only to **act-and-r
 2. Print the planned consolidation actions as a structured list (see Dry-Run Output below).
 3. Ask the user: `"Apply these N changes? [yes / no / select]"`.
 4. Only proceed with writes after explicit confirmation. If the user selects individual actions, apply only those.
-5. Never merge pages — use `wiki-dedup` for that. Only link, promote, demote, and flag.
+5. Never merge pages — use `wiki-dedup` for that. Only link, promote, demote, and flag. Never apply `snapshot_mismatch` here; that stays on the snapshots CLI with its own confirmation (see Before You Start).
 
 ### Consolidation actions (in order, after confirmation)
 
