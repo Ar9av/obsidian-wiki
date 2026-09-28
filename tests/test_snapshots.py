@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -12,6 +13,7 @@ from obsidian_wiki.snapshots import (
     rewrite_page_snapshots,
     union_snapshot_paths,
 )
+from obsidian_wiki.trust import build_trust_ledger, write_trust_ledger
 from obsidian_wiki.vault import split_frontmatter
 
 
@@ -143,3 +145,158 @@ def test_snapshots_set_rejects_page_paths_that_escape_vault(tmp_path: Path) -> N
     )
     assert via_abs.returncode != 0
     assert page.read_text(encoding="utf-8") == before
+
+
+def _page(
+    vault: Path,
+    relpath: str,
+    *,
+    title: str | None = None,
+    summary: str | None = "Short summary.",
+    tags: str = "[test]",
+    sources: str = "[manual]",
+    created: str = "2026-07-01",
+    updated: str = "2026-07-01",
+    links: list[str] | None = None,
+    include_frontmatter: bool = True,
+    include_trust_fields: bool = True,
+    snapshots: str | None = None,
+) -> Path:
+    path = vault / relpath
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if include_frontmatter:
+        lines.extend(
+            [
+                "---",
+                f"title: {title or path.stem}",
+                "category: concepts",
+                f"tags: {tags}",
+                f"sources: {sources}",
+                f"created: {created}",
+                f"updated: {updated}",
+            ]
+        )
+        if include_trust_fields:
+            lines.extend(["base_confidence: 0.80", "lifecycle: reviewed"])
+        if summary is not None:
+            lines.append(f"summary: {summary}")
+        if snapshots is not None:
+            lines.append(f"snapshots: {snapshots}")
+        lines.append("---")
+    lines.append(f"# {title or path.stem}")
+    for link in links or []:
+        lines.append(f"[[{link}]]")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
+def _clean_pair(vault: Path, *, alpha_snapshots: str | None = None) -> None:
+    """Write a two-page graph and trust ledger from the **final** page bytes.
+
+    Never rewrite a page after `write_trust_ledger`: that marks reviewed
+    pages stale (`confidence_review_stale`) and pollutes `status`.
+    """
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots=alpha_snapshots,
+    )
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+
+
+def _write_archive_and_manifest(vault: Path, page: str = "concepts/alpha.md") -> None:
+    archived = vault / "_raw" / "_archived" / "a.md"
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("# clip\n", encoding="utf-8")
+    (vault / ".manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": {
+                    "_raw/_archived/a.md": {"pages_produced": [page]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_snapshots_apply_dry_run_then_apply_replaces(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    _clean_pair(vault, alpha_snapshots="[_raw/_archived/extra.md]")
+    _write_archive_and_manifest(vault)
+    json_path = tmp_path / "lint.json"
+    proc = _run(home, "lint", "--json")
+    assert proc.returncode == 0
+    json_path.write_text(proc.stdout, encoding="utf-8")
+    report = json.loads(proc.stdout)
+    assert report["findings"]["snapshot_mismatch"]
+    before = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
+    preview = _run(home, "snapshots", "apply", "--from-json", str(json_path))
+    assert preview.returncode == 0
+    assert "concepts/alpha.md" in preview.stdout
+    assert "[[_raw/_archived/a]]" in preview.stdout
+    assert (vault / "concepts" / "alpha.md").read_text(encoding="utf-8") == before
+    written = _run(home, "snapshots", "apply", "--from-json", str(json_path), "--apply")
+    assert written.returncode == 0
+    text = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
+    assert "[[_raw/_archived/a]]" in text
+    assert "[[_raw/_archived/extra]]" not in text
+    assert "sources: [manual]" in text
+
+
+def test_snapshots_apply_bad_json_writes_nothing(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    _clean_pair(vault)
+    _write_archive_and_manifest(vault)
+    before = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not-json", encoding="utf-8")
+    proc = _run(home, "snapshots", "apply", "--from-json", str(bad))
+    assert proc.returncode != 0
+    assert (vault / "concepts" / "alpha.md").read_text(encoding="utf-8") == before
+
+
+def test_snapshots_apply_missing_page_writes_nothing(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    _clean_pair(vault)
+    _write_archive_and_manifest(vault)
+    before = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
+    payload = {
+        "findings": {
+            "snapshot_mismatch": [
+                {"page": "concepts/alpha.md", "expected": ["_raw/_archived/a.md"]},
+                {"page": "concepts/missing.md", "expected": ["_raw/_archived/a.md"]},
+            ]
+        }
+    }
+    json_path = tmp_path / "lint.json"
+    json_path.write_text(json.dumps(payload), encoding="utf-8")
+    proc = _run(home, "snapshots", "apply", "--from-json", str(json_path), "--apply")
+    assert proc.returncode != 0
+    assert (vault / "concepts" / "alpha.md").read_text(encoding="utf-8") == before
+
+
+def test_snapshots_apply_empty_expected_skips_row(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    _clean_pair(vault, alpha_snapshots="\n  - [[_raw/_archived/keep]]")
+    archived = vault / "_raw" / "_archived" / "keep.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("k\n", encoding="utf-8")
+    before = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
+    payload = {
+        "findings": {
+            "snapshot_mismatch": [
+                {"page": "concepts/alpha.md", "expected": []},
+            ]
+        }
+    }
+    json_path = tmp_path / "lint.json"
+    json_path.write_text(json.dumps(payload), encoding="utf-8")
+    proc = _run(home, "snapshots", "apply", "--from-json", str(json_path), "--apply")
+    assert proc.returncode == 0
+    assert (vault / "concepts" / "alpha.md").read_text(encoding="utf-8") == before
+    assert "[[_raw/_archived/keep]]" in before

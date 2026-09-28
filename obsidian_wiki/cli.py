@@ -1893,6 +1893,18 @@ def cmd_snapshots(args: argparse.Namespace) -> int:
     return handler(args)
 
 
+def _page_under_vault(vault: Path, rel: str) -> Path | None:
+    candidate = Path(rel)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    page = vault / rel
+    try:
+        page.resolve().relative_to(vault.resolve())
+    except ValueError:
+        return None
+    return page
+
+
 def cmd_snapshots_set(args: argparse.Namespace) -> int:
     from obsidian_wiki.provenance import prefer_archive_write_path
     from obsidian_wiki.snapshots import read_snapshots, rewrite_page_snapshots, union_snapshot_paths
@@ -1901,17 +1913,8 @@ def cmd_snapshots_set(args: argparse.Namespace) -> int:
     if context is None:
         return 1
     vault, _, _ = context
-    candidate = Path(args.page)
-    if candidate.is_absolute() or ".." in candidate.parts:
-        print(f"error: page not found: {args.page}", file=sys.stderr)
-        return 1
-    page = vault / args.page
-    try:
-        page.resolve().relative_to(vault.resolve())
-    except ValueError:
-        print(f"error: page not found: {args.page}", file=sys.stderr)
-        return 1
-    if not page.is_file():
+    page = _page_under_vault(vault, args.page)
+    if page is None or not page.is_file():
         print(f"error: page not found: {args.page}", file=sys.stderr)
         return 1
     resolved: list[str] = []
@@ -1923,6 +1926,55 @@ def cmd_snapshots_set(args: argparse.Namespace) -> int:
         resolved.append(preferred)
     existing = read_snapshots(page)
     rewrite_page_snapshots(page, union_snapshot_paths(existing, resolved))
+    return 0
+
+
+def cmd_snapshots_apply(args: argparse.Namespace) -> int:
+    from obsidian_wiki.snapshots import rewrite_page_snapshots
+
+    context = _resolve_schema_command_context(getattr(args, "vault", None))
+    if context is None:
+        return 1
+    vault, _, _ = context
+    raw = sys.stdin.read() if args.from_json == "-" else Path(args.from_json).read_text(encoding="utf-8")
+    try:
+        report = json.loads(raw)
+        findings = report["findings"]
+        rows = findings["snapshot_mismatch"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        print(f"error: unusable lint JSON: {exc}", file=sys.stderr)
+        return 1
+    planned: list[tuple[Path, list[str]]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            print("error: malformed snapshot_mismatch row", file=sys.stderr)
+            return 1
+        rel = row.get("page")
+        expected = row.get("expected") or []
+        if not rel or not expected:
+            continue
+        page = _page_under_vault(vault, rel)
+        if page is None or not page.is_file():
+            print(f"error: page not found: {rel}", file=sys.stderr)
+            return 1
+        planned.append((page, list(expected)))
+    for page, expected in planned:
+        print(page.relative_to(vault).as_posix())
+        for item in expected:
+            inner = item[:-3] if item.lower().endswith(".md") else item
+            print(f"  - [[{inner}]]")
+    if not args.apply:
+        return 0
+    written: list[str] = []
+    for page, expected in planned:
+        try:
+            rewrite_page_snapshots(page, expected)
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            if written:
+                print("wrote: " + ", ".join(written), file=sys.stderr)
+            return 1
+        written.append(page.relative_to(vault).as_posix())
     return 0
 
 
@@ -3003,6 +3055,16 @@ def build_parser() -> argparse.ArgumentParser:
     sns.add_argument("--archive", nargs="+", required=True, help="vault-relative archive files")
     sns.add_argument("--vault", default=None, help="vault path or @name (defaults via config)")
     sns.set_defaults(snapshots_func=cmd_snapshots_set)
+    sna = sn_sub.add_parser("apply", help="apply snapshot_mismatch from lint JSON (dry-run default)")
+    sna.add_argument(
+        "--from-json",
+        dest="from_json",
+        required=True,
+        help="lint --json file, or - for stdin",
+    )
+    sna.add_argument("--apply", action="store_true", help="write pages (default is preview)")
+    sna.add_argument("--vault", default=None, help="vault path or @name (defaults via config)")
+    sna.set_defaults(snapshots_func=cmd_snapshots_apply)
 
     tr = sub.add_parser(
         "trust-record",
