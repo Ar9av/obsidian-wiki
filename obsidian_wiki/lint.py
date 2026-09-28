@@ -12,6 +12,7 @@ from obsidian_wiki.cache import _iter_entries, _load_manifest
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
 from obsidian_wiki.provenance import (
+    archive_wikilink_relpath,
     clip_url_index,
     expected_snapshots_for_page,
     invert_pages,
@@ -246,7 +247,15 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     relative = path.relative_to(vault)
 
     links: list[str] = []
+    broken_archive_links: list[dict[str, str]] = []
     for raw in _WIKILINK_RE.findall(text):
+        archive_rel = archive_wikilink_relpath(vault, raw)
+        if archive_rel is not None:
+            if not (vault / archive_rel).is_file():
+                broken_archive_links.append(
+                    {"page": relative.as_posix(), "target": archive_rel}
+                )
+            continue
         name = _wikilink_page_target(raw)
         target = _slug(name) if name else ""
         if target:
@@ -268,6 +277,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "absolute_sources": _absolute_source_entries(frontmatter),
         "snapshots": parse_snapshots_field(_frontmatter_field_block(frontmatter, "snapshots")),
         "values": values,
+        "archive_broken": broken_archive_links,
     }
 
 
@@ -312,6 +322,7 @@ def lint_vault(
                 broken_links.append({"page": page["path"], "target": target})
                 continue
             incoming[target] += 1
+        broken_links.extend(page.get("archive_broken", []))
 
     missing_frontmatter = []
     confidence_missing_fields = []
