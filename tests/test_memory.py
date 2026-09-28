@@ -148,6 +148,20 @@ def test_index_drops_a_stale_section_when_its_category_empties(vault: Path) -> N
     assert "## Entities" in text
 
 
+def test_index_drops_the_uncategorized_section_when_it_empties(vault: Path) -> None:
+    """No directory names "Uncategorized", so it was kept as a human section."""
+    _page(vault, "loose.md", title="Loose")
+    mem.rebuild_index(vault)
+    assert "## Uncategorized" in (vault / "index.md").read_text(encoding="utf-8")
+    (vault / "loose.md").unlink()
+    result = mem.rebuild_index(vault, write=False)
+    assert result.removed == ("loose",)
+    mem.rebuild_index(vault)
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    assert "## Uncategorized" not in text
+    assert "loose" not in text
+
+
 def test_index_check_mode_reports_drift_without_writing(vault: Path) -> None:
     mem.rebuild_index(vault)
     before = (vault / "index.md").read_text(encoding="utf-8")
