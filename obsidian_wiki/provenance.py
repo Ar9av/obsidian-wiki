@@ -150,6 +150,8 @@ def prefer_archive_write_path(vault: Path, rel: str) -> str | None:
     """Vault-relative archive path to store, or None if nothing exists on disk."""
     rel = rel.strip().replace("\\", "/")
     candidate = Path(rel)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
     if "_archived" in candidate.parts:
         if (vault / candidate).is_file():
             return candidate.as_posix()
@@ -162,7 +164,7 @@ def prefer_archive_write_path(vault: Path, rel: str) -> str | None:
     return None
 
 
-def archive_wikilink_relpath(vault: Path, inner: str) -> str | None:
+def archive_wikilink_relpath(_vault: Path, inner: str) -> str | None:
     """Normalise a wikilink inner to `_raw/_archived/…`.md if archive-shaped.
 
     Does not require the file to exist. Returns None when the inner is not
@@ -171,7 +173,10 @@ def archive_wikilink_relpath(vault: Path, inner: str) -> str | None:
     value = unwrap_snapshot_value(inner)
     if not value:
         return None
-    parts = Path(value).parts
+    path = Path(value.replace("\\", "/"))
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    parts = path.parts
     if len(parts) < 3 or parts[0] != "_raw" or parts[1] != "_archived":
         return None
     return value if value.lower().endswith(".md") else f"{value}.md"

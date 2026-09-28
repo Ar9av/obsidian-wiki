@@ -164,3 +164,20 @@ def test_prefer_live_staging_without_archive_returns_staging(tmp_path: Path) -> 
     staging.parent.mkdir(parents=True)
     staging.write_text("staging\n", encoding="utf-8")
     assert prefer_archive_write_path(vault, "_raw/notes.md") == "_raw/notes.md"
+
+
+def test_prefer_archive_write_path_rejects_traversal_and_absolute(
+    tmp_path: Path,
+) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    outside = tmp_path / "outside.md"
+    outside.write_text("secret\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "../outside.md") is None
+    assert prefer_archive_write_path(vault, outside.as_posix()) is None
+
+
+def test_archive_wikilink_relpath_rejects_parent_traversal(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    assert archive_wikilink_relpath(vault, "_raw/_archived/../attention") is None
