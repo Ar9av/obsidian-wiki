@@ -568,8 +568,7 @@ def rebuild_index(
     # page currently lives there. Deriving this from pages alone meant deleting
     # the last page in a category left its stale section behind, preserved as
     # though a human had written it.
-    # "Uncategorized" is generated too, for pages with no category directory.
-    categories = {_heading_for(name).casefold() for name in (*CATEGORY_ORDER, "")}
+    categories = {_heading_for(name).casefold() for name in CATEGORY_ORDER}
     categories |= {_heading_for(page.category).casefold() for page in pages}
     categories |= {
         _heading_for(child.name).casefold()
