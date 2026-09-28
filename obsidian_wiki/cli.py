@@ -1880,6 +1880,43 @@ def cmd_lint(args: argparse.Namespace) -> int:
     return 0
 
 
+def _is_archived_rel(rel: str) -> bool:
+    parts = Path(rel).parts
+    return len(parts) >= 3 and parts[0] == "_raw" and parts[1] == "_archived"
+
+
+def cmd_snapshots(args: argparse.Namespace) -> int:
+    handler = getattr(args, "snapshots_func", None)
+    if handler is None:
+        print("error: use snapshots set or snapshots apply", file=sys.stderr)
+        return 2
+    return handler(args)
+
+
+def cmd_snapshots_set(args: argparse.Namespace) -> int:
+    from obsidian_wiki.provenance import prefer_archive_write_path
+    from obsidian_wiki.snapshots import read_snapshots, rewrite_page_snapshots, union_snapshot_paths
+
+    context = _resolve_schema_command_context(getattr(args, "vault", None))
+    if context is None:
+        return 1
+    vault, _, _ = context
+    page = vault / args.page
+    if not page.is_file():
+        print(f"error: page not found: {args.page}", file=sys.stderr)
+        return 1
+    resolved: list[str] = []
+    for raw in args.archive:
+        preferred = prefer_archive_write_path(vault, raw)
+        if preferred is None or not _is_archived_rel(preferred):
+            print(f"error: archive not found: {raw}", file=sys.stderr)
+            return 1
+        resolved.append(preferred)
+    existing = read_snapshots(page)
+    rewrite_page_snapshots(page, union_snapshot_paths(existing, resolved))
+    return 0
+
+
 def _resolve_command_vault(vault_arg: str | None) -> Path | None:
     resolved = (
         vault_arg
@@ -2948,6 +2985,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="authority locator recorded in the lint report (for example, vault/AGENTS.md)",
     )
     lt.set_defaults(func=cmd_lint)
+
+    sn = sub.add_parser("snapshots", help="write YAML snapshots: (ingest set / lint-json apply)")
+    sn_sub = sn.add_subparsers(dest="snapshots_command")
+    sn.set_defaults(func=cmd_snapshots)
+    sns = sn_sub.add_parser("set", help="union --archive paths into page snapshots:")
+    sns.add_argument("page", help="vault-relative wiki page")
+    sns.add_argument("--archive", nargs="+", required=True, help="vault-relative archive files")
+    sns.add_argument("--vault", default=None, help="vault path or @name (defaults via config)")
+    sns.set_defaults(snapshots_func=cmd_snapshots_set)
 
     tr = sub.add_parser(
         "trust-record",

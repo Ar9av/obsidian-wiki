@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from obsidian_wiki.provenance import parse_snapshots_field
@@ -53,3 +56,66 @@ def test_read_snapshots_round_trips_block_list(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert read_snapshots(page) == ["_raw/_archived/a.md"]
+
+
+def _run(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    home.mkdir(parents=True, exist_ok=True)
+    return subprocess.run(
+        [sys.executable, "-m", "obsidian_wiki.cli", *args],
+        capture_output=True, check=False, text=True, env=env, cwd=home,
+    )
+
+
+def _home_vault(tmp_path: Path) -> tuple[Path, Path]:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    return home, vault
+
+
+def test_snapshots_set_unions_and_rejects_missing(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    (vault / "_raw" / "_archived").mkdir(parents=True)
+    (vault / "_raw" / "_archived" / "a.md").write_text("a\n", encoding="utf-8")
+    (vault / "_raw" / "_archived" / "b.md").write_text("b\n", encoding="utf-8")
+    page = vault / "concepts" / "alpha.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("---\ntitle: alpha\nsources: [manual]\n---\n# alpha\n", encoding="utf-8")
+    proc = _run(
+        home, "snapshots", "set", "concepts/alpha.md", "--archive", "_raw/_archived/a.md",
+    )
+    assert proc.returncode == 0
+    proc2 = _run(
+        home, "snapshots", "set", "concepts/alpha.md", "--archive", "_raw/_archived/b.md",
+    )
+    assert proc2.returncode == 0
+    text = page.read_text(encoding="utf-8")
+    assert "[[_raw/_archived/a]]" in text
+    assert "[[_raw/_archived/b]]" in text
+    assert "sources: [manual]" in text
+    bad = _run(
+        home, "snapshots", "set", "concepts/alpha.md", "--archive", "_raw/_archived/nope.md",
+    )
+    assert bad.returncode != 0
+    assert page.read_text(encoding="utf-8") == text
+
+
+def test_snapshots_set_rejects_staging_path_without_archive(tmp_path: Path) -> None:
+    home, vault = _home_vault(tmp_path)
+    staging = vault / "_raw" / "notes.md"
+    staging.parent.mkdir(parents=True)
+    staging.write_text("staging\n", encoding="utf-8")
+    page = vault / "concepts" / "alpha.md"
+    page.parent.mkdir(parents=True)
+    page.write_text("---\ntitle: alpha\nsources: [manual]\n---\n# alpha\n", encoding="utf-8")
+    before = page.read_text(encoding="utf-8")
+    proc = _run(
+        home, "snapshots", "set", "concepts/alpha.md", "--archive", "_raw/notes.md",
+    )
+    assert proc.returncode != 0
+    assert page.read_text(encoding="utf-8") == before
+    assert "snapshots:" not in before
