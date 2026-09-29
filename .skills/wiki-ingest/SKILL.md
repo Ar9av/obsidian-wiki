@@ -97,6 +97,8 @@ obsidian-wiki snapshots set <page> --archive "_raw/_archived/<filename>"
 obsidian-wiki cache-update "$OBSIDIAN_VAULT_PATH" "_raw/_archived/<filename>" --pages <page>
 ```
 
+That CLI writes YAML `snapshots:` as a quoted wikilink **list** with display text, e.g. `"[[_raw/_archived/clip|clip]]"`. Do not hand-edit `snapshots:` to Markdown `[title](path)` — Obsidian Properties only treats `"[[…]]"` as clickable links ([Properties](https://help.obsidian.md/properties)). If Properties shows a single text blob, set the property type to **List**.
+
 - Every created or updated page must end with a **Sources** section whose clickable entries may be Obsidian wikilinks to those snapshots: `[[_raw/_archived/<filename>]]`. The snapshots CLI does not touch the body.
 - Do **not** add a live URL to YAML `sources:` or to the Sources section just because the draft recorded a webpage. Optional non-link breadcrumb: *Clipped from https://…* (plain text, not a markdown/wikilink).
 - **URL exception:** link a live URL only when this ingest **fetched the network** (`/ingest-url` / `ingest-url`) and there is **no** local snapshot file. Then YAML may use `url:<canonical-url>` and the Sources section may use a markdown link to that URL.
@@ -414,7 +416,7 @@ For each page in your plan:
 - Use the page template from the llm-wiki skill (frontmatter + sections). **For academic papers landing in `references/`, use the Paper Deep-Dive Template** from `llm-wiki/SKILL.md` instead of the generic one (see *Academic papers* in Step 1).
 - Place in the correct category directory
 - Add `[[wikilinks]]` to at least 2-3 existing pages
-- Include the origin in the `sources` frontmatter field **and** a bottom **Sources** section (see Raw Mode snapshot provenance). YAML `sources:` is origin keys (`url:`, `agent:`, …), not the archive path. File/raw ingest: `snapshots set` plus `[[_raw/_archived/…]]` in the body. Live URL only if this ingest fetched the web with no snapshot.
+- Include the origin in the `sources` frontmatter field **and** a bottom **Sources** section (see Raw Mode snapshot provenance). YAML `sources:` is origin keys (`url:`, `agent:`, …), not the archive path. File/raw ingest: `snapshots set` (YAML `"[[_raw/_archived/stem|stem]]"`) plus `[[_raw/_archived/…]]` in the body. Live URL only if this ingest fetched the web with no snapshot.
 
 **If updating an existing page:**
 - Read the current page first
@@ -562,7 +564,7 @@ After ingesting, verify:
 - [ ] `log.md` has the ingest entry
 - [ ] Source attribution is present for every new claim
 - [ ] Every new/updated page has a bottom **Sources** section with Obsidian wikilinks to `_raw/_archived/…` snapshots (or a live URL only if ingest was `/ingest-url` with no local file)
-- [ ] YAML `sources:` is origin keys (`url:`, `agent:`, …), not archive paths; after a `_raw/_archived/` move, `snapshots set` then `cache-update` ran on the archived path; clipping `source:`/`url` frontmatter is not copied in as the clickable source
+- [ ] YAML `sources:` is origin keys (`url:`, `agent:`, …), not archive paths; after a `_raw/_archived/` move, `snapshots set` then `cache-update` ran on the archived path (YAML `snapshots:` is `"[[_raw/_archived/stem|stem]]"`, not Markdown links); clipping `source:`/`url` frontmatter is not copied in as the clickable source
 - [ ] Inferred and ambiguous claims are marked with `^[inferred]` / `^[ambiguous]`; `provenance:` frontmatter block is present on new and updated pages
 - [ ] Every new/updated page has a `summary:` frontmatter field (1–2 sentences, ≤200 chars)
 - [ ] `relationships:` block is present on pages where source text made typed connections clear; all entries use an allowed type from `llm-wiki/SKILL.md`

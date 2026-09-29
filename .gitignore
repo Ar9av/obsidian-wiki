@@ -25,3 +25,6 @@ extensions/brain-capture/*.zip
 
 # Local graphify graph (do not PR)
 graphify-out/
+
+# Superpowers implementation plans — local agent scratch, not framework docs
+docs/superpowers/

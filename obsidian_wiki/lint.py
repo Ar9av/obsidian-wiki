@@ -261,6 +261,13 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         if target:
             links.append(target)
     for href in _MD_LINK_RE.findall(text):
+        archive_rel = archive_wikilink_relpath(vault, href)
+        if archive_rel is not None:
+            if not (vault / archive_rel).is_file():
+                broken_archive_links.append(
+                    {"page": relative.as_posix(), "target": archive_rel}
+                )
+            continue
         target = _slug(Path(href).stem)
         if target:
             links.append(target)

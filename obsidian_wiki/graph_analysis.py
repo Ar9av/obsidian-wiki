@@ -143,6 +143,8 @@ def parse_vault_graph(vault: Path) -> tuple[dict[str, list[str]], dict[str, list
 
         # Markdown links (when OBSIDIAN_LINK_FORMAT=markdown)
         for href in _MD_LINK_RE.findall(text):
+            if archive_wikilink_relpath(vault, href) is not None:
+                continue
             target = _slug(Path(href).stem)
             if target and target != src and target in known_slugs:
                 outgoing[src].append(target)

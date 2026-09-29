@@ -47,7 +47,7 @@ Proposed **[ADR 0002](0002-ingest-url-snapshot-then-ingest.md):** `/ingest-url` 
 ADRs are not user-facing. When this ships, update **`docs/`** only as far as the change is observable:
 
 - **`docs/cli.md`** — lint report: finding name, warn (not fail / not `--strict`), `snapshots:` vs invert. Write commands live in ADR 0003 (`snapshots set`; `snapshots apply --from-json` dry-run / `--apply`); lint stays read-only.
-- **`docs/architecture.md`** — one mention that `snapshots:` (when present) is the page-local ledger projection; `sources:` is unchanged.
+- **`docs/architecture.md`** — `snapshots:` (when present) is the page-local ledger projection; `sources:` is unchanged. Writer YAML shape is in ADR 0003 / `docs/cli.md`.
 - Skill markdown that already documents frontmatter (`llm-wiki`, `wiki-lint`, ingest) — ingest *may* set `snapshots:`; do not recast `sources:`.
 
 Do not add ADRs to `docs/README.md`. No new conceptual guide.

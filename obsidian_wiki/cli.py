@@ -1934,7 +1934,7 @@ def cmd_snapshots_set(args: argparse.Namespace) -> int:
 
 
 def cmd_snapshots_apply(args: argparse.Namespace) -> int:
-    from obsidian_wiki.snapshots import rewrite_page_snapshots
+    from obsidian_wiki.snapshots import format_snapshots_block, rewrite_page_snapshots
 
     context = _resolve_schema_command_context(getattr(args, "vault", None))
     if context is None:
@@ -1964,9 +1964,8 @@ def cmd_snapshots_apply(args: argparse.Namespace) -> int:
         planned.append((page, list(expected)))
     for page, expected in planned:
         print(page.relative_to(vault).as_posix())
-        for item in expected:
-            inner = item[:-3] if item.lower().endswith(".md") else item
-            print(f'  - "[[{inner}]]"')
+        for line in format_snapshots_block(expected).splitlines()[1:]:
+            print(line)
     if not args.apply:
         return 0
     written: list[str] = []

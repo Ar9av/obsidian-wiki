@@ -108,14 +108,24 @@ The check warns. A vault carrying a collision moves from `pass` to `warn`, which
 portable file keys. Optional `snapshots:` is separate: when present, it lists the archived
 files under `_raw/_archived/` (vault-relative) that the manifest says this page came from.
 
-Lint inverts `.manifest.json` — unioning each source's `pages_produced` and `pages_created`,
-resolving keys to those archive paths — and compares the set to `snapshots:` on the page.
-Values written as `"[[wikilinks]]"` are unwrapped before comparison. When the invert is
-non-empty and the field is missing or differs, `snapshot_mismatch` reports the page with
-expected vs actual path lists. It warns only; lint never rewrites frontmatter, and
-`obsidian-wiki lint --strict` does not promote this finding to exit 1.
+Clicking on links in the `snapshots` property allows you to easily view the
+source files used to construct the page.   You can also go to the url of the
+source file in the `sources` section, but since the Internet is ephemeral, the
+upstream source may have changed, moved or been deleted since import, making it
+not possible to establish information provenance.  The `snapshots` property
+ensures you can always reconstruct page provenance, at least from files that
+were added to `_raw`.
 
-Write `snapshots:` with the snapshots CLI:
+`/wiki-lint` is `snapshot` aware: it inverts `.manifest.json` — unioning each
+source's `pages_produced` and `pages_created`, resolving keys to those archive
+paths — and compares the set to `snapshots:` on the page.  Values written as
+`"[[path|title]]"` or unaliased `"[[path]]"` are unwrapped before comparison.
+When the invert is non-empty and the field is missing or differs,
+`snapshot_mismatch` reports the page with expected vs actual path lists. It
+warns only; lint never rewrites frontmatter, and `obsidian-wiki lint
+--strict` does not promote this finding to exit 1.
+
+To actually update the `snapshots` property:
 
 ```bash
 obsidian-wiki snapshots set concepts/attention.md --archive _raw/_archived/paper.pdf
@@ -123,19 +133,27 @@ obsidian-wiki snapshots apply --from-json lint.json          # dry-run: preview,
 obsidian-wiki snapshots apply --from-json lint.json --apply  # write
 ```
 
-`snapshots set PAGE --archive …` unions the given archive paths into the page's current
-`snapshots:` (prior archives stay). Every `--archive` argument must resolve to an
-existing file under `_raw/_archived/` (nested dirs are fine). A missing archive, or a
-staging-only `_raw/<name>.md` with no archive beside it, fails the whole command and
-writes nothing.
+`/wiki-ingest` now uses `obsidian-wiki snapshots set PAGE --archive …` to
+update the `snapshots` property.  It unions the given archive paths into the
+page's current `snapshots:` (prior archives stay). Every `--archive` argument
+must resolve to an existing file under `_raw/_archived/` (nested dirs are fine).
+A missing archive, or a staging-only `_raw/<name>.md` with no archive beside it,
+fails the whole command and writes nothing.
 
-`snapshots apply --from-json FILE|-` reads `findings.snapshot_mismatch` from lint JSON.
-Without `--apply` it prints the pages and `snapshots:` that would be written and exits 0.
-`--apply` replaces each listed page's `snapshots:` with that row's `expected` set.
-Each list item is written as a quoted wikilink (`- "[[_raw/_archived/foo]]"`) so YAML
-does not treat `[[` as nested arrays and Obsidian Properties can render clickable links.
-Changing those bytes stales trust fingerprints on reviewed pages; the command does not
-call `trust-record`.
+For retrofitting an existing vault with snapshots, or fixing lint
+`snapshot_mismatch` warnings, you can use `obsidian-wiki snapshots apply
+--from-json FILE|-`. It reads `findings.snapshot_mismatch` from lint JSON.  Without
+`--apply` it prints the pages and `snapshots:` that would be written and exits
+0.  `--apply` replaces each listed page's `snapshots:` with that row's
+`expected` set.  Each list item is written as a quoted wikilink with display
+text so YAML does not treat `[[` as nested arrays and Obsidian Properties can
+show a clickable **title**:
+
+```yaml
+snapshots:
+  - "[[_raw/_archived/foo|foo]]"
+  - "[[_raw/_archived/paper.pdf|paper.pdf]]"
+```
 
 ### Lifecycle transition checking
 

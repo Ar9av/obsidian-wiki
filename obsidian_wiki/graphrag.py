@@ -174,6 +174,8 @@ def build_index(vault: Path) -> dict[str, dict]:
                 pages[target]["in_links"].append(slug)
 
         for href in _MD_LINK_RE.findall(text):
+            if archive_wikilink_relpath(vault, href) is not None:
+                continue
             target = _slug(Path(href).stem)
             if target and target != slug and target in known:
                 pages[slug]["out_links"].append(target)

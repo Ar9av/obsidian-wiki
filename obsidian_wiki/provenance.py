@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -11,15 +12,22 @@ from obsidian_wiki.vault import split_frontmatter
 
 _PAGE_LIST_KEYS = ("pages_produced", "pages_created")
 _URL_FIELDS = ("url", "source", "source_url")
+_MARKDOWN_LINK_RE = re.compile(r"^\[([^\]]*)\]\(([^)]+)\)$")
 
 
 def unwrap_snapshot_value(raw: str) -> str:
     value = raw.strip().strip("'\"").strip()
-    if value.startswith("[[") and "]]" in value:
+    markdown = _MARKDOWN_LINK_RE.match(value)
+    if markdown:
+        value = markdown.group(2).strip()
+    elif value.startswith("[[") and "]]" in value:
         inner = value[2 : value.index("]]")]
         inner = inner.split("|", 1)[0].split("#", 1)[0].strip()
         value = inner
-    if value and _is_file_key(value) and not value.lower().endswith(".md"):
+    elif "|" in value:
+        # _WIKILINK_RE captures inners as path|display without [[ ]].
+        value = value.split("|", 1)[0].split("#", 1)[0].strip()
+    if value and _is_file_key(value) and Path(value).suffix == "":
         value = f"{value}.md"
     return value
 

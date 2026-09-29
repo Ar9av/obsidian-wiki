@@ -5,30 +5,38 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from obsidian_wiki.provenance import parse_snapshots_field
+from obsidian_wiki.provenance import parse_snapshots_field, unwrap_snapshot_value
 from obsidian_wiki.vault import split_frontmatter
 
 _SNAPSHOTS_LINE = re.compile(r"^snapshots\s*:")
 
 
-def _wikilink_inner(rel: str) -> str:
-    rel = rel.strip().replace("\\", "/")
-    if rel.lower().endswith(".md"):
-        rel = rel[: -len(".md")]
-    return rel
+def _display_label(canonical: str) -> str:
+    name = Path(canonical).name
+    if name.lower().endswith(".md"):
+        return name[: -len(".md")]
+    return name
+
+
+def _wikilink_inner(canonical: str) -> str:
+    if canonical.lower().endswith(".md"):
+        return canonical[: -len(".md")]
+    return canonical
 
 
 def format_snapshots_block(paths: list[str]) -> str:
     lines = ["snapshots:"]
     seen: set[str] = set()
     for raw in paths:
-        inner = _wikilink_inner(raw)
-        if not inner or inner in seen:
+        canonical = unwrap_snapshot_value(raw)
+        if not canonical or canonical in seen:
             continue
-        seen.add(inner)
-        # Quote so YAML does not parse `[[path]]` as a nested flow sequence.
-        # Unquoted items render as orange non-links in Obsidian Properties.
-        lines.append(f'  - "[[{inner}]]"')
+        seen.add(canonical)
+        inner = _wikilink_inner(canonical)
+        label = _display_label(canonical)
+        # Quoted wikilink: Obsidian Properties only treats [[…]] as links.
+        # |label is display text so the UI is not `_raw/_archived/…`.
+        lines.append(f'  - "[[{inner}|{label}]]"')
     return "\n".join(lines)
 
 

@@ -45,6 +45,18 @@ def test_unwrap_wikilink_and_quotes() -> None:
         "_raw/_archived/Old English.md"
     )
     assert unwrap_snapshot_value('"_raw/_archived/a.md"') == "_raw/_archived/a.md"
+    assert unwrap_snapshot_value(
+        '"[a](_raw/_archived/a.md)"'
+    ) == "_raw/_archived/a.md"
+    assert unwrap_snapshot_value(
+        "[clip](_raw/_archived/topic/clip.md)"
+    ) == "_raw/_archived/topic/clip.md"
+    assert unwrap_snapshot_value(
+        "[[_raw/_archived/foo|foo]]"
+    ) == "_raw/_archived/foo.md"
+    assert unwrap_snapshot_value("_raw/_archived/foo|foo") == (
+        "_raw/_archived/foo.md"
+    )
 
 
 def test_resolve_stale_raw_to_archived(tmp_path: Path) -> None:
@@ -95,10 +107,15 @@ def test_expected_snapshots_skips_unresolvable_keys(tmp_path: Path) -> None:
 
 
 def test_parse_snapshots_block_list() -> None:
-    raw = "\n  - [[_raw/_archived/a.md]]\n  - _raw/_archived/b.md\n"
+    raw = (
+        "\n  - [[_raw/_archived/a.md]]\n"
+        "  - _raw/_archived/b.md\n"
+        '  - "[c](_raw/_archived/c.md)"\n'
+    )
     assert parse_snapshots_field(raw) == [
         "_raw/_archived/a.md",
         "_raw/_archived/b.md",
+        "_raw/_archived/c.md",
     ]
 
 

@@ -207,6 +207,10 @@ lifecycle_changed: 2024-03-15
 tier: supporting
 created: 2024-03-15T10:30:00Z
 updated: 2024-03-15T10:30:00Z
+# Optional. Written only by `obsidian-wiki snapshots set` / `apply` — do not hand-author.
+# Quoted wikilinks with |title: Obsidian Properties does not treat Markdown [text](path) as links.
+snapshots:
+  - "[[_raw/_archived/example-clip|example-clip]]"
 ---
 
 # Page Title
@@ -232,7 +236,7 @@ Things that are unresolved or need more sources.
 
 **Sources section (required, last body section).** Every wiki page ends with `## Sources`. Entries must be clickable in Obsidian:
 
-- **Local snapshot** (raw ingest, dropped PDFs/images, Web Clipper files, anything that landed in `_raw/` and was archived): `[[_raw/_archived/<filename>]]` in the body **Sources** section. YAML `sources:` stays origin keys (`url:`, `agent:`, repo paths, …), **not** the archive path. After moving a file to `_raw/_archived/`, run `obsidian-wiki snapshots set <page> --archive _raw/_archived/<filename>` then `obsidian-wiki cache-update` on that **archived** path. The snapshots CLI does not touch the body. Do not link the webpage recorded in clipping frontmatter — that URL is mutable origin metadata.
+- **Local snapshot** (raw ingest, dropped PDFs/images, Web Clipper files, anything that landed in `_raw/` and was archived): `[[_raw/_archived/<filename>]]` in the body **Sources** section (body wikilinks may include `.md`). YAML `sources:` stays origin keys (`url:`, `agent:`, repo paths, …), **not** the archive path. YAML `snapshots:` is separate: after moving a file to `_raw/_archived/`, run `obsidian-wiki snapshots set <page> --archive _raw/_archived/<filename>` then `obsidian-wiki cache-update` on that **archived** path. The CLI writes a **List** of quoted wikilinks with display text, e.g. `"[[_raw/_archived/clip|clip]]"` (no `.md` in the target; `|clip` is what Properties shows). Do **not** put Markdown `[title](path)` in `snapshots:` — Properties leaves those as unclickable text. The snapshots CLI does not touch the body. Do not link the webpage recorded in clipping frontmatter — that URL is mutable origin metadata.
 - **Fetched URL** (`/ingest-url` with no saved snapshot): a markdown link to the canonical URL, and YAML `sources:` as `url:<canonical-url>`.
 - Do not mix those up. A clip of a page is not an ingest-from-URL.
 

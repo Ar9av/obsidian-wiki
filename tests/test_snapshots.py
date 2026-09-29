@@ -17,11 +17,12 @@ from obsidian_wiki.trust import build_trust_ledger, write_trust_ledger
 from obsidian_wiki.vault import split_frontmatter
 
 
-def test_format_snapshots_block_is_wikilink_list_without_md() -> None:
+def test_format_snapshots_block_is_wikilink_list_with_display_alias() -> None:
     block = format_snapshots_block(["_raw/_archived/foo.md", "_raw/_archived/bar.md"])
     assert block.splitlines()[0] == "snapshots:"
-    assert '  - "[[_raw/_archived/foo]]"' in block
-    assert ".md]]" not in block
+    assert '  - "[[_raw/_archived/foo|foo]]"' in block
+    assert '  - "[[_raw/_archived/bar|bar]]"' in block
+    assert "](" not in block
     assert parse_snapshots_field("\n" + "\n".join(block.splitlines()[1:])) == [
         "_raw/_archived/foo.md",
         "_raw/_archived/bar.md",
@@ -39,7 +40,7 @@ def test_rewrite_inserts_and_preserves_sources(tmp_path: Path) -> None:
     fm, body = split_frontmatter(text)
     assert "sources: [manual]" in fm
     assert "snapshots:" in fm
-    assert '  - "[[_raw/_archived/a]]"' in fm
+    assert '  - "[[_raw/_archived/a|a]]"' in fm
     assert body.strip().startswith("# T")
 
 
@@ -106,8 +107,8 @@ def test_snapshots_set_unions_and_rejects_missing(tmp_path: Path) -> None:
     )
     assert proc2.returncode == 0
     text = page.read_text(encoding="utf-8")
-    assert "[[_raw/_archived/a]]" in text
-    assert "[[_raw/_archived/b]]" in text
+    assert "[[_raw/_archived/a|a]]" in text
+    assert "[[_raw/_archived/b|b]]" in text
     assert "sources: [manual]" in text
     bad = _run(
         home, "snapshots", "set", "concepts/alpha.md", "--archive", "_raw/_archived/nope.md",
@@ -248,13 +249,13 @@ def test_snapshots_apply_dry_run_then_apply_replaces(tmp_path: Path) -> None:
     preview = _run(home, "snapshots", "apply", "--from-json", str(json_path))
     assert preview.returncode == 0
     assert "concepts/alpha.md" in preview.stdout
-    assert "[[_raw/_archived/a]]" in preview.stdout
+    assert "[[_raw/_archived/a|a]]" in preview.stdout
     assert (vault / "concepts" / "alpha.md").read_text(encoding="utf-8") == before
     written = _run(home, "snapshots", "apply", "--from-json", str(json_path), "--apply")
     assert written.returncode == 0
     text = (vault / "concepts" / "alpha.md").read_text(encoding="utf-8")
-    assert "[[_raw/_archived/a]]" in text
-    assert "[[_raw/_archived/extra]]" not in text
+    assert "[[_raw/_archived/a|a]]" in text
+    assert "_raw/_archived/extra" not in text
     assert "sources: [manual]" in text
 
 

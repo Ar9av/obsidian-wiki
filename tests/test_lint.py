@@ -1124,6 +1124,46 @@ def test_lint_archive_wikilink_does_not_attach_to_concept_slug(tmp_path: Path) -
     )
 
 
+def test_lint_archive_markdown_snapshot_does_not_attach_to_concept_slug(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/attention.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["attention"])
+    archived = vault / "_raw" / "_archived" / "attention.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("# clip\n", encoding="utf-8")
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots='\n  - "[attention](_raw/_archived/attention.md)"',
+    )
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    parsed = _parse_page(vault / "concepts/alpha.md", vault)
+    assert "attention" not in parsed["links"]
+    assert "beta" in parsed["links"]
+    report = lint_vault(vault)
+    assert report["findings"]["broken_links"] == []
+
+
+def test_lint_missing_archive_markdown_snapshot_is_broken_path(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots='\n  - "[ghost](_raw/_archived/ghost.md)"',
+    )
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    report = lint_vault(vault)
+    assert {
+        "page": "concepts/alpha.md",
+        "target": "_raw/_archived/ghost.md",
+    } in report["findings"]["broken_links"]
+
+
 def test_lint_missing_archive_wikilink_is_broken_path(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(

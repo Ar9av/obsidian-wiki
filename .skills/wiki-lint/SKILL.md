@@ -33,7 +33,7 @@ Schema precedence is CLI flags > resolved environment/config values > framework 
 
 When `obsidian-wiki` is on PATH, prefer `obsidian-wiki lint "$OBSIDIAN_VAULT_PATH" --json` (with the same schema override flags as above) and fold the JSON `findings` into the health report. If the CLI is unavailable, keep the grep-based checks below — do not require the binary.
 
-If the JSON report includes `findings.snapshot_mismatch`, list those pages in the report. Missing or drifted `snapshots:` is **not** missing required frontmatter (section 3 still covers only title, category, tags, sources, created, updated). Do not rewrite `sources:` to fix snapshot drift. Run `obsidian-wiki snapshots apply --from-json <lint.json>` (dry-run), show the preview, and pass `--apply` only after explicit user confirmation. `wiki-lint --consolidate` still does not apply this finding.
+If the JSON report includes `findings.snapshot_mismatch`, list those pages in the report. Missing or drifted `snapshots:` is **not** missing required frontmatter (section 3 still covers only title, category, tags, sources, created, updated). Do not rewrite `sources:` to fix snapshot drift. Run `obsidian-wiki snapshots apply --from-json <lint.json>` (dry-run), show the preview, and pass `--apply` only after explicit user confirmation. Apply writes quoted `"[[_raw/_archived/stem|stem]]"` list items (native Property links with display text). `wiki-lint --consolidate` still does not apply this finding.
 
 ## Lint Checks
 

@@ -9,7 +9,7 @@ The immutable file under `_raw/_archived/` that ingest actually read.
 _Avoid_: raw file, clip, original, source document (when those mean the live webpage)
 
 **`snapshots:`**:
-Page frontmatter listing archived snapshot paths (vault-relative; wikilink wrappers allowed for Obsidian). Distill provenance when a file was read. **Optional** — not in `REQUIRED_FRONTMATTER`. `/ingest-url` with no file, hand-written pages, and empty **resolved** invert omit it. When resolved invert is non-empty, lint may **warn** if the field is missing or disagrees (not fail). Writers emit a YAML **block list** of `[[_raw/_archived/…]]` (no `.md` inside the link). `snapshots set` **unions**; `snapshots apply --apply` **replaces** from lint `expected`.
+Page frontmatter listing archived snapshot paths (vault-relative; quoted wikilinks for Obsidian Properties). Distill provenance when a file was read. **Optional** — not in `REQUIRED_FRONTMATTER`. `/ingest-url` with no file, hand-written pages, and empty **resolved** invert omit it. When resolved invert is non-empty, lint may **warn** if the field is missing or disagrees (not fail). Writers emit a YAML **block list** of `"[[_raw/_archived/…|title]]"` (no `.md` in the target; `title` is the archive basename). `snapshots set` **unions**; `snapshots apply --apply` **replaces** from lint `expected`.
 _Avoid_: raw_sources, treating `sources:` URLs as the snapshot; writing `snapshots: [[…]]` as a flow list
 
 **Ledger**:
