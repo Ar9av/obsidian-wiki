@@ -115,7 +115,9 @@ class LangSpec:
     class_pat: str
     func_pat: str
     import_pats: tuple[str, ...]
-    inherit_pat: str = ""    # optional group(1)=child group(2)=parent
+    inherit_pat: str = ""    # optional group(1)=child, group(2)=parent clause
+                              # (one name, or several comma-separated for
+                              # multi-base languages like Python)
     docstring_pat: str = ""  # line immediately after def/class
 
 
@@ -257,6 +259,41 @@ def _file_id(path: str, name: str) -> str:
     return f"{path}::{name}"
 
 
+def _split_base_clause(clause: str) -> list[str]:
+    """Split an inherit_pat parent capture into real base-class names.
+
+    Python's clause can hold several comma-separated bases plus keyword args
+    (e.g. "Animal, Mixin, metaclass=ABCMeta"); other languages already
+    capture a single identifier here and pass through unchanged.
+    """
+    bases: list[str] = []
+    depth = 0
+    current = ""
+    for ch in clause:
+        if ch in "([{":
+            depth += 1
+            current += ch
+        elif ch in ")]}":
+            depth -= 1
+            current += ch
+        elif ch == "," and depth == 0:
+            bases.append(current)
+            current = ""
+        else:
+            current += ch
+    bases.append(current)
+
+    names = []
+    for base in bases:
+        base = base.strip()
+        if not base or "=" in base:
+            continue  # keyword arg (metaclass=..., **kwargs), not a base class
+        m = re.match(r"[\w.]+", base)
+        if m:
+            names.append(m.group(0))
+    return names
+
+
 def extract_file(path: Path, root: Path | None = None) -> Graph:
     """Extract nodes and edges from a single code file."""
     rel = str(path.relative_to(root)) if root else path.name
@@ -321,14 +358,15 @@ def extract_file(path: Path, root: Path | None = None) -> Graph:
         if spec.inherit_pat:
             m = re.match(spec.inherit_pat, stripped)
             if m and len(m.groups()) >= 2:
-                child, parent = m.group(1), m.group(2)
-                if child and parent:
+                child, parent_clause = m.group(1), m.group(2)
+                if child and parent_clause:
                     child_id = _file_id(rel, child)
-                    parent_id = _file_id(rel, parent)
-                    graph.edges.append(Edge(source=child_id, target=parent_id,
-                                            relation="inherits",
-                                            confidence="EXTRACTED",
-                                            source_file=rel))
+                    for parent in _split_base_clause(parent_clause):
+                        parent_id = _file_id(rel, parent)
+                        graph.edges.append(Edge(source=child_id, target=parent_id,
+                                                relation="inherits",
+                                                confidence="EXTRACTED",
+                                                source_file=rel))
 
     return graph
 

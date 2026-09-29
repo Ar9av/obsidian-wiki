@@ -81,6 +81,53 @@ class TestExtractFile:
                      for e in g.edges}
         assert ("Dog", "Animal", "inherits") in relations
 
+    def test_python_multiple_inheritance_edges(self, tmp_path):
+        src = tmp_path / "multi.py"
+        src.write_text(textwrap.dedent("""\
+            class Animal:
+                pass
+
+            class Mixin:
+                pass
+
+            class Dog(Animal, Mixin):
+                pass
+        """))
+        g = extract_file(src)
+        relations = {(e.source.split("::")[-1], e.target.split("::")[-1], e.relation)
+                     for e in g.edges}
+        assert ("Dog", "Animal", "inherits") in relations
+        assert ("Dog", "Mixin", "inherits") in relations
+        assert not any(target == "Animal, Mixin" for _, target, _ in relations)
+
+    def test_python_inheritance_skips_metaclass_kwarg(self, tmp_path):
+        src = tmp_path / "meta.py"
+        src.write_text(textwrap.dedent("""\
+            class Base:
+                pass
+
+            class Foo(Base, metaclass=type):
+                pass
+        """))
+        g = extract_file(src)
+        inherits = {(e.source.split("::")[-1], e.target.split("::")[-1])
+                    for e in g.edges if e.relation == "inherits"}
+        assert inherits == {("Foo", "Base")}
+
+    def test_python_inheritance_generic_base_not_split_on_internal_comma(self, tmp_path):
+        src = tmp_path / "generic.py"
+        src.write_text(textwrap.dedent("""\
+            class Base:
+                pass
+
+            class Foo(Mapping[str, int], Base):
+                pass
+        """))
+        g = extract_file(src)
+        inherits = {(e.source.split("::")[-1], e.target.split("::")[-1])
+                    for e in g.edges if e.relation == "inherits"}
+        assert inherits == {("Foo", "Mapping"), ("Foo", "Base")}
+
     def test_javascript_class_and_function(self, tmp_js):
         g = extract_file(tmp_js)
         labels = {n.label for n in g.nodes}
