@@ -235,7 +235,7 @@ class TestUpdateSource:
         assert str(src_file) in sources
         assert str(src_dir) in sources
 
-    def test_update_source_prefers_archived_key_and_hash(self, vault):
+    def test_update_source_live_draft_beats_same_named_archive(self, vault):
         staging = vault / "_raw" / "notes.md"
         archived = vault / "_raw" / "_archived" / "notes.md"
         archived.parent.mkdir(parents=True, exist_ok=True)
@@ -243,11 +243,10 @@ class TestUpdateSource:
         staging.write_text("staging-bytes\n", encoding="utf-8")
         archived.write_text("archived-bytes\n", encoding="utf-8")
         h = update_source(vault, staging)
-        assert h == compute_hash(archived)
-        assert h != compute_hash(staging)
+        assert h == compute_hash(staging)
         sources = _load_manifest(vault)
-        assert "_raw/_archived/notes.md" in sources
-        assert "_raw/notes.md" not in sources
+        assert "_raw/notes.md" in sources
+        assert "_raw/_archived/notes.md" not in sources
 
     def test_update_source_hashes_archive_when_staging_gone(self, vault):
         staging = vault / "_raw" / "notes.md"

@@ -148,9 +148,29 @@ def test_prefer_stale_raw_uses_flat_archived_basename(tmp_path: Path) -> None:
     archived = vault / "_raw" / "_archived" / "notes.md"
     archived.parent.mkdir(parents=True)
     archived.write_text("x\n", encoding="utf-8")
-    (vault / "_raw").mkdir(exist_ok=True)
-    (vault / "_raw" / "notes.md").write_text("staging\n", encoding="utf-8")
     assert prefer_archive_write_path(vault, "_raw/notes.md") == "_raw/_archived/notes.md"
+
+
+def test_prefer_live_draft_over_same_named_archive(tmp_path: Path) -> None:
+    # A new _raw/notes.md next to an old archived notes.md is a new draft.
+    vault = tmp_path / "vault"
+    archived = vault / "_raw" / "_archived" / "notes.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("x\n", encoding="utf-8")
+    (vault / "_raw" / "notes.md").write_text("staging\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "_raw/notes.md") == "_raw/notes.md"
+
+
+def test_archive_basename_only_matches_raw_keys(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    archived = vault / "_raw" / "_archived" / "README.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("x\n", encoding="utf-8")
+    (vault / "docs").mkdir()
+    (vault / "docs" / "README.md").write_text("doc\n", encoding="utf-8")
+    assert prefer_archive_write_path(vault, "docs/README.md") == "docs/README.md"
+    assert resolve_source_key(vault, "docs/README.md") is None
+    assert resolve_source_key(vault, "projects/x/README.md") is None
 
 
 def test_prefer_missing_returns_none(tmp_path: Path) -> None:

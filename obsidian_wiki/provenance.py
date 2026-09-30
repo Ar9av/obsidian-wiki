@@ -96,13 +96,21 @@ def resolve_source_key(
     if not _is_file_key(key):
         return None
     candidate = Path(key)
+    if "_archived" in candidate.parts:
+        return candidate.as_posix() if (vault / candidate).is_file() else None
+    return _stale_raw_archive(vault, candidate)
+
+
+def _stale_raw_archive(vault: Path, candidate: Path) -> str | None:
+    """`_raw/<name>` that ingest already moved to `_raw/_archived/<name>`.
+
+    Only `_raw/` drafts qualify, and only once the draft itself is gone: a live
+    file, or a same-named file elsewhere in the vault, is never an archive.
+    """
+    if candidate.parts[:1] != ("_raw",) or (vault / candidate).is_file():
+        return None
     archived_rel = Path("_raw") / "_archived" / candidate.name
-    archived_abs = vault / archived_rel
-    if archived_abs.is_file():
-        return archived_rel.as_posix()
-    if (vault / candidate).is_file() and "_archived" in candidate.parts:
-        return candidate.as_posix()
-    return None
+    return archived_rel.as_posix() if (vault / archived_rel).is_file() else None
 
 
 def parse_snapshots_field(raw: str) -> list[str]:
@@ -164,12 +172,9 @@ def prefer_archive_write_path(vault: Path, rel: str) -> str | None:
         if (vault / candidate).is_file():
             return candidate.as_posix()
         return None
-    archived_rel = Path("_raw") / "_archived" / candidate.name
-    if (vault / archived_rel).is_file():
-        return archived_rel.as_posix()
     if (vault / candidate).is_file():
         return candidate.as_posix()
-    return None
+    return _stale_raw_archive(vault, candidate)
 
 
 def archive_wikilink_relpath(_vault: Path, inner: str) -> str | None:

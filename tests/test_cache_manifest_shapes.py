@@ -153,6 +153,7 @@ def test_list_manifest_rekeys_stale_raw_to_archived(vault):
         vault,
         [{"path": "_raw/foo.md", "content_hash": "sha256:old", "source_type": "document"}],
     )
+    staging.unlink()  # ingest moved the draft into _archived/
     h = update_source(vault, staging)
     assert h == compute_hash(archived)
     entries = _load_raw(vault)["sources"]
