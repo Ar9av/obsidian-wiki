@@ -402,33 +402,70 @@ def compute_hash(path: Path) -> str:
     return sha256_file(path)
 
 
+def _resolved_form(path: Path) -> str | None:
+    """``realpath`` of *path* as a comparable string, or ``None`` if it cannot be resolved.
+
+    ``os.path.normcase`` keeps the comparison equivalent to ``Path`` equality on
+    case-insensitive filesystems.
+    """
+    try:
+        return os.path.normcase(str(path.resolve()))
+    except OSError:
+        return None
+
+
 def check_sources(vault: Path, source_paths: list[Path]) -> CheckResult:
     """Classify each source as new / modified / unchanged vs. the manifest.
 
     Also reports manifest entries whose source file no longer exists on disk.
     Handles both manifest shapes and compares hashes prefix-insensitively.
+
+    Every entry and every query is resolved once and matched through an index
+    of its forms (raw key, resolved path).  Resolving is a ``realpath`` walk —
+    one ``lstat`` per path component — so doing it per (entry, query) pair, as
+    the first-match scan did, made a 3,000-entry manifest cost about a second
+    per queried file.  The index keeps the first entry for each form, which is
+    what the scan's ``break`` on first hit returned.
     """
     entries = list(_iter_entries(_load_manifest(vault)))
     result: CheckResult = {
         "new": [], "modified": [], "unchanged": [], "missing": [], "unavailable": []
     }
 
+    by_form: dict[str, int] = {}
+    entry_resolved: list[str | None] = []
+    for i, (stored_key, _entry) in enumerate(entries):
+        resolved = None
+        if stored_key:
+            by_form.setdefault(stored_key, i)
+            stored_path = resolve_key(stored_key, vault)
+            if stored_path is not None:
+                resolved = _resolved_form(stored_path)
+                if resolved is not None:
+                    by_form.setdefault(resolved, i)
+        entry_resolved.append(resolved)
+
     matched: set[int] = set()
+    query_forms: set[str] = set()
     for path in source_paths:
         key = str(path)
+        forms = [key]
+        resolved = _resolved_form(path)
+        if resolved is not None:
+            forms.append(resolved)
+        query_forms.update(forms)
         if not path.exists():
             result["missing"].append(key)
             continue
         current_hash = _strip_algo(compute_hash(path))
-        entry = None
-        for i, (stored_key, e) in enumerate(entries):
-            if _same_source(stored_key, path, vault):
-                entry = e
-                matched.add(i)
-                break
-        if entry is None:
+        hits = [by_form[f] for f in forms if f in by_form]
+        if not hits:
             result["new"].append(key)
-        elif _strip_algo(entry.get("content_hash")) != current_hash:
+            continue
+        i = min(hits)   # the earliest entry matching by either form — the old scan's first hit
+        matched.add(i)
+        entry = entries[i][1]
+        if _strip_algo(entry.get("content_hash")) != current_hash:
             result["modified"].append(key)
         else:
             result["unchanged"].append(key)
@@ -439,7 +476,7 @@ def check_sources(vault: Path, source_paths: list[Path]) -> CheckResult:
     for i, (stored_key, _entry) in enumerate(entries):
         if i in matched:
             continue
-        if any(_same_source(stored_key, p, vault) for p in source_paths):
+        if stored_key in query_forms or (entry_resolved[i] is not None and entry_resolved[i] in query_forms):
             continue
         if _missing_on_disk(stored_key, vault):
             bucket = "missing" if _is_vault_local(stored_key, vault, top_names) else "unavailable"
