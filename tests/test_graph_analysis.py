@@ -93,6 +93,35 @@ class TestParseVaultGraph:
         outgoing, _ = parse_vault_graph(vault)
         assert outgoing["orphan"] == []
 
+    def test_archive_wikilink_is_not_an_edge_to_same_stem(self, vault):
+        _page(vault, "attention", ["other"])
+        _page(vault, "other", ["attention"])
+        arch = vault / "_raw" / "_archived" / "attention.md"
+        arch.parent.mkdir(parents=True)
+        arch.write_text("clip\n", encoding="utf-8")
+        cited = vault / "cited.md"
+        cited.write_text(
+            "---\ntitle: cited\nsnapshots:\n  - [[_raw/_archived/attention]]\n---\n# cited\n",
+            encoding="utf-8",
+        )
+        outgoing, _ = parse_vault_graph(vault)
+        assert "attention" not in outgoing.get("cited", [])
+
+    def test_archive_markdown_snapshot_is_not_an_edge_to_same_stem(self, vault):
+        _page(vault, "attention", ["other"])
+        _page(vault, "other", ["attention"])
+        arch = vault / "_raw" / "_archived" / "attention.md"
+        arch.parent.mkdir(parents=True)
+        arch.write_text("clip\n", encoding="utf-8")
+        cited = vault / "cited.md"
+        cited.write_text(
+            "---\ntitle: cited\nsnapshots:\n"
+            '  - "[attention](_raw/_archived/attention.md)"\n---\n# cited\n',
+            encoding="utf-8",
+        )
+        outgoing, _ = parse_vault_graph(vault)
+        assert "attention" not in outgoing.get("cited", [])
+
 
 # ---------------------------------------------------------------------------
 # god_nodes

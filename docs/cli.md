@@ -65,7 +65,7 @@ then re-run `obsidian-wiki setup`.
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, `snapshot_mismatch` (a warning when optional `snapshots:` does not match the ledger invert — the page is reported, never rewritten, and `--strict` does not promote it), and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
 | `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash
@@ -101,6 +101,59 @@ while titles differ (`"Vector Search"` and `"vector-search"` slug to the same st
 
 The check warns. A vault carrying a collision moves from `pass` to `warn`, which leaves
 `obsidian-wiki lint` at exit 0 and takes `obsidian-wiki lint --strict` to exit 1.
+
+### Snapshot provenance (`snapshots:`)
+
+`sources:` names the upstream inputs a page was distilled from — URLs, repo paths, agent logs,
+portable file keys. Optional `snapshots:` is separate: when present, it lists the archived
+files under `_raw/_archived/` (vault-relative) that the manifest says this page came from.
+
+Clicking on links in the `snapshots` property allows you to easily view the
+source files used to construct the page.   You can also go to the url of the
+source file in the `sources` section, but since the Internet is ephemeral, the
+upstream source may have changed, moved or been deleted since import, making it
+not possible to establish information provenance.  The `snapshots` property
+ensures you can always reconstruct page provenance, at least from files that
+were added to `_raw`.
+
+`/wiki-lint` is `snapshot` aware: it inverts `.manifest.json` — unioning each
+source's `pages_produced` and `pages_created`, resolving keys to those archive
+paths — and compares the set to `snapshots:` on the page.  Values written as
+`"[[path|title]]"` or unaliased `"[[path]]"` are unwrapped before comparison.
+When the invert is non-empty and the field is missing or differs,
+`snapshot_mismatch` reports the page with expected vs actual path lists. It
+warns only; lint never rewrites frontmatter, and `obsidian-wiki lint
+--strict` does not promote this finding to exit 1.
+
+To actually update the `snapshots` property:
+
+```bash
+obsidian-wiki snapshots set concepts/attention.md --archive _raw/_archived/paper.pdf
+obsidian-wiki snapshots apply --from-json lint.json          # dry-run: preview, no writes
+obsidian-wiki snapshots apply --from-json lint.json --apply  # write
+```
+
+`/wiki-ingest` now uses `obsidian-wiki snapshots set PAGE --archive …` to
+update the `snapshots` property.  It unions the given archive paths into the
+page's current `snapshots:` (prior archives stay). Every `--archive` argument
+must resolve to an existing file under `_raw/_archived/` (nested dirs are fine).
+A missing archive, or a staging-only `_raw/<name>.md` with no archive beside it,
+fails the whole command and writes nothing.
+
+For retrofitting an existing vault with snapshots, or fixing lint
+`snapshot_mismatch` warnings, you can use `obsidian-wiki snapshots apply
+--from-json FILE|-`. It reads `findings.snapshot_mismatch` from lint JSON.  Without
+`--apply` it prints the pages and `snapshots:` that would be written and exits
+0.  `--apply` replaces each listed page's `snapshots:` with that row's
+`expected` set.  Each list item is written as a quoted wikilink with display
+text so YAML does not treat `[[` as nested arrays and Obsidian Properties can
+show a clickable **title**:
+
+```yaml
+snapshots:
+  - "[[_raw/_archived/foo|foo]]"
+  - "[[_raw/_archived/paper.pdf|paper.pdf]]"
+```
 
 ### Lifecycle transition checking
 
@@ -451,7 +504,7 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
 | `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable` |
-| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME` |
+| `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME`. If `_raw/_archived/<basename>` exists, that is the stored key and the file that is hashed — even when you pass a staging `_raw/<name>.md` path |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
 | `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. `--backend` beats the resolved `CODE_UNDERSTANDING_*` config (env → project `.env` → global config). Used by wiki-update Step 3b. |

@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from obsidian_wiki.lint import lint_vault
+from obsidian_wiki.lint import _parse_page, lint_vault
 from obsidian_wiki.trust import build_trust_ledger, write_trust_ledger
 
 
@@ -26,6 +26,7 @@ def _page(
     links: list[str] | None = None,
     include_frontmatter: bool = True,
     include_trust_fields: bool = True,
+    snapshots: str | None = None,
 ) -> Path:
     path = vault / relpath
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -46,6 +47,8 @@ def _page(
             lines.extend(["base_confidence: 0.80", "lifecycle: reviewed"])
         if summary is not None:
             lines.append(f"summary: {summary}")
+        if snapshots is not None:
+            lines.append(f"snapshots: {snapshots}")
         lines.append("---")
     lines.append(f"# {title or path.stem}")
     for link in links or []:
@@ -100,6 +103,95 @@ def test_lint_vault_passes_clean_graph(tmp_path: Path) -> None:
     assert report["status"] == "pass"
     assert report["findings"]["broken_links"] == []
     assert report["findings"]["missing_frontmatter"] == []
+
+
+def _clean_pair(vault: Path, *, alpha_snapshots: str | None = None) -> None:
+    """Write a two-page graph and trust ledger from the **final** page bytes.
+
+    Never rewrite a page after `write_trust_ledger`: that marks reviewed
+    pages stale (`confidence_review_stale`) and pollutes `status`.
+    """
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots=alpha_snapshots,
+    )
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+
+
+def _write_archive_and_manifest(vault: Path, page: str = "concepts/alpha.md") -> None:
+    archived = vault / "_raw" / "_archived" / "a.md"
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    archived.write_text("# clip\n", encoding="utf-8")
+    (vault / ".manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": {
+                    "_raw/_archived/a.md": {"pages_produced": [page]},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_snapshot_mismatch_warns_when_field_missing(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+    _write_archive_and_manifest(vault)
+
+    report = lint_vault(vault)
+
+    assert report["status"] == "warn"
+    assert report["findings"]["snapshot_mismatch"] == [
+        {
+            "page": "concepts/alpha.md",
+            "expected": ["_raw/_archived/a.md"],
+            "actual": [],
+        }
+    ]
+    assert "sources: [manual]" in (vault / "concepts" / "alpha.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_snapshot_mismatch_empty_when_field_matches(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault, alpha_snapshots="[_raw/_archived/a.md]")
+    _write_archive_and_manifest(vault)
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["snapshot_mismatch"] == []
+    assert report["status"] == "pass"
+
+
+def test_snapshot_mismatch_when_field_disagrees(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault, alpha_snapshots="[_raw/_archived/wrong.md]")
+    _write_archive_and_manifest(vault)
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["snapshot_mismatch"] == [
+        {
+            "page": "concepts/alpha.md",
+            "expected": ["_raw/_archived/a.md"],
+            "actual": ["_raw/_archived/wrong.md"],
+        }
+    ]
+
+
+def test_snapshot_mismatch_absent_when_invert_empty(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["snapshot_mismatch"] == []
 
 
 def test_lint_vault_honors_okignore(tmp_path: Path) -> None:
@@ -228,6 +320,35 @@ def test_lint_cli_uses_configured_vault_and_strict_mode(tmp_path: Path) -> None:
     data = json.loads(proc.stdout)
     assert data["status"] == "warn"
     assert "concepts/alpha.md" in data["findings"]["missing_summaries"]
+
+
+def test_lint_cli_strict_ignores_snapshot_mismatch_alone(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+    _write_archive_and_manifest(vault)
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    proc = _run(home, "lint", "--json", "--strict")
+    data = json.loads(proc.stdout)
+    assert data["status"] == "warn"
+    assert data["findings"]["snapshot_mismatch"]
+    assert proc.returncode == 0
+
+
+def test_lint_cli_strict_still_fails_other_warnings(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", summary=None)
+    config_dir = home / ".obsidian-wiki"
+    config_dir.mkdir(parents=True)
+    (config_dir / "config").write_text(f'OBSIDIAN_VAULT_PATH="{vault}"\n', encoding="utf-8")
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger)
+    proc = _run(home, "lint", "--json", "--strict")
+    assert proc.returncode == 1
+    assert json.loads(proc.stdout)["findings"]["missing_summaries"]
 
 
 def test_lint_vault_legacy_pages_without_trust_schema_warn_by_default(tmp_path: Path) -> None:
@@ -975,3 +1096,88 @@ def test_machine_path_in_scalar_sources_is_reported(tmp_path: Path) -> None:
     assert report["findings"]["machine_path_sources"] == [
         {"page": "references/alpha.md", "sources": ["/abs/only.md"]}
     ]
+
+
+def test_lint_archive_wikilink_does_not_attach_to_concept_slug(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/attention.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["attention"])
+    archived = vault / "_raw" / "_archived" / "attention.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("# clip\n", encoding="utf-8")
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots="\n  - [[_raw/_archived/attention]]",
+    )
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    parsed = _parse_page(vault / "concepts/alpha.md", vault)
+    assert "attention" not in parsed["links"]
+    assert "beta" in parsed["links"]
+    report = lint_vault(vault)
+    assert report["findings"]["broken_links"] == []
+    assert not any(
+        item.get("target") == "attention" and item.get("page") == "concepts/alpha.md"
+        for item in report["findings"]["broken_links"]
+    )
+
+
+def test_lint_archive_markdown_snapshot_does_not_attach_to_concept_slug(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/attention.md", links=["beta"])
+    _page(vault, "concepts/beta.md", links=["attention"])
+    archived = vault / "_raw" / "_archived" / "attention.md"
+    archived.parent.mkdir(parents=True)
+    archived.write_text("# clip\n", encoding="utf-8")
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots='\n  - "[attention](_raw/_archived/attention.md)"',
+    )
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    parsed = _parse_page(vault / "concepts/alpha.md", vault)
+    assert "attention" not in parsed["links"]
+    assert "beta" in parsed["links"]
+    report = lint_vault(vault)
+    assert report["findings"]["broken_links"] == []
+
+
+def test_lint_missing_archive_markdown_snapshot_is_broken_path(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots='\n  - "[ghost](_raw/_archived/ghost.md)"',
+    )
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    report = lint_vault(vault)
+    assert {
+        "page": "concepts/alpha.md",
+        "target": "_raw/_archived/ghost.md",
+    } in report["findings"]["broken_links"]
+
+
+def test_lint_missing_archive_wikilink_is_broken_path(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(
+        vault,
+        "concepts/alpha.md",
+        links=["beta"],
+        snapshots="\n  - [[_raw/_archived/ghost]]",
+    )
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    ledger = build_trust_ledger(vault, reviewed_at="2026-07-12T17:38:39+07:00")
+    write_trust_ledger(vault / "_meta" / "trust-ledger.json", ledger, vault=vault)
+    report = lint_vault(vault)
+    assert {
+        "page": "concepts/alpha.md",
+        "target": "_raw/_archived/ghost.md",
+    } in report["findings"]["broken_links"]
+

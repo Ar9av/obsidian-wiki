@@ -2,7 +2,10 @@
 
 Reference for the `wiki-ingest` skill when the source is a **web URL** rather than a local file.
 Triggered by `/ingest-url <url>`, "add this URL", "ingest this link", "save this page", or a pasted
-URL with "add this" / "save this to my wiki".
+URL with "add this" / "save this to my wiki". **This is the URL exception** in `wiki-ingest` snapshot
+provenance: there is no `_raw/_archived/` file, so YAML `sources:` / `source_url` and the page
+**Sources** section **may** link the live URL. If the user already has a saved snapshot in `_raw/`,
+do not use this path — use ordinary raw ingest and link the archive, not the webpage.
 
 Where the page lands depends on whether you can detect a current project — if yes, it goes straight
 into that project's folder; if not, it goes to `misc/` and is promoted later based on connection
@@ -203,6 +206,7 @@ Then write the body (same for both modes):
 - `## Entities` — wikilinks to entity pages (`[[entities/...]]`) for people, tools, orgs mentioned
 - `## Open Questions` — questions the source raises (omit section if none)
 - `## Related` — wikilinks to any existing wiki pages this connects to; in project mode, always include a link back to `[[projects/<project-name>/<project-name>]]`
+- `## Sources` — last section: markdown link to the fetched URL (this path has no `_raw` snapshot)
 
 Apply `visibility/internal` or `visibility/pii` tags if the content warrants them. When in doubt, omit.
 

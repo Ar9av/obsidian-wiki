@@ -235,6 +235,32 @@ class TestUpdateSource:
         assert str(src_file) in sources
         assert str(src_dir) in sources
 
+    def test_update_source_live_draft_beats_same_named_archive(self, vault):
+        staging = vault / "_raw" / "notes.md"
+        archived = vault / "_raw" / "_archived" / "notes.md"
+        archived.parent.mkdir(parents=True, exist_ok=True)
+        staging.parent.mkdir(parents=True, exist_ok=True)
+        staging.write_text("staging-bytes\n", encoding="utf-8")
+        archived.write_text("archived-bytes\n", encoding="utf-8")
+        h = update_source(vault, staging)
+        assert h == compute_hash(staging)
+        sources = _load_manifest(vault)
+        assert "_raw/notes.md" in sources
+        assert "_raw/_archived/notes.md" not in sources
+
+    def test_update_source_hashes_archive_when_staging_gone(self, vault):
+        staging = vault / "_raw" / "notes.md"
+        archived = vault / "_raw" / "_archived" / "notes.md"
+        archived.parent.mkdir(parents=True, exist_ok=True)
+        staging.parent.mkdir(parents=True, exist_ok=True)
+        staging.write_text("staging-bytes\n", encoding="utf-8")
+        archived.write_text("archived-bytes\n", encoding="utf-8")
+        update_source(vault, staging)
+        staging.unlink()
+        h = update_source(vault, staging)
+        assert h == compute_hash(archived)
+        assert "_raw/_archived/notes.md" in _load_manifest(vault)
+
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -293,6 +319,20 @@ class TestCacheCLI:
         assert proc.returncode == 0
         assert "no portable key" not in proc.stderr
         assert "repo:o/n" in _load_manifest(vault)
+
+    def test_cache_update_cli_uses_archive_if_staging_gone(self, vault):
+        staging = vault / "_raw" / "notes.md"
+        archived = vault / "_raw" / "_archived" / "notes.md"
+        archived.parent.mkdir(parents=True, exist_ok=True)
+        staging.parent.mkdir(parents=True, exist_ok=True)
+        staging.write_text("staging-bytes\n", encoding="utf-8")
+        archived.write_text("archived-bytes\n", encoding="utf-8")
+        staging.unlink()
+        proc = self._run("cache-update", str(vault), str(staging))
+        assert proc.returncode == 0
+        data = json.loads(proc.stdout)
+        assert data["key"] == "_raw/_archived/notes.md"
+        assert data["content_hash"] == compute_hash(archived)
 
 
 class TestCacheCLIVaultRelativeSources:

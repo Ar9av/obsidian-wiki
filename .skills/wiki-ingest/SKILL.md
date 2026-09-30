@@ -87,12 +87,24 @@ In raw mode, each file in `OBSIDIAN_VAULT_PATH/_raw/` (or `OBSIDIAN_RAW_DIR`) is
 
 This keeps faith with the "immutable raw layer" principle in `llm-wiki/SKILL.md`: even though `_raw/` drafts aren't Layer 1 sources, some have no other copy (e.g. a quick-capture finding typed straight into `_raw/` with no external document behind it), so the promoted file is the only record once it leaves the staging directory.
 
-**Source inheritance:** The `_raw/` path is a staging artifact — never use it as the `sources:` value on the promoted page. Derive the source entry from the `_raw/` file's own frontmatter instead:
+**Snapshot provenance:** After the move, `_raw/_archived/<filename>` (with any collision suffix) **is** the snapshot the wiki was built from. Web pages change; a clipping’s YAML `source:` / `url` is origin metadata, not the snapshot.
 
-- If the file has both `capture_source` and `sources:` fields, synthesize a combined entry:
-  `"agent:<capture_source> <sources-value>"` — e.g. `"agent:claude-session obsidian-wiki session (2026-05-29)"`
-- If the file has only `sources:`, copy those entries verbatim.
-- Only fall back to the `_raw/` filename if the file has no `sources:` or `capture_source` fields at all.
+- YAML `sources:` stays origin keys (`url:`, `agent:`, repo paths, portable file keys) — **not** the archive path.
+- After the move, record the archive on the page, then the manifest — both on the **archived** path:
+
+```bash
+obsidian-wiki snapshots set <page> --archive "_raw/_archived/<filename>"
+obsidian-wiki cache-update "$OBSIDIAN_VAULT_PATH" "_raw/_archived/<filename>" --pages <page>
+```
+
+That CLI writes YAML `snapshots:` as a quoted wikilink **list** with display text, e.g. `"[[_raw/_archived/clip|clip]]"`. Do not hand-edit `snapshots:` to Markdown `[title](path)` — Obsidian Properties only treats `"[[…]]"` as clickable links ([Properties](https://help.obsidian.md/properties)). If Properties shows a single text blob, set the property type to **List**.
+
+- Every created or updated page must end with a **Sources** section whose clickable entries may be Obsidian wikilinks to those snapshots: `[[_raw/_archived/<filename>]]`. The snapshots CLI does not touch the body.
+- Do **not** add a live URL to YAML `sources:` or to the Sources section just because the draft recorded a webpage. Optional non-link breadcrumb: *Clipped from https://…* (plain text, not a markdown/wikilink).
+- **URL exception:** link a live URL only when this ingest **fetched the network** (`/ingest-url` / `ingest-url`) and there is **no** local snapshot file. Then YAML may use `url:<canonical-url>` and the Sources section may use a markdown link to that URL.
+- Agent-session keys (`agent:…`) still apply when the only origin is a conversation, not a file. Do not invent a `_raw/` path that does not exist.
+
+The pending `_raw/` path (before archive) is staging — never leave it as YAML `sources:` on a live page.
 
 **Move safety:** Only move the specific file that was just promoted. Before moving, verify the resolved path is inside `$OBSIDIAN_VAULT_PATH/_raw/` — never touch files outside this directory. Never use wildcards or recursive operations (`rm -rf`, `mv *`). Move one file at a time by its exact path into `_raw/_archived/`, preserving its filename. If a file of the same name already exists there, append a numeric suffix rather than overwriting.
 
@@ -404,13 +416,13 @@ For each page in your plan:
 - Use the page template from the llm-wiki skill (frontmatter + sections). **For academic papers landing in `references/`, use the Paper Deep-Dive Template** from `llm-wiki/SKILL.md` instead of the generic one (see *Academic papers* in Step 1).
 - Place in the correct category directory
 - Add `[[wikilinks]]` to at least 2-3 existing pages
-- Include the source in the `sources` frontmatter field. In raw mode: derive from `capture_source` + `sources` frontmatter of the `_raw/` file — never use the `_raw/` path itself (see Raw Mode section)
+- Include the origin in the `sources` frontmatter field **and** a bottom **Sources** section (see Raw Mode snapshot provenance). YAML `sources:` is origin keys (`url:`, `agent:`, …), not the archive path. File/raw ingest: `snapshots set` (YAML `"[[_raw/_archived/stem|stem]]"`) plus `[[_raw/_archived/…]]` in the body. Live URL only if this ingest fetched the web with no snapshot.
 
 **If updating an existing page:**
 - Read the current page first
 - Merge new information — don't just append
 - Update the `updated` timestamp in frontmatter
-- Add the new source to the `sources` list
+- Add the new origin to the `sources` list and to the bottom **Sources** section (same snapshot-vs-URL rules as create)
 - Resolve any contradictions between old and new information (note them if unresolvable)
 
 **Populate `relationships:` when context is clear** — if Step 2 identified typed relationships between this page and another, add a `relationships:` block to the frontmatter (defined in `llm-wiki/SKILL.md`, Typed Relationships section). Only add entries where the source text makes the direction and type unambiguous. When in doubt, use `related_to` or omit the block. Example:
@@ -551,6 +563,8 @@ After ingesting, verify:
 - [ ] `index.md` reflects all changes
 - [ ] `log.md` has the ingest entry
 - [ ] Source attribution is present for every new claim
+- [ ] Every new/updated page has a bottom **Sources** section with Obsidian wikilinks to `_raw/_archived/…` snapshots (or a live URL only if ingest was `/ingest-url` with no local file)
+- [ ] YAML `sources:` is origin keys (`url:`, `agent:`, …), not archive paths; after a `_raw/_archived/` move, `snapshots set` then `cache-update` ran on the archived path (YAML `snapshots:` is `"[[_raw/_archived/stem|stem]]"`, not Markdown links); clipping `source:`/`url` frontmatter is not copied in as the clickable source
 - [ ] Inferred and ambiguous claims are marked with `^[inferred]` / `^[ambiguous]`; `provenance:` frontmatter block is present on new and updated pages
 - [ ] Every new/updated page has a `summary:` frontmatter field (1–2 sentences, ≤200 chars)
 - [ ] `relationships:` block is present on pages where source text made typed connections clear; all entries use an allowed type from `llm-wiki/SKILL.md`
