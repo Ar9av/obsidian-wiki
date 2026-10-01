@@ -195,6 +195,56 @@ class TestCheckSources:
         assert result["missing"] == []
         assert "-Users-x/abc.jsonl" in result["unavailable"]
 
+    def test_check_sources_resolves_each_path_once(self, vault, tmp_path, monkeypatch):
+        """Matching resolves each entry and each query once (an index of forms), not once
+        per (entry, query) pair: with relative keys the string fast path never fires, and a
+        3,000-entry manifest made every queried file cost a second of ``realpath`` walks."""
+        src = tmp_path / "src"
+        src.mkdir()
+        files = []
+        for i in range(300):
+            f = src / f"f{i:03d}.md"
+            f.write_text(f"doc {i}", encoding="utf-8")
+            files.append(f)
+        sources = {}
+        for i, f in enumerate(files):
+            # "../src/f000.md" — the relative form the CLI writes for out-of-vault sources
+            sources[os.path.relpath(f, vault)] = {"content_hash": sha256_file(f) if i % 3 else "0" * 64}
+        for i in range(2000):  # unrelated entries, like a real manifest
+            sources[f"../elsewhere/e{i:04d}.md"] = {"content_hash": "1" * 64}
+        _write_manifest(vault, {"version": 1, "sources": sources})
+
+        calls = {"n": 0}
+        real_resolve = Path.resolve
+
+        def counting_resolve(self, *args, **kwargs):
+            calls["n"] += 1
+            return real_resolve(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "resolve", counting_resolve)
+        result = check_sources(vault, files)
+
+        assert len(result["unchanged"]) == 200
+        assert len(result["modified"]) == 100
+        assert result["new"] == []
+        assert len(result["missing"]) + len(result["unavailable"]) == 2000
+        # one resolve per entry and per query (plus a handful inside helpers), never entries × queries
+        assert calls["n"] <= 3 * (2300 + 300), calls["n"]
+
+    def test_check_sources_first_entry_wins_for_duplicate_forms(self, vault, tmp_path):
+        """Two entries naming the same file in different forms: the earlier one is the match,
+        the later one is not reported missing (it is a duplicate of a scanned path)."""
+        f = tmp_path / "dup.md"
+        f.write_text("same", encoding="utf-8")
+        sources = {
+            os.path.relpath(f, vault): {"content_hash": "0" * 64},           # earlier: stale hash → modified
+            str(f): {"content_hash": sha256_file(f)},                        # later: same file, absolute form
+        }
+        _write_manifest(vault, {"version": 1, "sources": sources})
+        result = check_sources(vault, [f])
+        assert result["modified"] == [str(f)] and result["unchanged"] == []
+        assert result["missing"] == [] and result["unavailable"] == []
+
 
 # ---------------------------------------------------------------------------
 # update_source / manifest
