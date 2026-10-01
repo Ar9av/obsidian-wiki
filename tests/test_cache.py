@@ -195,11 +195,6 @@ class TestCheckSources:
         assert result["missing"] == []
         assert "-Users-x/abc.jsonl" in result["unavailable"]
 
-
-# ---------------------------------------------------------------------------
-# update_source / manifest
-# ---------------------------------------------------------------------------
-
     def test_check_sources_resolves_each_path_once(self, vault, tmp_path, monkeypatch):
         """Matching resolves each entry and each query once (an index of forms), not once
         per (entry, query) pair: with relative keys the string fast path never fires, and a
@@ -250,6 +245,10 @@ class TestCheckSources:
         assert result["modified"] == [str(f)] and result["unchanged"] == []
         assert result["missing"] == [] and result["unavailable"] == []
 
+
+# ---------------------------------------------------------------------------
+# update_source / manifest
+# ---------------------------------------------------------------------------
 
 class TestUpdateSource:
     def test_writes_manifest(self, vault, src_file):
