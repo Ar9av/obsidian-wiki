@@ -35,6 +35,10 @@
 
 ## 60 秒上手
 
+<p align="center">
+  <img width="800" alt="安裝、設定、檢視並推送 vault" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/onboarding.gif?raw=true" />
+</p>
+
 ```bash
 pip install obsidian-wiki
 obsidian-wiki setup --vault ~/brain

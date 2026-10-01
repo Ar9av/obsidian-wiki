@@ -34,6 +34,10 @@ Every skill here is a markdown file that any agent — Claude Code, Cursor, Code
 
 ## 60 seconds
 
+<p align="center">
+  <img width="800" alt="install, set up, view, and push a vault" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/onboarding.gif?raw=true" />
+</p>
+
 ```bash
 pip install obsidian-wiki
 obsidian-wiki setup --vault ~/brain
