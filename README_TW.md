@@ -77,6 +77,10 @@ https://github.com/Ar9av/obsidian-wiki — set up my wiki
 /wiki-digest week                   # 我這週學到了什麼？
 ```
 
+<p align="center">
+  <img width="800" alt="Claude Code 透過 /wiki-query 從 vault 回答" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/claude-query.gif?raw=true" />
+</p>
+
 **找出那個你叫不出名字的 session。**
 
 ```bash
@@ -104,6 +108,14 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 </p>
 
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
+
+## 在瀏覽器中使用
+
+[Brain 擴充功能](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md) 能將網頁擷取進 vault，並用 vault 已知的內容填寫網頁表單——使用你已有的 Claude Code 或 Codex。它永遠不會自動送出。
+
+<p align="center">
+  <img width="800" alt="Brain 擴充功能用 vault 內容填寫求職表單" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/brain-extension.gif?raw=true" />
+</p>
 
 ## 用 Python 直接使用
 

@@ -76,6 +76,10 @@ Other paths — `git clone`, Skills CLI, multiple vaults → **[Installation](ht
 /wiki-digest week                   # what did I learn this week?
 ```
 
+<p align="center">
+  <img width="800" alt="Claude Code answering from the vault with /wiki-query" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/claude-query.gif?raw=true" />
+</p>
+
 **Find that session you can't name.**
 
 ```bash
@@ -103,6 +107,14 @@ Open the vault in Obsidian and hit the graph view (Cmd/Ctrl+P → "Open graph vi
 </p>
 
 Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
+
+## From your browser
+
+The [Brain extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md) captures pages into your vault, and fills web forms from what the vault already knows — using the Claude Code or Codex you already have. It never submits.
+
+<p align="center">
+  <img width="800" alt="Brain extension filling a job application from the vault" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/brain-extension.gif?raw=true" />
+</p>
 
 ## Use it from Python
 

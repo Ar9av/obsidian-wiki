@@ -10,6 +10,11 @@ to your vault in both directions:
 Capture needs nothing but the extension. Fill also needs a small native
 messaging host, because no reasoning model can run inside a browser extension.
 
+<p align="center">
+  <img width="800" alt="Brain extension filling a job application from the vault" src="images/brain-extension.gif" />
+</p>
+
+
 ---
 
 ## Install
