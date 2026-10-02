@@ -52,7 +52,16 @@ obsidian-wiki setup --vault ~/brain
 https://github.com/Ar9av/obsidian-wiki — set up my wiki
 ```
 
-其他安裝方式（`git clone`、Skills CLI、多個 vault）請見 **[安裝說明](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md)**（英文）
+使用 Claude Code？也可以改用 plugin 安裝，不需要 Python：
+
+```text
+/plugin marketplace add Ar9av/obsidian-wiki
+/plugin install obsidian-wiki@obsidian-wiki
+```
+
+Plugin 裡的 skill 會加上命名空間（`/obsidian-wiki:wiki-ingest`），而且 plugin 只包含 skill，不包含 session hook 與 `obsidian-wiki` CLI。
+
+其他安裝方式（`git clone`、Claude Code plugin、Skills CLI、多個 vault）請見 **[安裝說明](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md)**（英文）
 
 ## 你實際會做的事
 
@@ -140,6 +149,16 @@ memory.recap()                       # 在 session 開始時注入
 - **在你原本工作的地方就能用。** 一個 `.skills/` 目錄，symlink 到你使用的每一個 agent。
 
 更多細節請見 **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**（英文）
+
+## 和其他做法比較
+
+| | obsidian-wiki | 桌面版 LLM-wiki 應用 | MCP 記憶伺服器 | 單一 skill 的 LLM wiki |
+|---|---|---|---|---|
+| **知識存在哪裡** | 你 Obsidian vault 裡的 Markdown | 由應用程式管理的資料夾 | 資料庫或事件紀錄 | 一個 Markdown 資料夾 |
+| **能搭配哪些工具** | Claude Code、Codex、Cursor、Gemini CLI，以及另外十多種 | 只有該應用程式本身 | 任何 MCP 用戶端 | 通常只有一種 agent |
+| **你要安裝什麼** | Markdown skill；Python CLI 可選 | 桌面應用程式加上 LLM API key | 一個伺服器程序 | 一個 skill |
+| **能挖掘過去的 agent session** | Claude、Codex、Copilot、Hermes、OpenClaw、Pi | 不行 | 只能擷取新的 session | 不行 |
+| **會自我整理** | Lint、去重、交叉連結、標籤分類 | 視產品而定 | 不適用 | 頂多有 lint |
 
 ## 真的有幫助嗎？
 

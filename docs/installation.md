@@ -1,6 +1,6 @@
 # Installation
 
-Four ways in. Pick one — they all end at the same place: your vault path in the global config (`~/.config/obsidian-wiki/config`) and the skills discoverable by your agent.
+Five ways in. Pick one — they all end at the same place: your vault path in the global config (`~/.config/obsidian-wiki/config`) and the skills discoverable by your agent.
 
 All full setup entry points — `obsidian-wiki setup`, `setup.sh`, and an agent running the `wiki-setup` skill — also create the global writing profile at `~/.config/obsidian-wiki/WRITING.md` (or the active legacy config directory). Rerunning setup never overwrites an existing profile. Edit `WRITING.md` to define your writing habits for every project that uses wiki skills.
 
@@ -11,6 +11,7 @@ All full setup entry points — `obsidian-wiki setup`, `setup.sh`, and an agent 
 | [pip / uv / pipx](#install-via-pip-uv-or-pipx-recommended) | Most people | ✅ | ✅ |
 | [Let your agent do it](#let-your-agent-set-it-up) | No terminal required | ✅ | ✅ |
 | [git clone + `setup.sh`](#install-via-git-clone) | Contributors, hackers | ✅ | ✅ |
+| [Claude Code plugin](#install-as-a-claude-code-plugin) | Claude Code users who skip Python | ✅ (on first "set up my wiki") | ❌ (Claude Code only) |
 | [Skills CLI](#install-via-skills-cli-deprecated) | Deprecated — partial install | ❌ | ❌ (current agent only) |
 
 ## Install via pip, uv, or pipx (recommended)
@@ -92,6 +93,31 @@ For local-only config, copy `.env.example` to `.env` and set `OBSIDIAN_VAULT_PAT
 6. **GitHub sync** (optional) — see [Configuration → Syncing your vault to GitHub](configuration.md#syncing-your-vault-to-github)
 
 `obsidian-wiki setup` and `setup.sh` share one implementation, so pip and source installs produce the identical result.
+
+## Install as a Claude Code plugin
+
+The repo is its own Claude Code plugin marketplace. Inside Claude Code:
+
+```text
+/plugin marketplace add Ar9av/obsidian-wiki
+/plugin install obsidian-wiki@obsidian-wiki
+```
+
+Or from a shell:
+
+```bash
+claude plugin marketplace add Ar9av/obsidian-wiki
+claude plugin install obsidian-wiki@obsidian-wiki
+```
+
+Then say **"set up my wiki"**. The `wiki-setup` skill asks for your vault path and writes the global config, the same as every other path.
+
+What's different:
+
+- **Skills are namespaced.** Slash commands become `/obsidian-wiki:wiki-ingest`, `/obsidian-wiki:wiki-query`, and so on. Plain-language requests ("ingest this folder") route the same way they always do.
+- **Skills only.** The plugin doesn't register the session hooks or put the `obsidian-wiki` CLI on your `PATH`. For those, install with pip as well and run `obsidian-wiki setup`.
+- **Updates follow the repo.** The plugin has no pinned version, so `claude plugin marketplace update obsidian-wiki` picks up the latest commit on `main`.
+- **Claude Code only.** Other agents need one of the paths above.
 
 ## Install via Skills CLI (deprecated)
 

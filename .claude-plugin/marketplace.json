@@ -1,0 +1,19 @@
+{
+  "name": "obsidian-wiki",
+  "owner": {
+    "name": "Ar9av",
+    "url": "https://github.com/Ar9av"
+  },
+  "metadata": {
+    "description": "obsidian-wiki: an AI-maintained Obsidian knowledge base for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "obsidian-wiki",
+      "source": "./",
+      "description": "Grow an Obsidian second brain with your AI agent: ingest docs, chat history and URLs into interlinked markdown, then query it with citations.",
+      "category": "productivity",
+      "homepage": "https://github.com/Ar9av/obsidian-wiki"
+    }
+  ]
+}
