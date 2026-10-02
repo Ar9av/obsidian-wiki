@@ -51,7 +51,16 @@ Prefer not to touch a terminal? Give your agent this and it'll do the whole thin
 https://github.com/Ar9av/obsidian-wiki — set up my wiki
 ```
 
-Other paths — `git clone`, Skills CLI, multiple vaults → **[Installation](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md)**
+Using Claude Code? Install it as a plugin instead — no Python needed:
+
+```text
+/plugin marketplace add Ar9av/obsidian-wiki
+/plugin install obsidian-wiki@obsidian-wiki
+```
+
+Plugin skills are namespaced (`/obsidian-wiki:wiki-ingest`), and the plugin ships the skills only — not the session hooks or the `obsidian-wiki` CLI.
+
+Other paths — `git clone`, Claude Code plugin, Skills CLI, multiple vaults → **[Installation](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/installation.md)**
 
 ## What you actually do
 
@@ -139,6 +148,16 @@ More → **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/doc
 - **Works where you already work.** One `.skills/` directory, symlinked into every agent you use.
 
 More → **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**
+
+## How it compares
+
+| | obsidian-wiki | Desktop LLM-wiki apps | MCP memory servers | Single-skill LLM wikis |
+|---|---|---|---|---|
+| **Where knowledge lives** | Markdown in your Obsidian vault | A folder the app manages | A database or event log | A markdown folder |
+| **Works with** | Claude Code, Codex, Cursor, Gemini CLI, and a dozen more | The app itself | Any MCP client | Usually one agent |
+| **What you install** | Markdown skills; the Python CLI is optional | A desktop app plus an LLM API key | A server process | One skill |
+| **Mines past agent sessions** | Claude, Codex, Copilot, Hermes, OpenClaw, Pi | No | Captures new sessions only | No |
+| **Keeps itself clean** | Lint, dedup, cross-linking, tag taxonomy | Varies | Not applicable | Lint, if anything |
 
 ## Does it actually help?
 
