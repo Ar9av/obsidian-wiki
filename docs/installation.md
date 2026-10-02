@@ -116,7 +116,7 @@ What's different:
 
 - **Skills are namespaced.** Slash commands become `/obsidian-wiki:wiki-ingest`, `/obsidian-wiki:wiki-query`, and so on. Plain-language requests ("ingest this folder") route the same way they always do.
 - **Skills only.** The plugin doesn't register the session hooks or put the `obsidian-wiki` CLI on your `PATH`. For those, install with pip as well and run `obsidian-wiki setup`.
-- **Updates follow the repo.** The plugin has no pinned version, so `claude plugin marketplace update obsidian-wiki` picks up the latest commit on `main`.
+- **Updates follow the repo.** The plugin has no pinned version, so it tracks the latest commit on `main`: run `claude plugin marketplace update obsidian-wiki`, then `claude plugin update obsidian-wiki@obsidian-wiki`, and restart Claude Code.
 - **Claude Code only.** Other agents need one of the paths above.
 
 ## Install via Skills CLI (deprecated)
