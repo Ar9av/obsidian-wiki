@@ -1,0 +1,54 @@
+{
+  "showTags": false,
+  "showOrphans": true,
+  "hideUnresolved": true,
+  "search": "-path:_meta -file:index -file:log -file:hot -file:README",
+  "colorGroups": [
+    {
+      "query": "path:concepts",
+      "color": {
+        "a": 1,
+        "rgb": 5213943
+      }
+    },
+    {
+      "query": "path:entities",
+      "color": {
+        "a": 1,
+        "rgb": 15902017
+      }
+    },
+    {
+      "query": "path:skills",
+      "color": {
+        "a": 1,
+        "rgb": 3982474
+      }
+    },
+    {
+      "query": "path:references",
+      "color": {
+        "a": 1,
+        "rgb": 10194162
+      }
+    },
+    {
+      "query": "path:synthesis",
+      "color": {
+        "a": 1,
+        "rgb": 15687034
+      }
+    },
+    {
+      "query": "path:journal",
+      "color": {
+        "a": 1,
+        "rgb": 8370377
+      }
+    }
+  ],
+  "lineSizeMultiplier": 1,
+  "nodeSizeMultiplier": 1.2,
+  "repelStrength": 12,
+  "linkDistance": 220
+}

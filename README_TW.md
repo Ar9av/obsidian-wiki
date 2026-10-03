@@ -104,6 +104,8 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 
 在 Obsidian 打開 vault，然後開啟 graph view（Cmd/Ctrl+P → 「Open graph view」）。說 **「color my graph」**，它就會依照 tag、category 或 visibility 為節點上色。
 
+想先看看再動手？[`examples/demo-vault/`](https://github.com/Ar9av/obsidian-wiki/tree/main/examples/demo-vault) 是一個 18 頁的範例 vault，主題是打造可靠的 LLM agent，已經依資料夾上好顏色。Clone 這個 repo，在 Obsidian 選 *Open folder as vault*，再選那個資料夾即可。
+
 <p align="center">
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>

@@ -103,6 +103,8 @@ All 39 skills → **[Skills Reference](https://github.com/Ar9av/obsidian-wiki/bl
 
 Open the vault in Obsidian and hit the graph view (Cmd/Ctrl+P → "Open graph view"). Say **"color my graph"** and it tints nodes by tag, category, or visibility.
 
+Want to look before you build? [`examples/demo-vault/`](https://github.com/Ar9av/obsidian-wiki/tree/main/examples/demo-vault) is an 18-page sample vault on building reliable LLM agents, already colored by folder. Clone the repo, choose *Open folder as vault* in Obsidian, and pick that folder.
+
 <p align="center">
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
