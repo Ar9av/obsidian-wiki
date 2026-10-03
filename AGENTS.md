@@ -11,7 +11,7 @@ A **skill-based framework** for building and maintaining an Obsidian knowledge b
 Resolve config using the Config Resolution Protocol in `llm-wiki/SKILL.md`:
 
 0. **Inline vault override (`@name`)** — if the request contains an `@<name>` token, resolve `<global config dir>/config.<name>` directly, overriding the steps below. See "Targeting a specific vault" right after this list.
-1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
+1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`. If its value is empty, stop there too: tell the user which `.env` blocked resolution (a blank line copied from `.env.example` does this) instead of falling through to the global config.
 2. **Global config** — if no local `.env` is found, read `<global config dir>/config`.
 3. **Prompt setup** — if neither exists, tell the user to run `wiki-setup`.
 

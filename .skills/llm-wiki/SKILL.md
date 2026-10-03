@@ -598,7 +598,7 @@ Everywhere below, "the global config dir" means `$(obsidian_wiki_config_dir)`, a
 ### Resolution order
 
 0. **Inline vault override (`@name`)** — if the user's request contains an `@<name>` token (e.g. `@work save this`, `query @personal about X`), resolve `<global config dir>/config.<name>` directly and use its `OBSIDIAN_VAULT_PATH`. This **overrides** both the CWD `.env` walk-up and the active symlink, and applies to **that invocation only** — never run `ln -sf` or otherwise change the active vault for an `@name` request. If `<global config dir>/config.<name>` doesn't exist, tell the user it doesn't exist and list the available vaults (the `wiki-switch` **List** logic), then stop — do **not** silently fall back to the default. The `@name` is a routing directive, not content: strip it out before treating the rest of the request as the actual instruction or page text.
-1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`.
+1. **Walk up from CWD** — look for a `.env` file in the current directory, then each parent, up to `$HOME`. Stop at the first `.env` that contains `OBSIDIAN_VAULT_PATH`. If its value is empty, stop there too: tell the user which `.env` blocked resolution (a blank line copied from `.env.example` does this) instead of falling through to the global config.
 2. **Global config** — if no local `.env` found, read the global config (`$(obsidian_wiki_config_dir)/config`).
 3. **Prompt setup** — if neither exists, tell the user: "No config found. Run `wiki-setup` to initialize your wiki."
 

@@ -1654,6 +1654,17 @@ def _read_config_file(path: Path) -> dict[str, str]:
     return values
 
 
+def _report_empty_local_vault(env_file: Path | str) -> None:
+    # An empty OBSIDIAN_VAULT_PATH= in a project .env deliberately blocks the
+    # global vault, but a copied .env.example does the same by accident, so
+    # name the file that stopped the walk.
+    print(
+        f"error: vault not configured; {env_file} sets OBSIDIAN_VAULT_PATH to empty, "
+        "which blocks the global config. Set it, delete the line, or pass a path",
+        file=sys.stderr,
+    )
+
+
 def _resolve_schema_command_context(
     vault_arg: str | None,
 ) -> tuple[Path, dict[str, str], str] | None:
@@ -1690,7 +1701,10 @@ def _resolve_schema_command_context(
             config = _read_config_file(GLOBAL_CONFIG)
         resolved = config.get("OBSIDIAN_VAULT_PATH", "")
     if not resolved:
-        print("error: vault not configured; pass a path, @name, or run obsidian-wiki setup", file=sys.stderr)
+        if config_source.endswith(".env"):
+            _report_empty_local_vault(config_source)
+        else:
+            print("error: vault not configured; pass a path, @name, or run obsidian-wiki setup", file=sys.stderr)
         return None
     vault = Path(resolved).expanduser().resolve()
     if not vault.is_dir():
@@ -2020,10 +2034,7 @@ def _resolve_context_pack_vault(vault_arg: str | None) -> Path | None:
         )
         if found:
             if not local_vault:
-                print(
-                    "error: vault not configured; pass a path or run obsidian-wiki setup",
-                    file=sys.stderr,
-                )
+                _report_empty_local_vault(current / ".env")
                 return None
             return _resolve_command_vault(local_vault)
         if current == home or current.parent == current:
