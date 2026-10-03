@@ -15,9 +15,9 @@ See [`.skills/skill-creator/SKILL.md`](../.skills/skill-creator/SKILL.md) for th
 
 When you add a skill, also add it to the [skills reference](skills.md) and the routing table in `AGENTS.md`.
 
-## Keeping both READMEs in sync
+## Keeping the READMEs in sync
 
-`README.md` (English) and `README_TW.md` (Traditional Chinese) are **one documentation surface**. Keep headings, examples, links, and user-facing behavior structurally and semantically aligned.
+`README.md` (English) and every `README_<LANG>.md` translation — today `README_TW.md` (Traditional Chinese) — are **one documentation surface**. Keep headings, examples, links, and user-facing behavior structurally and semantically aligned.
 
 Syncing is advisory, not a merge gate — the `readme-translation-drift` CI job only reports when the translation falls behind. To catch up:
 
@@ -25,9 +25,28 @@ Syncing is advisory, not a merge gate — the `readme-translation-drift` CI job 
 python tools/check_readme_sync.py
 ```
 
-It lists the commits that changed `README.md` without a later `README_TW.md` update, plus the pending English diff. Translate and backfill those into `README_TW.md`. Reviewers assess translation quality.
+For each translation, it lists the commits that changed `README.md` without a later update to that translation, plus the pending English diff. Translate and backfill those changes. Reviewers assess translation quality.
 
 The `docs/` pages are English-only for now.
+
+## Adding a README translation
+
+New languages are one of the easiest ways to contribute, and no code changes are needed. The drift checker finds every tracked `README_<LANG>.md` on its own.
+
+1. **Copy** `README.md` to `README_<LANG>.md` at the repo root, with an upper-case code: `README_JA.md`, `README_KO.md`, `README_ES.md`, `README_CN.md` (Simplified Chinese; `README_TW.md` is Traditional).
+2. **Translate the prose only.** Leave commands, code blocks, slash commands (`/wiki-ingest`), skill and file names, and URLs exactly as they are. User-facing phrases agents match on, like **"set up my wiki"**, stay in English, with a translation alongside if it helps (see how `README_TW.md` does it).
+3. **Keep the structure identical:** the same headings in the same order, the same tables, the same images and links. A reader switching languages should land in the same place.
+4. **Add the language to the switcher** near the top of `README.md` and of every existing translation, e.g. `English | <a href="…/README_TW.md">繁體中文</a> | <a href="…/README_JA.md">日本語</a>`. A test checks that every translation is linked from `README.md`.
+5. **Run the checks:**
+
+   ```bash
+   python tools/check_readme_sync.py
+   python -m pytest tests/test_readme_sync.py
+   ```
+
+6. **Open a PR.** Say in the description whether you're a native or fluent speaker. A second speaker's review is welcome but not required to merge.
+
+After that, the `readme-translation-drift` job reports when your translation falls behind the English README. Backfilling later is welcome, and drift never blocks a merge.
 
 ## Repo conventions
 
