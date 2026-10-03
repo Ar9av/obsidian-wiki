@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
-from obsidian_wiki.vault import iter_md, split_frontmatter
+from obsidian_wiki.vault import BLOCK_SCALAR_RE, iter_md, split_frontmatter
 
 
 DEFAULT_BUDGET = 8_000
@@ -110,6 +110,18 @@ def _frontmatter_values(frontmatter: str) -> dict[str, Any]:
         key, value = key.strip(), _without_yaml_comment(raw.strip())
         if value.startswith("[") and value.endswith("]"):
             values[key] = tuple(item.strip().strip("'\"") for item in value[1:-1].split(",") if item.strip())
+        elif BLOCK_SCALAR_RE.match(value):
+            # `title: >-` / `summary: >-` is the page template's own form; the
+            # value is on the indented lines below. `>` folds them, `|` keeps them.
+            block: list[str] = []
+            cursor = index + 1
+            while cursor < len(lines) and (lines[cursor].startswith((" ", "\t")) or not lines[cursor].strip()):
+                block.append(lines[cursor].strip())
+                cursor += 1
+            joiner = "\n" if value.startswith("|") else " "
+            values[key] = joiner.join(part for part in block if part).strip()
+            index = cursor
+            continue
         elif not value:
             children: list[str] = []
             cursor = index + 1
