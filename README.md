@@ -231,6 +231,8 @@ Full data, per-run logs and the scaling measurements are in
 
 This is early. The skills work, but there's room to make the brain smarter — better cross-referencing, sharper deduplication, bigger vaults, new ingest sources. If you have a workflow that could be a skill, [PRs are welcome](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md).
 
+Speak another language? Translating this README is a good first PR, and it needs no code: see [Adding a README translation](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md#adding-a-readme-translation).
+
 ## License
 
 [MIT](https://github.com/Ar9av/obsidian-wiki/blob/main/LICENSE)

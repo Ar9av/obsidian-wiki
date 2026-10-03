@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -74,6 +75,34 @@ class ReadmeDriftTest(unittest.TestCase):
         result = self.run_checker()
 
         self.assertEqual(result.returncode, 0)
+
+    def test_each_translation_is_checked_separately(self) -> None:
+        self.commit("initial docs", "README.md", "README_TW.md", "README_JA.md")
+        self.commit("add install section", "README.md")
+        self.commit("translate install section", "README_TW.md")
+
+        result = self.run_checker()
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("README_TW.md is up to date", result.stdout)
+        self.assertIn("without a later README_JA.md update", result.stdout)
+        self.assertIn("backfill them into README_JA.md", result.stdout)
+
+    def test_untracked_draft_is_not_a_translation(self) -> None:
+        self.commit("initial docs", "README.md", "README_TW.md")
+        (self.repo / "README_KO.md").write_text("draft\n")
+
+        result = self.run_checker()
+
+        self.assertEqual(result.returncode, 0)
+        self.assertNotIn("README_KO.md", result.stdout)
+
+    def test_every_translation_is_in_the_language_switcher(self) -> None:
+        # Adding a language is: README_<LANG>.md plus a switcher link in README.md.
+        english = (ROOT / "README.md").read_text(encoding="utf-8")
+        for path in sorted(ROOT.glob("README_*.md")):
+            with self.subTest(translation=path.name):
+                self.assertRegex(english, rf"/{re.escape(path.name)}[\")]")
 
     def test_sync_workflow_is_documented(self) -> None:
         for path in (ROOT / "AGENTS.md", ROOT / "docs" / "contributing.md"):

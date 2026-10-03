@@ -29,4 +29,4 @@ jobs:
 
       - name: Report README translation drift (never blocks merge)
         run: |
-          python tools/check_readme_sync.py || echo "::warning file=README_TW.md::README_TW.md is behind README.md. Run 'python tools/check_readme_sync.py' locally, then translate and backfill the pending changes."
+          python tools/check_readme_sync.py || echo "::warning file=README.md::A README translation is behind README.md. Run 'python tools/check_readme_sync.py' locally to see which, then translate and backfill the pending changes."

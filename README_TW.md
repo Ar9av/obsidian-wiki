@@ -218,6 +218,8 @@ memory.recap()                       # 在 session 開始時注入
 
 這個專案還很早期。skills 是能用的，但還有很多空間讓這個大腦變得更聰明：更好的交叉引用、更精準的去重、支撐更大的 vault、更多匯入來源。如果你有一個工作流程適合做成 skill，[歡迎送 PR](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)。
 
+會說其他語言嗎？翻譯這份 README 很適合當作第一個 PR，而且完全不用寫程式：請見 [Adding a README translation](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md#adding-a-readme-translation)（英文）。
+
 ## 授權
 
 [MIT](https://github.com/Ar9av/obsidian-wiki/blob/main/LICENSE)
