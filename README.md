@@ -19,6 +19,10 @@
 </p>
 
 <p align="center">
+  <img width="768" alt="obsidian-wiki CLI: query, lint and context-pack on a demo vault" src="assets/demo.gif" />
+</p>
+
+<p align="center">
   English | <a href="https://github.com/Ar9av/obsidian-wiki/blob/main/README_TW.md">繁體中文</a>
 </p>
 
