@@ -57,6 +57,36 @@ Prefer short-lived access tokens.
     assert page.base_confidence == "0.82"
 
 
+def test_load_pages_reads_block_scalar_title_and_summary(tmp_path: Path) -> None:
+    # The llm-wiki page template writes title and summary as `>-` folded
+    # scalars; reading the indicator as the value rendered "## >-" headings.
+    vault = tmp_path / "vault"
+    write_note(vault, "concepts/memory.md", """---
+title: >-
+  Agent Memory
+tags: [memory]
+summary: >-
+  What an agent can recall beyond
+  one context window.
+notes: |
+  line one
+  line two
+lifecycle: reviewed
+---
+# Agent Memory
+
+Body.
+""")
+    page = load_pages(vault)[0]
+    assert page.title == "Agent Memory"
+    assert page.summary == "What an agent can recall beyond one context window."
+    assert page.tags == ("memory",)
+    assert page.lifecycle == "reviewed"
+    rendered = render_markdown(build_context_pack(vault, "agent memory", budget=600))
+    assert "## Agent Memory" in rendered
+    assert ">-" not in rendered
+
+
 def test_load_pages_skips_control_and_staging_paths(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     for relative, text in (("AGENTS.md", "# Instructions\n"), ("hot.md", "# Hot\n"), ("_raw/draft.md", "# Draft\n"), ("_staging/review.md", "# Review\n"), ("_archives/old.md", "# Old\n"), ("AI/kept.md", "# Kept\n\nUseful knowledge.\n")):
