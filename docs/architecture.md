@@ -195,9 +195,9 @@ The [original gist](https://gist.github.com/karpathy/442a6bf555914893e9891c11519
 
 ## Open Knowledge Format
 
-The vault format is structurally conformant with [OKF v0.1](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) — markdown with YAML frontmatter, category subfolders, reserved `index.md`/`log.md`.
+The vault format is structurally conformant with [OKF v0.2](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) — markdown with YAML frontmatter, category subfolders, reserved `index.md`/`log.md`.
 
-`wiki-export` (OKF mode) and `wiki-import` are the bridge: they translate between native frontmatter (`title`/`category`/`tags`/`sources`/`created`/`updated` + `summary`) and OKF (`type`/`title`/`description`/`resource`/`tags`/`timestamp`), making vaults exchangeable with any OKF tool.
+`wiki-export` (OKF mode) and `wiki-import` are the bridge: they translate between native frontmatter (`title`/`category`/`tags`/`sources`/`created`/`updated` + `summary`) and OKF (`type`/`title`/`description`/`tags`/`generated`/`sources`, plus `status` and `verified` from lifecycle and trust reviews), making vaults exchangeable with any OKF tool.
 
 The OKF round-trip is lossless. The `graph.json` round-trip is not — it carries structure, not page bodies.
 
