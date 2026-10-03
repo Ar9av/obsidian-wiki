@@ -20,6 +20,10 @@
 </p>
 
 <p align="center">
+  <img width="768" alt="obsidian-wiki CLI：在範例 vault 上執行 query、lint 與 context-pack" src="assets/demo.gif" />
+</p>
+
+<p align="center">
   <a href="https://github.com/Ar9av/obsidian-wiki/blob/main/README.md">English</a> | 繁體中文
 </p>
 
