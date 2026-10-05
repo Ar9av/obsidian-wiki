@@ -1,13 +1,7 @@
 ---
 name: cross-linker
 description: >
-  Scan the Obsidian wiki and automatically discover missing cross-references between pages.
-  Use this skill when the user says "link my pages", "find missing links", "cross-reference",
-  "connect my wiki", "add wikilinks", "what pages should be linked", or after any large ingestion
-  to ensure new pages are woven into the existing knowledge graph. Also trigger when the user
-  mentions "orphan pages" in the context of wanting to connect them, or says things like
-  "my wiki feels disconnected" or "pages aren't linked well". This is a write-heavy skill —
-  it actually modifies pages to add links, unlike wiki-lint which just reports issues.
+  Find and add missing cross-references between wiki pages. Use when pages are disconnected or after large ingestion. This modifies pages to add links; use wiki-lint for report-oriented structural auditing.
 ---
 
 # Cross-Linker — Automated Wiki Cross-Referencing

@@ -1,10 +1,7 @@
 ---
 name: wiki-research
 description: >
-  Autonomously research a topic via multi-round web search, synthesize findings, and file structured
-  results into the Obsidian wiki. Use this skill when the user says "/wiki-research [topic]",
-  "research X", "find everything about Y", "do a deep dive on Z", "autonomous research on X",
-  or wants comprehensive, web-sourced knowledge on a topic filed directly into their wiki.
+  Perform multi-round web research on a topic, synthesize the findings, and file structured results into the Obsidian wiki. Use for comprehensive web-sourced research intended to become wiki knowledge.
 ---
 
 # Wiki Research — Autonomous Multi-Round Research

@@ -1,11 +1,7 @@
 ---
 name: wiki-switch
 description: >
-  Switch between multiple Obsidian wiki vault profiles. Use this skill when the user says
-  "/wiki-switch NAME", "switch to my work wiki", "switch vault", "change wiki", "which wiki am I on",
-  "list my wikis", "show my vaults", "create a new vault config", or "add a new wiki profile".
-  The skill manages named config files at <global config dir>/config.NAME and activates one by
-  symlinking it to <global config dir>/config.
+  List, create, or switch named Obsidian wiki vault profiles under the global config directory. Use when changing the active vault, checking which vault is active, or managing multi-vault profiles.
 ---
 
 # Wiki Switch — Manage Multiple Vault Profiles

@@ -1,13 +1,7 @@
 ---
 name: graph-colorize
 description: >
-  Color-code the Obsidian graph view by rewriting `.obsidian/graph.json` colorGroups.
-  Use this skill when the user says "color my graph", "color code obsidian", "colorize
-  the graph", "color the graph by tag", "color by category", "highlight visibility
-  in graph", "make the graph colorful", "distinguish tags in graph", or wants nodes
-  in Obsidian's graph view tinted by tag, folder, or visibility. Generates a
-  `colorGroups` array from the vault's actual tags/categories and merges it into the
-  existing graph.json without clobbering other graph settings. Always backs up first.
+  Configure Obsidian graph colors by tag, folder, category, or visibility by updating .obsidian/graph.json. Use for graph colorization; preserve other graph settings and back up before changes.
 ---
 
 # Graph Colorize — Color-code the Obsidian Graph View

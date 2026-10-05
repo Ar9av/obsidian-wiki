@@ -1,12 +1,7 @@
 ---
 name: llm-wiki
 description: >
-  The foundational knowledge distillation pattern for building and maintaining an AI-powered Obsidian wiki.
-  Based on Andrej Karpathy's LLM Wiki architecture. Use this skill whenever the user wants to understand the
-  wiki pattern, set up a new knowledge base, or needs guidance on the three-layer architecture (raw sources →
-  wiki → schema). Also use when discussing knowledge management strategy, wiki structure decisions, or how
-  to organize distilled knowledge. This is the "theory" skill — other skills handle specific operations
-  (ingesting, querying, linting).
+  Explain and apply the foundational LLM Wiki architecture and knowledge-management strategy. Use for setup, architecture, schema, or organization decisions; operational ingest/query/lint work uses dedicated skills.
 ---
 
 # LLM Wiki — Knowledge Distillation Pattern

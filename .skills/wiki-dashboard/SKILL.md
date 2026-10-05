@@ -1,11 +1,7 @@
 ---
 name: wiki-dashboard
 description: >
-  Create dynamic, queryable dashboard views of the Obsidian vault using Obsidian Bases or Dataview.
-  Use this skill when the user says "create a dashboard", "vault dashboard", "show all X as a table",
-  "dynamic view", "query my vault", "build a content index", "show me all concepts/entities/projects",
-  or wants a structured, auto-updating view of their wiki content.
-  Bases is native to Obsidian 1.8+ (no plugin needed). Dataview requires the community plugin.
+  Create dynamic, queryable Obsidian dashboard views using Bases or Dataview. Use for auto-updating tables, indexes, or structured views of vault content; not for ordinary question answering.
 ---
 
 # Wiki Dashboard — Dynamic Vault Views

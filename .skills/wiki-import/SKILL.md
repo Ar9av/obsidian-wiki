@@ -1,11 +1,7 @@
 ---
 name: wiki-import
 description: >
-  Import a wiki knowledge graph into the current vault — either from a graph.json export
-  file (stubs) or from an OKF (Open Knowledge Format) markdown bundle (full page bodies).
-  Use this skill when the user says "import wiki", "import from export", "load graph.json",
-  "import vault", "import OKF bundle", "import OKF", "load OKF", "import markdown bundle",
-  "/wiki-import", or wants to transfer pages from one vault to another using the output of wiki-export.
+  Import a wiki graph into the current vault from graph.json or an OKF/markdown bundle. Use for transferring previously exported wiki content between vaults; pair with wiki-export for the reverse direction.
 ---
 
 # Wiki Import — Reconstruct Pages from an Export
