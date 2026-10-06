@@ -58,7 +58,11 @@ ALLOWED_RELATIONSHIP_TYPES = frozenset(
 
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
-_MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
+# Local `.md` targets only: skip URLs (any `scheme:`) and require `.md` to end
+# the path, before an optional `#anchor` or `"title"`.
+_MD_LINK_RE = re.compile(
+    r"\[.*?\]\((?![A-Za-z][A-Za-z0-9+.-]*:)([^)#\s]+\.md)(?:[#\s][^)]*)?\)"
+)
 _RELATIONSHIP_LIST_FIELD_RE = re.compile(
     r"^\s*-\s*(type|target):\s*(.*?)\s*$"
 )

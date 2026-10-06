@@ -40,7 +40,11 @@ _TAGS_LIST_RE = re.compile(r"^tags:\s*\n((?:\s+-\s+\S+\n)+)", re.MULTILINE)
 _CATEGORY_RE = re.compile(r"^category:\s*(\w+)", re.MULTILINE)
 _TIER_RE = re.compile(r"^tier:\s*(\w+)", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
-_MD_LINK_RE = re.compile(r"\[.*?\]\(([^)]+\.md[^)]*)\)")
+# Local `.md` targets only: skip URLs (any `scheme:`) and require `.md` to end
+# the path, before an optional `#anchor` or `"title"`.
+_MD_LINK_RE = re.compile(
+    r"\[.*?\]\((?![A-Za-z][A-Za-z0-9+.-]*:)([^)#\s]+\.md)(?:[#\s][^)]*)?\)"
+)
 
 from obsidian_wiki.graph_analysis import (  # noqa: E402
     SKIP_DIRS,
