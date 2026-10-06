@@ -972,6 +972,24 @@ def test_duplicate_stems_ignores_how_the_link_was_written(tmp_path: Path) -> Non
     assert report["status"] == "pass"
 
 
+def test_external_urls_containing_md_are_not_broken_links(tmp_path: Path) -> None:
+    """Issue #263: `.md` inside a URL (`www.mdpi.com`, `README.md`) is not a page."""
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/vector-search.md", title="Vector Search")
+    _page(vault, "projects/rollout.md", title="Rollout")
+    (vault / "projects/rollout.md").write_text(
+        (vault / "projects/rollout.md").read_text(encoding="utf-8")
+        + "\n[Study](https://www.mdpi.com/2304-8158/13/11/1691)"
+        + "\n[Readme](https://github.com/owner/repo/blob/main/README.md)"
+        + "\n[Vector Search](../concepts/vector-search.md#intro)\n",
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["broken_links"] == []
+
+
 def test_duplicate_stems_follows_the_graph_page_selection(tmp_path: Path) -> None:
     """Root `index.md` is not a graph page; `_bootstrap/` is."""
     vault = tmp_path / "vault"
