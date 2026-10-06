@@ -1,12 +1,7 @@
 ---
 name: wiki-digest
 description: >
-  Generate a periodic knowledge digest — a human-readable newsletter-style summary of what was
-  learned, updated, and connected in your wiki over a specified period (day/week/month). Use when
-  the user says "what did I learn this week", "give me a digest", "weekly summary", "knowledge
-  report", "what's new in my wiki", "/wiki-digest [period]", "summarize my recent learning", or
-  wants a readable overview of recent wiki activity. Distinct from wiki-status (which reports
-  ingestion delta of sources) — wiki-digest summarizes *knowledge*, not sources.
+  Produce a day/week/month knowledge digest summarizing what was learned, updated, and connected in the wiki. Use for readable recent-learning summaries; wiki-status reports source and ingestion state instead.
 ---
 
 # Wiki Digest — Knowledge Newsletter Generator

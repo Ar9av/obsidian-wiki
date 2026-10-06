@@ -1,16 +1,7 @@
 ---
 name: wiki-status
 description: >
-  Show the current state of the wiki — what's been ingested, what's pending, and the delta between sources
-  and wiki content. Use this skill when the user asks "what's the status", "how much is ingested",
-  "what's left to process", "show me the delta", "what changed since last ingest", "wiki dashboard",
-  or wants an overview of their knowledge base health and completeness. Also use before deciding whether
-  to append or rebuild. Includes an insights mode triggered by "wiki insights", "what's central",
-  "show me the hubs", "central pages", "what's connected", "wiki structure" — analyzes the shape of
-  the wiki itself to surface top hubs, cross-domain bridges, and orphan-adjacent pages.
-  Also includes an equilibrium mode triggered by "is my vault at equilibrium", "wiki equilibrium",
-  "is maintenance done", "is the vault converged", or "are my skills fighting" — runs every maintenance
-  skill's audit-only pass and reports whether any of them still has a pending change.
+  Report wiki ingestion/completeness state, pending source delta, structural insights, or maintenance equilibrium. Use for remaining-work/status questions, hubs and bridges, or whether maintenance skills still have pending changes. wiki-digest summarizes learned knowledge instead.
 ---
 
 # Wiki Status — Audit & Delta

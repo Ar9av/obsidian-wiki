@@ -1,17 +1,7 @@
 ---
 name: wiki-ingest
 description: >
-  Ingest any source into the Obsidian wiki by distilling its knowledge into interconnected wiki pages.
-  Handles structured documents (PDFs, markdown, articles, papers, notes, folders), raw/unstructured
-  text (chat exports, conversation logs, Slack/Discord threads, meeting transcripts, CSV/JSON data,
-  journal entries, browser bookmarks, email archives, text dumps), AND web URLs. Use whenever the
-  user wants to add new sources to their wiki: "add this to the wiki", "process these docs", "ingest
-  this folder", "ingest this data", "process this export/logs", "import my chat history from X",
-  "/ingest-url <url>", "add this URL", "save this page", or pastes a URL and says "add this" /
-  "save this to my wiki". Also triggers when the user drops a file, or for raw mode: "process my
-  drafts", "promote my raw pages", or any reference to the _raw/ staging directory. This is the
-  general catch-all ingest skill for any document, text, or URL source not covered by a more
-  specific ingest skill (claude-history-ingest, etc.).
+  Ingest new documents, raw text, folders, or URLs into the Obsidian wiki as distilled, linked knowledge. Use for general wiki ingestion when no more specific ingest skill applies, including processing _raw/ staged content.
 ---
 
 # Obsidian Ingest — Document Distillation

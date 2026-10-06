@@ -1,16 +1,7 @@
 ---
 name: code-understand
 description: >
-  Build a ranked, citation-backed focus map of a codebase — the files and symbols an
-  architecture actually hangs on — using CodeGraph when available and a dependency-free
-  builtin (regex AST extraction + `rg` cross-file references) otherwise. Use this any time
-  you (the coding agent) need to orient in an unfamiliar or large codebase before making a
-  change: the user says "help me understand this codebase", "what's load-bearing here",
-  "what would break if I change X", "who calls this", "map out this project's architecture",
-  or you're about to touch code you haven't read yet and want to know what matters before
-  scanning everything by hand. This is the same extractor `wiki-update` Step 3b uses
-  internally — this skill exposes it directly so any agent session can call it on demand,
-  not just during a wiki sync.
+  Map the load-bearing files, symbols, callers, and dependencies of an unfamiliar codebase before making changes. Use for architecture orientation, impact analysis, what-would-break questions, or finding callers. Uses CodeGraph when available and a dependency-free builtin fallback.
 ---
 
 # Code Understand — On-Demand Architecture Focus Map

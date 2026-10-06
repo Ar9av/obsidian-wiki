@@ -1,16 +1,7 @@
 ---
 name: wiki-query
 description: >
-  Answer questions by searching the compiled Obsidian wiki. Use this skill when the user asks a question
-  about their knowledge base, wants to find information across their wiki, asks "what do I know about X",
-  "find everything related to Y", or wants synthesized answers with citations from their wiki pages.
-  Also use when the user wants to explore connections between topics in their wiki, or asks a multi-hop
-  "how is X connected to Y", "what links X to Y", "trace the chain from X to Z", or "what does X depend on
-  transitively" question — answered by walking typed edges across multiple hops. Works from any project.
-  Includes an index-only fast mode triggered by "quick answer", "just scan", "don't read the pages",
-  "fast lookup" — returns answers from page summaries and frontmatter without reading page bodies.
-  Accepts inline named-vault routing like "wiki-query @work what do I know about X" via the shared
-  Config Resolution Protocol.
+  Search and synthesize answers from the compiled Obsidian wiki, including cited and multi-hop answers. Use for questions about existing wiki knowledge or fast index-only lookups. Supports named-vault routing such as wiki-query @work; not for ingesting new sources.
 ---
 
 # Wiki Query — Knowledge Retrieval

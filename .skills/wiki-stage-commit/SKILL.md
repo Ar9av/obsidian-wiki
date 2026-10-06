@@ -1,11 +1,7 @@
 ---
 name: wiki-stage-commit
 description: >
-  Review and promote staged wiki pages to their final locations. Use when WIKI_STAGED_WRITES=true
-  and the user says "/wiki-stage-commit", "review staged pages", "commit staged writes",
-  "promote staged pages", "approve staged changes", or "what's waiting in staging".
-  Shows each staged file, lets the user accept or reject it, and moves accepted files to
-  their final wiki locations. Rejected files are moved back to _raw/ for manual editing.
+  Review staged wiki writes and promote accepted pages to final locations when WIKI_STAGED_WRITES is enabled. Use for staging approval/commit; rejected pages return to _raw/ for editing.
 ---
 
 # Wiki Stage Commit — Staged Write Promotion

@@ -1,14 +1,7 @@
 ---
 name: session-brain
 description: >
-  Build and maintain a topic graph over your agent session history. Reads every Claude session
-  transcript plus the pruned sessions that survive only in history.jsonl, clusters them by topic
-  using local TF-IDF (no API calls, no embeddings), and writes an interactive graph you can open
-  in a browser. Use when the user says "/session-brain", "build my session map", "cluster my
-  claude sessions", "map my session history", "rebuild the session graph", "show me my session
-  graph", "what have I been working on lately", "what topics have gone stale". Different from
-  wiki-history-ingest, which distils sessions into vault pages: this builds a retrieval index
-  over the raw sessions and never writes to the vault.
+  Build or refresh a browser-viewable topic graph over Claude session history using local clustering. Use for mapping or clustering sessions, recent or stale topic analysis, or rebuilding/showing the session graph. Unlike wiki-history-ingest, it indexes raw sessions and never writes to the vault.
 ---
 
 # Session Brain

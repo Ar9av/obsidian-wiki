@@ -1,11 +1,7 @@
 ---
 name: wiki-rebuild
 description: >
-  Archive existing wiki knowledge and rebuild from scratch, or restore from a previous archive.
-  Use this skill when the user wants to start fresh, rebuild the wiki from all sources, archive current
-  knowledge before a major change, or restore an older version. Triggers on "rebuild the wiki",
-  "start over", "archive and rebuild", "restore from archive", "nuke and repave", "clean rebuild".
-  Also use when the wiki has drifted too far from sources and incremental fixes won't cut it.
+  Archive and rebuild wiki knowledge from source, or restore a prior archive. Use for full restart/recovery when incremental repair is inappropriate; this is broader and more destructive than ordinary update or lint.
 ---
 
 # Wiki Rebuild — Archive, Rebuild, Restore

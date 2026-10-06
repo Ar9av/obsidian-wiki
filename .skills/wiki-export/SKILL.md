@@ -1,14 +1,7 @@
 ---
 name: wiki-export
 description: >
-  Export the Obsidian wiki's knowledge graph to structured formats for use in external tools.
-  Use this skill when the user says "export wiki", "export graph", "export to JSON", "export to Gephi",
-  "export to Neo4j", "export to Postgres", "export to SQL", "graphml", "visualize wiki",
-  "knowledge graph export", "export to OKF", "OKF bundle", "open knowledge format",
-  "export as markdown bundle", or wants to use their wiki data in another tool. Outputs
-  graph.json, graph.graphml, cypher.txt (Neo4j), postgres.sql (Postgres), and graph.html
-  (interactive browser visualization) into a wiki-export/ directory at the vault root, plus an
-  optional OKF (Open Knowledge Format) markdown bundle under wiki-export/okf/.
+  Export the Obsidian wiki graph to JSON, GraphML, Neo4j Cypher, Postgres/SQL, HTML, or OKF bundles. Use when transferring or visualizing wiki data in external tools; wiki-import handles the reverse direction.
 ---
 
 # Wiki Export — Knowledge Graph Export

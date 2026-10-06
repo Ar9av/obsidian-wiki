@@ -1,13 +1,7 @@
 ---
 name: obsidian-layout-adjustment
 description: >
-  Workflow for working with the user on changing how Obsidian looks using CSS snippets.
-  Use this whenever the user asks to restyle Obsidian, tune a vault's visual layout,
-  adjust tabs, sidebars, note surfaces, properties, backlinks, graph panes, file
-  explorer rows, icons, links, shadows, active states, or CSS snippets. Also use
-  it when the user says a visual CSS change did nothing, still looks wrapped, is not
-  lifted, is unreadable, or needs to be refactored without changing the current
-  appearance.
+  Adjust the user's Obsidian visual layout with CSS snippets. Use for restyling tabs, sidebars, note surfaces, properties, backlinks, graph or file-explorer UI, or diagnosing CSS changes that did not take effect.
 ---
 
 # Obsidian Layout Adjustment

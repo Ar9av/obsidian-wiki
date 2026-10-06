@@ -1,12 +1,7 @@
 ---
 name: memory-bridge
 description: >
-  Browse and compare wiki knowledge by which AI tool originally produced it. Use this skill when the user
-  says "/memory-bridge", "browse codex memory", "what did codex know about X", "show me claude knowledge",
-  "cross-tool memory", "what does hermes know that claude doesn't", "show me knowledge from <tool>",
-  "compare my AI tool memories", or wants to explore knowledge gaps between tools. Works from any project.
-  Diff mode ("what's different", "unique to codex", "gaps between tools") is the killer feature — it surfaces
-  blind spots between tools that the user may not know exist.
+  Browse or compare wiki knowledge by originating AI tool. Use for cross-tool memory questions, tool-specific knowledge, or gap/diff analysis between Codex, Claude, Hermes, and other agents.
 ---
 
 # Memory Bridge — Cross-Tool Knowledge Browser

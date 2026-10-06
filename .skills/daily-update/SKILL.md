@@ -1,11 +1,7 @@
 ---
 name: daily-update
 description: >
-  Run the daily wiki maintenance cycle: check all source freshness, update the index, and regenerate hot.md.
-  Use this skill when the user says "/daily-update", "run the daily update", "update everything", "morning sync",
-  "refresh the wiki index", or when triggered by the scheduled 9 AM run (launchd, systemd timer, or cron). Also use to set up or verify the
-  cron + terminal notification infrastructure for the first time ("set up the daily cron", "install the
-  terminal notification", "how do I get the morning reminder?").
+  Run or configure the daily wiki maintenance cycle: check source freshness, refresh the index and hot.md, and manage its scheduled 9 AM launchd/systemd/cron reminder. Use for daily or morning wiki refresh or scheduler setup and verification.
 ---
 
 # Daily Update — Wiki Maintenance Cycle

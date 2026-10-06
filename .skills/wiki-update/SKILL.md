@@ -1,11 +1,7 @@
 ---
 name: wiki-update
 description: >
-  Sync the current project's knowledge into the Obsidian wiki. Use this skill from any project
-  when the user says "update wiki", "sync to wiki", "save this to my wiki", "update obsidian",
-  or wants to distill what they've been working on into their knowledge base. This is the
-  cross-project skill that lets you push knowledge from wherever you are into the vault. Accepts
-  inline named-vault routing like "@work update wiki" via the shared Config Resolution Protocol.
+  Sync knowledge from the current project into the Obsidian wiki. Use when work already in the current project should be distilled into the vault; named-vault routing includes @work update wiki. wiki-capture saves the current conversation and wiki-ingest handles external/new sources.
 ---
 
 # Wiki Update — Sync Any Project to Your Wiki

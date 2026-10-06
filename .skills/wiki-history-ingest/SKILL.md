@@ -1,10 +1,7 @@
 ---
 name: wiki-history-ingest
 description: >
-  Unified wiki-history-ingest entrypoint for conversation/session sources. Use this when the user says
-  "/wiki-history-ingest claude", "/wiki-history-ingest copilot", "/wiki-history-ingest codex",
-  "/wiki-history-ingest pi", or asks to ingest agent history without naming the underlying skill.
-  This router dispatches to the specialized history skill.
+  Route generic agent-history ingestion requests to the appropriate specialized history-ingest skill. Use when the user asks to ingest AI-agent history without directly selecting the underlying agent-specific skill.
 ---
 
 # Unified History Ingest Router

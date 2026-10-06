@@ -1,11 +1,7 @@
 ---
 name: claude-history-ingest
 description: >
-  Ingest Claude Code conversation history into the Obsidian wiki. Use this skill when the user wants to mine
-  their past Claude conversations for knowledge, import their ~/.claude folder, extract insights from
-  previous coding sessions, or says things like "process my Claude history", "add my conversations to the wiki",
-  "what have I discussed with Claude before". Also triggers when the user mentions their .claude folder,
-  Claude projects, session data, past conversation logs, local-agent-mode sessions, or audit logs.
+  Ingest Claude Code conversation/session history into Obsidian as distilled knowledge. Use for importing or mining past Claude sessions, .claude data, project/session history, or audit logs.
 ---
 
 # Claude History Ingest — Conversation Mining
