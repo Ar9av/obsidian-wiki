@@ -223,3 +223,40 @@ def test_reachability_searches_the_path_the_hook_will_get(home: Path) -> None:
     if reach["console_script"]:
         assert str(Path(sys.executable).parent) in reach["console_script"] or reach["reachable"]
     assert isinstance(reach["reachable"], bool)
+
+
+def test_windows_paths_are_written_in_git_bash_form(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Claude Code runs hooks in Git Bash, where `C:\\Users\\...` collapses to
+    `C:Users...` — the backslashes are escapes — and the hook exits 127 (#265)."""
+    monkeypatch.setattr(hk.os, "name", "nt")
+    assert hk._git_bash_path(Path("C:/Users/Callum/h.sh")) == "/c/Users/Callum/h.sh"
+    monkeypatch.setattr(hk, "_bin_dir", lambda: Path("C:/py/Scripts"))
+    command = hk._command_for(Path("C:/Users/Callum/h.sh"))
+    assert "\\" not in command
+    assert command == 'PATH="/c/py/Scripts:$PATH" bash "/c/Users/Callum/h.sh"'
+
+
+def test_the_script_path_is_quoted(home: Path) -> None:
+    """Home directories have spaces in them."""
+    hk.install(home)
+    for event, name in hk.HOOKS:
+        command = next(c for c in _commands(home, event) if name in c)
+        assert f'"{hk._git_bash_path(hk.hook_script(name))}"' in command
+
+
+def test_install_rewrites_a_backslash_registration(home: Path) -> None:
+    """Pre-fix Windows installs look registered but can never run, so install
+    must replace them instead of skipping them."""
+    path = hk.settings_path(home)
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"hooks": {"SessionStart": [
+        {"matcher": "", "hooks": [
+            {"type": "command", "command": "bash C:\\Users\\Callum\\wiki-session-recap.sh"},
+            {"type": "command", "command": "echo mine"},
+        ]}
+    ]}}), encoding="utf-8")
+    hk.install(home)
+    commands = _commands(home, "SessionStart")
+    assert "echo mine" in commands
+    recap = [c for c in commands if "wiki-session-recap" in c]
+    assert len(recap) == 1 and "\\" not in recap[0]
