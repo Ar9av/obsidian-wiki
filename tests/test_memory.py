@@ -239,6 +239,57 @@ def test_index_is_idempotent(vault: Path) -> None:
     assert second.text == first
 
 
+def _sub_wiki(vault: Path) -> None:
+    """projects/alpha is a sub-wiki: its own index.md plus pages under it."""
+    hub = vault / "projects/alpha/index.md"
+    hub.parent.mkdir(parents=True, exist_ok=True)
+    hub.write_text("# Alpha Project\n\nEverything about alpha.\n", encoding="utf-8")
+    _page(vault, "projects/alpha/concepts/plan.md", title="Plan", summary="The plan")
+    _page(vault, "projects/alpha/entities/bob.md", title="Bob", summary="A person")
+    _page(vault, "projects/alpha/deep/index.md", title="Deep", summary="A nested hub")
+
+
+def _enable_hubs(vault: Path) -> None:
+    (vault / "index.md").write_text(
+        f"---\ntitle: Wiki Index\n{mem.FOLDER_HUBS_KEY}: true\n"
+        f"generated_by: {mem.GENERATED_MARKER} index\n---\n\n# Wiki Index\n",
+        encoding="utf-8",
+    )
+
+
+def test_index_lists_sub_wiki_pages_individually_by_default(vault: Path) -> None:
+    _sub_wiki(vault)
+    text = mem.rebuild_index(vault).text
+    assert "[[projects/alpha/concepts/plan]]" in text
+    assert "(3 pages)" not in text
+
+
+def test_folder_hubs_link_a_sub_wiki_once_instead_of_inlining_it(vault: Path) -> None:
+    """A vault of sub-wikis would otherwise inline every page of every one of
+    them into the root index, which every skill reads at startup."""
+    _sub_wiki(vault)
+    _enable_hubs(vault)
+
+    result = mem.rebuild_index(vault)
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    assert "- [[projects/alpha/index|Alpha Project]] — Everything about alpha. (3 pages)" in text
+    for inlined in ("projects/alpha/concepts/plan", "projects/alpha/entities/bob", "projects/alpha/deep"):
+        assert inlined not in text  # including the nested hub: the outermost wins
+    assert "[[concepts/attention]]" in text  # pages outside a hub are unaffected
+    assert result.total == 6
+    assert "projects/alpha/index" in result.added
+    assert f"{mem.FOLDER_HUBS_KEY}: true" in text  # the switch survives the rebuild
+    assert mem.rebuild_index(vault).changed is False
+
+
+def test_folder_hub_title_falls_back_to_the_folder_name(vault: Path) -> None:
+    hub = vault / "projects/beta-tool/index.md"
+    hub.parent.mkdir(parents=True)
+    hub.write_text("Just a list of links.\n", encoding="utf-8")
+    _enable_hubs(vault)
+    assert "[[projects/beta-tool/index|Beta Tool]]" in mem.rebuild_index(vault).text
+
+
 # --------------------------------------------------------------------------
 # hot.md
 # --------------------------------------------------------------------------
