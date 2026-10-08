@@ -228,10 +228,19 @@ def test_reachability_searches_the_path_the_hook_will_get(home: Path) -> None:
 def test_windows_paths_are_written_in_git_bash_form(monkeypatch: pytest.MonkeyPatch) -> None:
     """Claude Code runs hooks in Git Bash, where `C:\\Users\\...` collapses to
     `C:Users...` — the backslashes are escapes — and the hook exits 127 (#265)."""
+    # Build the paths *before* patching os.name. Python 3.9's pathlib picks the
+    # flavour when a Path is instantiated, so `Path("C:/...")` while os.name is
+    # "nt" tries to build a WindowsPath on posix and raises NotImplementedError.
+    # 3.12 dropped that check, which is why this only broke the 3.9 CI leg. And
+    # because `hk.os` is the global os module, the patch is process-wide: the
+    # raise lands inside pytest's own failure reporting (`Path(os.getcwd())`),
+    # surfacing as an INTERNALERROR that masks whatever actually failed.
+    script = Path("C:/Users/Callum/h.sh")
+    bin_dir = Path("C:/py/Scripts")
     monkeypatch.setattr(hk.os, "name", "nt")
-    assert hk._git_bash_path(Path("C:/Users/Callum/h.sh")) == "/c/Users/Callum/h.sh"
-    monkeypatch.setattr(hk, "_bin_dir", lambda: Path("C:/py/Scripts"))
-    command = hk._command_for(Path("C:/Users/Callum/h.sh"))
+    assert hk._git_bash_path(script) == "/c/Users/Callum/h.sh"
+    monkeypatch.setattr(hk, "_bin_dir", lambda: bin_dir)
+    command = hk._command_for(script)
     assert "\\" not in command
     assert command == 'PATH="/c/py/Scripts:$PATH" bash "/c/Users/Callum/h.sh"'
 
