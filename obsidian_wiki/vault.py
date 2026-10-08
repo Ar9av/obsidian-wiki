@@ -8,6 +8,7 @@ Modules layer their own extra skip dirs / reserved files on top.
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 from pathlib import Path
 from typing import Iterable
@@ -71,11 +72,32 @@ def skipped_dir(rel: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> bool:
     return any(part in skip_dirs or part.startswith(".") for part in rel.parts)
 
 
+def _walk_md(vault: Path) -> Iterable[Path]:
+    """Every `.md` under `vault`, descending into symlinked directories.
+
+    Obsidian follows a symlinked folder as part of the vault, but `Path.rglob`
+    does not descend into one before Python 3.13, so a vault that mounts its
+    project folders by symlink looked empty and `memory index` dropped their
+    entries. A directory whose real path was already visited is pruned, which
+    breaks symlink loops.
+    """
+    seen: set[str] = set()
+    for root, dirs, files in os.walk(vault, followlinks=True):
+        real = os.path.realpath(root)
+        if real in seen:
+            dirs[:] = []
+            continue
+        seen.add(real)
+        for name in files:
+            if name.endswith(".md"):
+                yield Path(root) / name
+
+
 def iter_md(vault: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> list[Path]:
     """Every `.md` under `vault`, sorted, minus hidden/skipped dirs and `.okignore`."""
     patterns = okignore_patterns(vault)
     return sorted(
-        path for path in vault.rglob("*.md")
+        path for path in _walk_md(vault)
         if not skipped_dir(path.relative_to(vault), skip_dirs)
         and not okignored(path.relative_to(vault), patterns)
     )
