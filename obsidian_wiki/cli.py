@@ -1488,6 +1488,16 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_projects_check(args: argparse.Namespace) -> int:
+    from obsidian_wiki.cache import check_projects
+    vault = Path(args.vault).expanduser().resolve()
+    result = check_projects(vault)
+    print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    # Exit 2 on a real staleness finding so a scheduled run can branch on it;
+    # unavailable/unsynced are absences of evidence, not findings.
+    return 2 if (result["behind"] or result["unreachable"]) else 0
+
+
 def cmd_cache_update(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import stored_key, update_source
     from obsidian_wiki.provenance import prefer_archive_write_path
@@ -2928,6 +2938,14 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("sources", nargs="+", help="source file or directory paths to check")
     cc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     cc.set_defaults(func=cmd_cache_check)
+
+    pc = sub.add_parser(
+        "projects-check",
+        help="check how far each project's checkout has moved past last_commit_synced",
+    )
+    pc.add_argument("vault", help="path to the Obsidian vault")
+    pc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    pc.set_defaults(func=cmd_projects_check)
 
     cu = sub.add_parser(
         "cache-update",

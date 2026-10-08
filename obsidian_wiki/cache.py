@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 from contextlib import contextmanager
@@ -626,3 +627,139 @@ def _rekey_stale_raw_to_archive(old_key: str | None, new_key: str) -> bool:
 def hash_file(path: Path) -> str:
     """Just compute and return the hash — no manifest I/O."""
     return compute_hash(path)
+
+
+# --- project (git) staleness ------------------------------------------------
+# `check_sources` answers "did this source file's bytes change?". It cannot
+# answer the same question for a project, because a git repo is not stored as a
+# hashed source: wiki-update records it under `projects` keyed by `source_repo`
+# with a `last_commit_synced` bookmark. Nothing compared that bookmark to HEAD,
+# so a vault could be arbitrarily far behind a repo with no signal at all.
+
+_GIT_TIMEOUT = 15
+
+
+class ProjectStatus(TypedDict, total=False):
+    project: str
+    commits: int
+    last_commit_synced: str
+    path: str
+    reason: str
+
+
+class ProjectCheckResult(TypedDict):
+    behind: list[ProjectStatus]       # checkout has moved past last_commit_synced
+    current: list[str]                # last_commit_synced == HEAD
+    unreachable: list[ProjectStatus]  # stored sha not usable (rebase/force-push/gc)
+    unsynced: list[str]               # entry exists but no last_commit_synced yet
+    unavailable: list[ProjectStatus]  # no usable checkout on this machine
+
+
+def _git_in(path: Path, *args: str) -> subprocess.CompletedProcess | None:
+    """Run git in *path*; None when git itself is unusable (absent, hung)."""
+    try:
+        return subprocess.run(
+            ["git", "-C", str(path), *args],
+            capture_output=True, text=True, timeout=_GIT_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def check_projects(vault: Path) -> ProjectCheckResult:
+    """Classify each manifest ``projects`` entry by how far its checkout has
+    moved past the recorded ``last_commit_synced``.
+
+    Mirrors :func:`check_sources`' vocabulary deliberately: a project whose
+    checkout is not on this machine is ``unavailable``, not stale.
+    ``source_cwd_hint`` is a *hint* — the manifest is portable across machines
+    by design, so a missing checkout is an absence of evidence, never a finding.
+
+    Read-only: never runs a git command that can write, and never fails the
+    whole call because one entry is malformed.
+    """
+    raw = _load_raw(vault).get("projects")
+    projects = raw if isinstance(raw, dict) else {}
+    result: ProjectCheckResult = {
+        "behind": [], "current": [], "unreachable": [], "unsynced": [], "unavailable": []
+    }
+
+    for name in sorted(projects):
+        entry = projects[name]
+        if not isinstance(entry, dict):
+            result["unavailable"].append({"project": name, "reason": "malformed_entry"})
+            continue
+
+        hint = entry.get("source_cwd_hint")
+        if not isinstance(hint, str) or not hint.strip():
+            result["unavailable"].append({"project": name, "reason": "no_source_cwd_hint"})
+            continue
+        path = Path(hint.strip()).expanduser()
+        if not path.is_dir():
+            result["unavailable"].append(
+                {"project": name, "reason": "checkout_not_found", "path": str(path)}
+            )
+            continue
+
+        # `rev-parse --git-dir` rather than a `.git` directory test: a linked
+        # worktree's `.git` is a file, and the hint may point below the root.
+        probe = _git_in(path, "rev-parse", "--git-dir")
+        if probe is None:
+            result["unavailable"].append(
+                {"project": name, "reason": "git_unavailable", "path": str(path)}
+            )
+            continue
+        if probe.returncode != 0:
+            result["unavailable"].append(
+                {"project": name, "reason": "not_a_git_repo", "path": str(path)}
+            )
+            continue
+
+        sha = entry.get("last_commit_synced")
+        if not isinstance(sha, str) or not sha.strip():
+            result["unsynced"].append(name)
+            continue
+        sha = sha.strip()
+
+        ancestor = _git_in(path, "merge-base", "--is-ancestor", sha, "HEAD")
+        if ancestor is None:
+            result["unavailable"].append(
+                {"project": name, "reason": "git_unavailable", "path": str(path)}
+            )
+            continue
+        if ancestor.returncode != 0:
+            # 1 = resolves but is not an ancestor (history was rewritten);
+            # anything else (128) = the object is not in this repo at all.
+            result["unreachable"].append({
+                "project": name,
+                "reason": "not_ancestor" if ancestor.returncode == 1 else "unknown_commit",
+                "last_commit_synced": sha,
+                "path": str(path),
+            })
+            continue
+
+        counted = _git_in(path, "rev-list", "--count", f"{sha}..HEAD")
+        if counted is None or counted.returncode != 0:
+            result["unavailable"].append(
+                {"project": name, "reason": "count_failed", "path": str(path)}
+            )
+            continue
+        try:
+            commits = int(counted.stdout.strip())
+        except ValueError:
+            result["unavailable"].append(
+                {"project": name, "reason": "count_unparsable", "path": str(path)}
+            )
+            continue
+
+        if commits == 0:
+            result["current"].append(name)
+        else:
+            result["behind"].append({
+                "project": name,
+                "commits": commits,
+                "last_commit_synced": sha,
+                "path": str(path),
+            })
+
+    return result

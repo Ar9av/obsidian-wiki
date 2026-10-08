@@ -503,8 +503,9 @@ Available for automation, scripting, and debugging. Skills call some of these in
 | `graph-analyse <vault> [--top N] [--snapshot] [--diff-against FILE]` | Graph analysis in pure Python (the graphify algorithm family): god nodes (degree), bridge pages (Brandes betweenness centrality), communities with cohesion scores, cross-community surprising connections, suggested questions, and — with `--diff-against` a previous `_insights.md` — a graph diff. Vault bookkeeping files (`index`, `log`, `hot`, `_insights`) are excluded. |
 | `graph-analyse <vault> --path A B` / `--around PAGE --depth N [--direction in\|out\|both]` | Query modes: shortest link path between two pages; N-hop neighbourhood of a page (`--direction in` = blast radius) |
 | `batch-plan <vault> <source_dir>` | Split a source directory into parallel-ingest batches, skipping unchanged files |
-| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable` |
+| `cache-check <vault> <sources...>` | Which sources are new / modified / unchanged vs. `.manifest.json`. Vault-local sources no longer on disk are reported as `missing`; machine-local sources absent on this host (e.g. synced from another machine) are reported separately as `unavailable`. Covers hashed **file** sources only — a git repo is tracked under `projects` by commit, not by hash, so use `projects-check` for those |
 | `cache-update <vault> <source> [--key <pseudo-key>] [--pages <page>...]` | Record a source's SHA-256 in `.manifest.json` after ingest. The stored key is normalised to a portable form; `--key` sets it explicitly (`repo:`/`url:`/`agent:`) for sources outside the vault and `$HOME`. If `_raw/_archived/<basename>` exists, that is the stored key and the file that is hashed — even when you pass a staging `_raw/<name>.md` path |
+| `projects-check <vault> [--pretty]` | How far each `.manifest.json` `projects` entry has drifted from its checkout: `behind` (with a commit count), `current`, `unreachable` (the recorded sha no longer resolves or is no longer an ancestor — history was rewritten), `unsynced` (no `last_commit_synced` yet), `unavailable` (no usable checkout on this machine). Exits **2** when anything is `behind` or `unreachable`, so a scheduled run can branch on it; `unavailable`/`unsynced` exit 0, because an absent checkout is an absence of evidence, not a finding |
 | `cache-hash <path>` | Compute a file or directory hash (no manifest I/O) |
 | `ast-extract <path>` | Extract classes, functions, and imports from code — no LLM, no API calls |
 | `code-understand --project <dir> [--backend auto\|builtin\|codegraph] [--since <sha>] [--changed <file>...] [--max-symbols N] [--pretty]` | Emit a ranked code-understanding focus map (symbols + file:line citations) for a project; CodeGraph when available, built-in AST + rg otherwise. `--backend` beats the resolved `CODE_UNDERSTANDING_*` config (env → project `.env` → global config). Used by wiki-update Step 3b. |
@@ -522,6 +523,7 @@ obsidian-wiki batch-plan /path/to/vault ~/research --max-mb 4 --max-files 30
 obsidian-wiki cache-check /path/to/vault ~/research/*.pdf
 obsidian-wiki cache-update /path/to/vault ~/research/paper.pdf --pages concepts/attention.md
 obsidian-wiki cache-update /path/to/vault /srv/data/report.pdf --key repo:github.com/acme/reports
+obsidian-wiki projects-check /path/to/vault --pretty
 obsidian-wiki ast-extract ./src --pretty
 obsidian-wiki code-understand --project . --since <last_commit_synced> --pretty
 ```
