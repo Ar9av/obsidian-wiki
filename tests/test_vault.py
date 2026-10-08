@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from obsidian_wiki.context_pack import load_pages
 from obsidian_wiki.graph_analysis import iter_pages
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.memory import scan_pages
 from obsidian_wiki.trust import iter_trust_pages
-from obsidian_wiki.vault import split_frontmatter
+from obsidian_wiki.vault import iter_md, split_frontmatter
 
 PAGE = (
     "---\ntitle: T\ncategory: concepts\ntags: [a]\nsources: []\n"
@@ -47,3 +49,35 @@ def test_every_walker_honors_okignore_and_hidden_dirs(tmp_path: Path) -> None:
     assert sorted(p.path for p in load_pages(tmp_path)) == want
     assert sorted(p.path for p in scan_pages(tmp_path)) == want
     assert lint_vault(tmp_path)["stats"]["pages"] == 1
+
+
+def _symlink_dir(link: Path, target: Path) -> None:
+    link.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        link.symlink_to(target, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable on this platform")
+
+
+def test_every_walker_follows_symlinked_dirs(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _write(vault, "concepts/local.md")
+    _write(tmp_path / "elsewhere", "notes/linked.md")
+    _symlink_dir(vault / "projects" / "mounted", tmp_path / "elsewhere")
+
+    want = ["concepts/local.md", "projects/mounted/notes/linked.md"]
+    rel = lambda paths: sorted(p.relative_to(vault).as_posix() for p in paths)  # noqa: E731
+    assert rel(iter_pages(vault)) == want
+    assert rel(iter_trust_pages(vault)) == want
+    assert sorted(p.path for p in load_pages(vault)) == want
+    assert sorted(p.path for p in scan_pages(vault)) == want
+    assert lint_vault(vault)["stats"]["pages"] == 2
+
+
+def test_symlink_loop_is_walked_once(tmp_path: Path) -> None:
+    _write(tmp_path, "concepts/page.md")
+    _symlink_dir(tmp_path / "concepts" / "loop", tmp_path / "concepts")
+
+    assert [p.relative_to(tmp_path).as_posix() for p in iter_md(tmp_path)] == [
+        "concepts/page.md"
+    ]
