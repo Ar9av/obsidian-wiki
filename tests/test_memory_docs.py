@@ -121,6 +121,28 @@ class MemoryDocsTest(unittest.TestCase):
         self.assertNotIn("The prose files take no lock", architecture)
         self.assertIn(".memory.lock", architecture)
 
+    def test_multiline_cli_examples_continue_every_line(self) -> None:
+        """A wrapped `obsidian-wiki` example missing a trailing backslash runs
+        as two commands when copied: the first loses its fields and the rest
+        fails as a command of its own."""
+        offenders = []
+        for path in SKILLS.glob("*/SKILL.md"):
+            text = path.read_text(encoding="utf-8")
+            for block in re.findall(r"```bash\n(.*?)```", text, re.DOTALL):
+                lines = block.splitlines()
+                in_command = False
+                for line, following in zip(lines, lines[1:] + [""]):
+                    if line.startswith("obsidian-wiki "):
+                        in_command = True
+                    if not in_command:
+                        continue
+                    if line.rstrip().endswith("\\"):
+                        continue
+                    if following[:1].isspace() and following.strip():
+                        offenders.append(f"{path.parent.name}: {line.strip()}")
+                    in_command = False
+        self.assertEqual(offenders, [], f"wrapped CLI examples missing a `\\`: {offenders}")
+
 
 
 class HooksDocsTest(unittest.TestCase):

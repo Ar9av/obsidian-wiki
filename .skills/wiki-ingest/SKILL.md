@@ -484,7 +484,7 @@ If the manifest doesn't exist yet, create it with `version: 1`.
 **`index.md`, `log.md`, `hot.md`** — one command, not three hand edits:
 
 ```bash
-obsidian-wiki memory sync INGEST source="path/to/source"
+obsidian-wiki memory sync INGEST source="path/to/source" \
   pages_created=N pages_updated=M \
   mode=append \
   --takeaways "Fowler's decomposition argument now anchors the microservices cluster."
