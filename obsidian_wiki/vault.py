@@ -67,6 +67,17 @@ def okignored(rel: Path, patterns: list[str]) -> bool:
     return False
 
 
+#: Instructions for coding agents, not knowledge, wherever they sit: a vault
+#: built from per-project sub-wikis carries one per project. A `README.md` is
+#: only excluded at the vault root, where it describes the vault itself.
+AGENT_INSTRUCTION_FILES = frozenset({"AGENTS.md", "CLAUDE.md", "GEMINI.md"})
+
+
+def is_instruction_file(rel: Path) -> bool:
+    """True if vault-relative `rel` is an agent-instruction file, not a page."""
+    return rel.name in AGENT_INSTRUCTION_FILES or (len(rel.parts) == 1 and rel.name == "README.md")
+
+
 def skipped_dir(rel: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> bool:
     """True if any component of vault-relative `rel` is hidden or in `skip_dirs`."""
     return any(part in skip_dirs or part.startswith(".") for part in rel.parts)
@@ -93,11 +104,23 @@ def _walk_md(vault: Path) -> Iterable[Path]:
                 yield Path(root) / name
 
 
+def iter_instruction_files(vault: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> list[Path]:
+    """The agent-instruction files `iter_md` leaves out. Not pages, but real
+    files a `[[CLAUDE]]` link opens, so link checks must still find them."""
+    return sorted(
+        path for path in _walk_md(vault)
+        if is_instruction_file(path.relative_to(vault))
+        and not skipped_dir(path.relative_to(vault), skip_dirs)
+    )
+
+
 def iter_md(vault: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> list[Path]:
-    """Every `.md` under `vault`, sorted, minus hidden/skipped dirs and `.okignore`."""
+    """Every `.md` page under `vault`, sorted, minus hidden/skipped dirs,
+    agent-instruction files, and `.okignore`."""
     patterns = okignore_patterns(vault)
     return sorted(
         path for path in _walk_md(vault)
         if not skipped_dir(path.relative_to(vault), skip_dirs)
+        and not is_instruction_file(path.relative_to(vault))
         and not okignored(path.relative_to(vault), patterns)
     )

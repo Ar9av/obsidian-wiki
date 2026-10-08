@@ -86,12 +86,20 @@ Lint resolves its vault and schema together: explicit path (no config inheritanc
 
 `duplicate_stems` reports two or more pages whose filename stems are equal after slugging —
 `concepts/vector-search.md` and `entities/vector-search.md` across folders, or `Vector Search.md`
-beside `vector-search.md` inside one. The graph
-identifies a page by its bare stem, so those pages are a single node in every graph metric:
-degree, communities, betweenness, and the `graph-analyse --around` blast radius. The check keys
-on the same slug and the same page selection `graph_analysis` uses, so what it reports is exactly
-what the graph will merge — root `index.md`/`log.md`/`hot.md`/`_insights.md` are excluded, and a
-legitimate `concepts/index.md` is not.
+beside `vector-search.md` inside one. A bare `[[vector-search]]` link then means whichever page
+is nearer to the linking page, as in Obsidian, which is easy to get wrong. Pages in different
+folders are separate graph nodes (their ids become their paths, e.g. `concepts/vector-search`);
+two files in one folder that slug alike still share a node, since nothing distinguishes them. The
+check uses the same page selection as `graph_analysis` — root
+`index.md`/`log.md`/`hot.md`/`_insights.md` are excluded, and a legitimate `concepts/index.md` is not.
+
+Links resolve the way Obsidian resolves them, in every command that reads the link graph
+(`graph-analyse`, `graph-query`, `lint`): `./`/`../` relative to the linking file, then an exact
+vault path, then a path relative to the linking file's folder, then a path suffix, then the bare
+name, taking the candidate that shares the most folders with the linking page. A vault of
+per-project sub-wikis can therefore link `[[concepts/plan]]` inside each project. Links inside
+inline code or fenced blocks are not links, and `AGENTS.md`/`CLAUDE.md`/`GEMINI.md` (anywhere) and
+the root `README.md` are agent instructions, not pages.
 
 It is independent of how any link is written: the collision is between the pages, not between
 references to them, so a vault where nothing links to the stem is still reported.
