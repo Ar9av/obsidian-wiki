@@ -49,10 +49,12 @@ _MD_LINK_RE = re.compile(
 from obsidian_wiki.graph_analysis import (  # noqa: E402
     SKIP_DIRS,
     SKIP_ROOT_FILES,
+    _node_for,
     _slug,
     iter_pages,
     shortest_path,
 )
+from obsidian_wiki.links import PageIndex, strip_code  # noqa: E402
 from obsidian_wiki.provenance import archive_wikilink_relpath  # noqa: E402
 from obsidian_wiki.vault import BLOCK_SCALAR_RE  # noqa: E402
 from obsidian_wiki.temporal import is_current, parse_date, superseded_target  # noqa: E402
@@ -107,10 +109,12 @@ def build_index(vault: Path) -> dict[str, dict]:
     # including it made almost any two pages look 2 hops apart and produced
     # meaningless "A -> index -> B" paths.
     md_files = iter_pages(vault)
+    rels = {page: page.relative_to(vault).as_posix() for page in md_files}
+    page_index = PageIndex(rels.values())
 
     # First pass: collect all slugs and frontmatter
     for page in md_files:
-        slug = _slug(page.stem)
+        slug = page_index.id_for(rels[page])
         try:
             text = page.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -161,18 +165,18 @@ def build_index(vault: Path) -> dict[str, dict]:
     # Second pass: extract wikilinks
     known = set(pages.keys())
     for page in md_files:
-        slug = _slug(page.stem)
+        slug = page_index.id_for(rels[page])
         if slug not in pages:
             continue
         try:
-            text = page.read_text(encoding="utf-8", errors="replace")
+            text = strip_code(page.read_text(encoding="utf-8", errors="replace"))
         except OSError:
             continue
 
         for link in _WIKILINK_RE.findall(text):
             if archive_wikilink_relpath(vault, link) is not None:
                 continue
-            target = _slug(link.split("/")[-1])
+            target = page_index.resolve(link, rels[page])
             if target and target != slug and target in known:
                 pages[slug]["out_links"].append(target)
                 pages[target]["in_links"].append(slug)
@@ -180,7 +184,7 @@ def build_index(vault: Path) -> dict[str, dict]:
         for href in _MD_LINK_RE.findall(text):
             if archive_wikilink_relpath(vault, href) is not None:
                 continue
-            target = _slug(Path(href).stem)
+            target = page_index.resolve(href, rels[page])
             if target and target != slug and target in known:
                 pages[slug]["out_links"].append(target)
                 pages[target]["in_links"].append(slug)
@@ -439,12 +443,10 @@ def _outgoing_from_index(index: dict[str, dict]) -> dict[str, list[str]]:
 
 def _resolve_page(index: dict[str, dict], term: str) -> str | None:
     """Resolve a free-text page reference to a slug, falling back to ranking."""
-    slug = _slug(term)
-    if slug in index:
-        return slug
-    slug = _slug(term.strip().strip("`\"'.,"))
-    if slug in index:
-        return slug
+    for candidate in (term, term.strip().strip("`\"'.,")):
+        slug = _node_for(index, candidate)
+        if slug in index:
+            return slug
     cands = rank_candidates(index, [term], top_n=1)
     return cands[0]["slug"] if cands else None
 
@@ -647,8 +649,8 @@ def query(
 
     path_result: list[str] = []
     if answer_type == "path" and len(terms) >= 2:
-        src_slug = _slug(terms[0])
-        tgt_slug = _slug(terms[1])
+        src_slug = _node_for(index, terms[0])
+        tgt_slug = _node_for(index, terms[1])
         # Try to find slugs by scoring if exact match fails
         if src_slug not in index:
             cands = rank_candidates(index, [terms[0]], top_n=1)

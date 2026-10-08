@@ -11,6 +11,7 @@ from typing import Any
 from obsidian_wiki.cache import _iter_entries, _load_manifest
 from obsidian_wiki.graph_analysis import _page_slug as graph_page_slug
 from obsidian_wiki.graph_analysis import iter_pages as iter_graph_pages
+from obsidian_wiki.links import PageIndex, strip_code
 from obsidian_wiki.provenance import (
     archive_wikilink_relpath,
     clip_url_index,
@@ -19,7 +20,7 @@ from obsidian_wiki.provenance import (
     parse_snapshots_field,
 )
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
-from obsidian_wiki.vault import iter_md, split_frontmatter
+from obsidian_wiki.vault import iter_instruction_files, iter_md, split_frontmatter
 from obsidian_wiki.temporal import (
     SUPERSEDED_FIELD,
     superseded_target,
@@ -212,6 +213,18 @@ def _parse_relationships(frontmatter: str) -> list[dict[str, str]]:
     return relationships
 
 
+def _display_target(raw: str) -> str:
+    """How a broken link is reported: the slugged last segment, sans `.md`."""
+    name = raw.rstrip("\\").split("/")[-1]
+    return _slug(name[:-3] if name.lower().endswith(".md") else name)
+
+
+def _relationship_link(raw: str) -> str:
+    """A `relationships:` target as a bare link target (no brackets, alias, anchor)."""
+    target = raw.strip().strip("\"'").removeprefix("[[").removesuffix("]]")
+    return target.split("|", 1)[0].split("#", 1)[0].strip()
+
+
 def _normalise_node_id(raw: str) -> str:
     target = raw.strip().removeprefix("[[").removesuffix("]]")
     target = target.split("|", 1)[0].split("#", 1)[0].strip()
@@ -250,8 +263,11 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     values = _parse_frontmatter_values(frontmatter)
     relative = path.relative_to(vault)
 
+    # Raw targets, resolved per page in `lint_vault` against the whole vault
+    # (`PageIndex`), so a project-relative link resolves like Obsidian does.
     links: list[str] = []
     broken_archive_links: list[dict[str, str]] = []
+    text = strip_code(text)
     for raw in _WIKILINK_RE.findall(text):
         archive_rel = archive_wikilink_relpath(vault, raw)
         if archive_rel is not None:
@@ -260,10 +276,8 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
                     {"page": relative.as_posix(), "target": archive_rel}
                 )
             continue
-        name = _wikilink_page_target(raw)
-        target = _slug(name) if name else ""
-        if target:
-            links.append(target)
+        if _wikilink_page_target(raw) and raw.strip():
+            links.append(raw.strip().rstrip("\\"))
     for href in _MD_LINK_RE.findall(text):
         archive_rel = archive_wikilink_relpath(vault, href)
         if archive_rel is not None:
@@ -272,9 +286,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
                     {"page": relative.as_posix(), "target": archive_rel}
                 )
             continue
-        target = _slug(Path(href).stem)
-        if target:
-            links.append(target)
+        links.append(href)
 
     return {
         "path": relative.as_posix(),
@@ -316,23 +328,24 @@ def lint_vault(
         else TRUST_REQUIRED_FRONTMATTER
     )
     pages = [_parse_page(path, vault) for path in iter_md(vault, SKIP_DIRS)]
-    slug_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    node_index: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    page_index = PageIndex(
+        [page["path"] for page in pages]
+        + [path.relative_to(vault).as_posix() for path in iter_instruction_files(vault, SKIP_DIRS)]
+    )
     for page in pages:
-        slug_index[page["slug"]].append(page)
-        node_index[page["node_id"]].append(page)
-    by_slug = {slug: matches[0] for slug, matches in slug_index.items()}
+        page["id"] = page_index.id_for(page["path"])
+        page["resolved"] = [
+            (raw, page_index.resolve(raw, page["path"])) for raw in page["links"]
+        ]
     incoming: dict[str, int] = defaultdict(int)
 
     broken_links: list[dict[str, str]] = []
     for page in pages:
-        for target in page["links"]:
-            if target == page["slug"]:
-                continue
-            if target not in by_slug:
-                broken_links.append({"page": page["path"], "target": target})
-                continue
-            incoming[target] += 1
+        for raw, target in page["resolved"]:
+            if target is None:
+                broken_links.append({"page": page["path"], "target": _display_target(raw)})
+            elif target != page["id"]:
+                incoming[target] += 1
         broken_links.extend(page.get("archive_broken", []))
 
     missing_frontmatter = []
@@ -356,12 +369,12 @@ def lint_vault(
         except ValueError as exc:
             trust_metadata_errors.append({"page": page["path"], "issue": str(exc)})
 
-    # `graph_analysis` identifies a page by its slugged stem (`_page_slug`), so
-    # two pages with the same slugged stem are ONE node in the graph metrics:
-    # degree, communities, betweenness, and the `neighborhood` blast radius.
-    # `Vector Search.md` and `vector-search.md` collide, in one folder or two.
-    # Key this check with that module's own slug and page selection, borrowed
-    # rather than reimplemented, so the report keys as the merge does.
+    # Two pages with the same slugged stem make a bare `[[stem]]` link mean
+    # whichever is nearer to the linking page (`links.PageIndex`), which is
+    # easy to get wrong. Pages in different folders stay separate graph nodes;
+    # `Vector Search.md` beside `vector-search.md` still share one, since
+    # nothing distinguishes them. Key this check with the graph's own page
+    # selection so it reports exactly the pages the graph sees.
     stem_index: dict[str, list[str]] = defaultdict(list)
     for graph_page in iter_graph_pages(vault):
         stem_index[graph_page_slug(graph_page, vault)].append(
@@ -404,8 +417,8 @@ def lint_vault(
     for page in pages:
         if page["slug"] in RESERVED_PAGE_STEMS:
             continue
-        outgoing = sum(1 for target in page["links"] if target in by_slug and target != page["slug"])
-        if outgoing == 0 and incoming.get(page["slug"], 0) == 0:
+        outgoing = sum(1 for _, target in page["resolved"] if target and target != page["id"])
+        if outgoing == 0 and incoming.get(page["id"], 0) == 0:
             orphan_pages.append(page["path"])
 
     manifest_sources = _load_manifest(vault)
@@ -463,8 +476,8 @@ def lint_vault(
                 )
                 continue
             target = _normalise_node_id(target_raw)
-            matches = node_index.get(target, []) if "/" in target else slug_index.get(target, [])
-            if len(matches) > 1:
+            link = _relationship_link(target_raw)
+            if page_index.is_ambiguous(link, page["path"]):
                 typed_relationship_issues.append(
                     {
                         "page": page["path"],
@@ -474,7 +487,7 @@ def lint_vault(
                     }
                 )
                 continue
-            resolved = matches[0] if matches else None
+            resolved = page_index.resolve(link, page["path"]) if link else None
             if resolved is None:
                 typed_relationship_issues.append(
                     {
@@ -484,7 +497,7 @@ def lint_vault(
                         "target": target,
                     }
                 )
-            elif resolved["node_id"] == page["node_id"]:
+            elif resolved == page["id"]:
                 typed_relationship_issues.append(
                     {
                         "page": page["path"],
@@ -510,15 +523,16 @@ def lint_vault(
         if not raw_successor:
             continue
         successor = _slug(superseded_target(raw_successor))
+        resolved_successor = page_index.resolve(successor, page["path"]) if successor else None
         if not successor:
             temporal_errors.append(
                 {"page": page["path"], "issue": f"empty {SUPERSEDED_FIELD} value"}
             )
-        elif successor == page["slug"]:
+        elif resolved_successor == page["id"]:
             superseded_dangling.append(
                 {"page": page["path"], "target": successor, "issue": "self_reference"}
             )
-        elif successor not in by_slug:
+        elif resolved_successor is None:
             superseded_dangling.append(
                 {"page": page["path"], "target": successor, "issue": "missing_target"}
             )
