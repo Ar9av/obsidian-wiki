@@ -41,6 +41,8 @@ This is the distinction that matters most in daily use.
 
 **`index.md` is reconciled, not overwritten.** One section per category is regenerated from disk. The preamble and any section whose heading is not a category are preserved verbatim — a hand-written "Reading queue" survives, a stale entry for a deleted page does not.
 
+**Sub-wikis can be linked instead of inlined.** Add `index_folder_hubs: true` to the frontmatter of the root `index.md` and any folder that has its own `index.md` is listed once, as a link to that index with a page count, rather than page by page. Nested hubs collapse into the outermost one. This keeps the root index small in a vault made of per-project sub-wikis, and the setting travels with the vault because it lives in the file it controls.
+
 **`hot.md` is generated except for one slot.** `## Key Takeaways` is where a model records what it concluded, and it carries across every rebuild unless `--takeaways` replaces it. Everything else in that file is derived, and hand edits to it are overwritten.
 
 ![The generated hot cache](images/memory-hot-cache.png)

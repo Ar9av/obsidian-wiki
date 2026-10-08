@@ -32,7 +32,7 @@ import os
 import re
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional, Sequence
 
 from obsidian_wiki.cache import advisory_lock
@@ -475,13 +475,81 @@ def _heading_for(category: str) -> str:
 # --------------------------------------------------------------------------
 
 
-def _index_entry(page: PageInfo, link_format: str) -> str:
+def _index_entry(page: PageInfo, link_format: str, *, hub_pages: Optional[int] = None) -> str:
     node = page.path[:-3] if page.path.endswith(".md") else page.path
-    link = f"[{page.title}]({page.path})" if link_format == "markdown" else f"[[{node}]]"
+    if link_format == "markdown":
+        link = f"[{page.title}]({page.path})"
+    elif hub_pages is not None:
+        # A hub's node ends in `/index`, which Obsidian would display as
+        # "index"; the alias shows the folder's own title instead.
+        link = f"[[{node}|{page.title}]]"
+    else:
+        link = f"[[{node}]]"
     # Format rule: a space after the opening paren, or tag parsing breaks.
     tags = f" ( {' '.join('#' + tag for tag in page.tags)})" if page.tags else ""
     summary = f" — {page.summary}" if page.summary else ""
-    return f"- {link}{summary}{tags}"
+    count = "" if hub_pages is None else f" ({hub_pages} page{'' if hub_pages == 1 else 's'})"
+    return f"- {link}{summary}{count}{tags}"
+
+
+#: Root ``index.md`` frontmatter key that turns on folder hubs (see
+#: ``collapse_folder_hubs``). It lives in the file it governs, so the setting
+#: travels with the vault instead of depending on which ``.env`` a caller saw.
+FOLDER_HUBS_KEY = "index_folder_hubs"
+
+_H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
+
+
+def folder_hubs_enabled(index_text: str) -> bool:
+    values = parse_frontmatter(split_frontmatter(index_text)[0])
+    return str(values.get(FOLDER_HUBS_KEY) or "").strip().lower() in {"true", "yes", "1"}
+
+
+def collapse_folder_hubs(vault: Path, pages: Sequence) -> tuple:
+    """Replace every page under a folder that has its own ``index.md`` with
+    one entry for that index, so a sub-wiki is linked rather than inlined.
+
+    Returns ``(entries, hub_counts)``: ``entries`` keeps every page outside a
+    hub plus each hub's index page, and ``hub_counts`` maps a hub index's path
+    to how many pages it stands for. The outermost hub wins when hubs nest.
+    """
+    hubs = sorted(
+        {
+            str(PurePosixPath(page.path).parent)
+            for page in pages
+            if PurePosixPath(page.path).name == "index.md" and "/" in page.path
+        },
+        key=len,
+    )
+    outermost: list = []
+    for hub in hubs:
+        if not any(hub.startswith(f"{outer}/") for outer in outermost):
+            outermost.append(hub)
+
+    entries, hub_counts = [], {}
+    by_path = {page.path: page for page in pages}
+    for page in pages:
+        hub = next((h for h in outermost if page.path.startswith(f"{h}/")), None)
+        if hub is None:
+            entries.append(page)
+        else:
+            hub_counts[f"{hub}/index.md"] = hub_counts.get(f"{hub}/index.md", 0) + 1
+    for hub_path, count in hub_counts.items():
+        entries.append(_hub_page(vault, by_path[hub_path], count - 1))
+        hub_counts[hub_path] = count - 1  # the index itself is not one of its pages
+    return entries, hub_counts
+
+
+def _hub_page(vault: Path, page: PageInfo, count: int) -> PageInfo:
+    """The hub's index page, titled for display: frontmatter title, else its
+    H1, else the folder name — never the bare stem "index"."""
+    title = page.title
+    if title == "index":
+        body = split_frontmatter((vault / page.path).read_text(encoding="utf-8", errors="replace"))[1]
+        heading = _H1_RE.search(body)
+        folder = PurePosixPath(page.path).parent.name
+        title = heading.group(1) if heading else folder.replace("-", " ").replace("_", " ").title()
+    return replace(page, title=title)
 
 
 @dataclass(frozen=True)
@@ -493,7 +561,15 @@ class IndexResult:
     text: str
 
 
-def render_index(pages: Sequence, *, link_format: str = "wikilink", preamble: str = "", extra_sections: str = "") -> str:
+def render_index(
+    pages: Sequence,
+    *,
+    link_format: str = "wikilink",
+    preamble: str = "",
+    extra_sections: str = "",
+    hub_counts: Optional[dict] = None,
+) -> str:
+    hub_counts = hub_counts or {}
     by_category: dict = {}
     for page in pages:
         by_category.setdefault(page.category, []).append(page)
@@ -507,7 +583,10 @@ def render_index(pages: Sequence, *, link_format: str = "wikilink", preamble: st
         entries = sorted(by_category[category], key=lambda p: (p.title.casefold(), p.path))
         chunks.append(
             f"## {_heading_for(category)}\n\n"
-            + "\n".join(_index_entry(page, link_format) for page in entries)
+            + "\n".join(
+                _index_entry(page, link_format, hub_pages=hub_counts.get(page.path))
+                for page in entries
+            )
         )
     if not by_category:
         chunks.append("## Concepts\n\n*No pages yet. Use `wiki-ingest` to add your first source.*")
@@ -567,6 +646,10 @@ def rebuild_index(
     Regenerates one section per category and preserves the preamble plus any
     section whose heading is not a category — a hand-written "Reading queue"
     section survives, a stale page entry does not.
+
+    With ``index_folder_hubs: true`` in the index frontmatter, a folder that
+    has its own ``index.md`` is listed once, as a link to that index, instead
+    of page by page (see ``collapse_folder_hubs``).
     """
     vault = _require_vault(vault)
     index = vault / "index.md"
@@ -608,10 +691,19 @@ def rebuild_index(
                 if md:
                     listed.add(md.group(1)[:-3] if md.group(1).endswith(".md") else md.group(1))
 
-    current = {page.path[:-3] for page in pages}
+    entries, hub_counts = (
+        collapse_folder_hubs(vault, pages) if folder_hubs_enabled(existing) else (pages, {})
+    )
+    current = {page.path[:-3] for page in entries}
     added = tuple(sorted(current - listed))
     removed = tuple(sorted(listed - current))
-    text = render_index(pages, link_format=link_format, preamble=preamble, extra_sections=extra)
+    text = render_index(
+        entries,
+        link_format=link_format,
+        preamble=preamble,
+        extra_sections=extra,
+        hub_counts=hub_counts,
+    )
     changed = text != existing
 
     if write and changed:

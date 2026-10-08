@@ -96,6 +96,10 @@ regenerated from disk; the preamble and any section whose heading is not a
 category are preserved verbatim. A hand-written "Reading queue" section
 survives. A stale entry for a deleted page does not.
 
+With `index_folder_hubs: true` in the root `index.md` frontmatter, a folder that
+has its own `index.md` is listed once, as a link to that index, instead of page
+by page. Read that sub-index when you need the pages inside it.
+
 ## Read-only skills
 
 If your skill only reads the vault, the *only* write you may perform is the log
