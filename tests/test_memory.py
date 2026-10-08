@@ -231,6 +231,18 @@ def test_index_ignores_staging_and_memory_files(vault: Path) -> None:
         assert excluded not in text
 
 
+def test_index_drift_ignores_links_inside_an_entry_summary(vault: Path) -> None:
+    """Only an entry's own link says what the index lists. A wikilink in the
+    page's summary text was counted too, so a summary pointing at a short-form
+    or not-yet-written page reported a phantom removal on every rebuild."""
+    _page(vault, "concepts/rag.md", title="RAG", summary='"See [[overview|the overview]] first"')
+    mem.rebuild_index(vault)
+    result = mem.rebuild_index(vault)
+    assert result.removed == ()
+    assert result.added == ()
+    assert result.changed is False
+
+
 def test_index_is_idempotent(vault: Path) -> None:
     mem.rebuild_index(vault)
     first = (vault / "index.md").read_text(encoding="utf-8")
