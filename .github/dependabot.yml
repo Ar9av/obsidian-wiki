@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Actions are pinned to commit SHAs, so a human never sees a new release land.
+  # Dependabot is what re-opens that door: it bumps the SHA and the `# vX.Y.Z`
+  # comment together.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(actions)"
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "chore(deps)"
