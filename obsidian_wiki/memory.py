@@ -679,14 +679,18 @@ def rebuild_index(
         body.strip("\n") for heading, body in sections.items() if heading not in categories
     )
 
+    # Only the link that opens an entry line is what the index lists; links in
+    # the entry's summary text point elsewhere and are not catalog entries.
     listed = set()
     for heading, body in sections.items():
         if heading in categories:
-            for match in _WIKILINK_RE.finditer(body):
-                if archive_wikilink_relpath(vault, match.group(1)) is not None:
-                    continue
-                listed.add(match.group(1).strip())
             for line in body.splitlines():
+                entry = re.match(r"^-\s*(\[\[[^\]]+\]\])", line.strip())
+                if entry:
+                    match = _WIKILINK_RE.match(entry.group(1))
+                    if match and archive_wikilink_relpath(vault, match.group(1)) is None:
+                        listed.add(match.group(1).strip())
+                    continue
                 md = re.match(r"^-\s*\[[^\]]*\]\(([^)]+)\)", line.strip())
                 if md:
                     listed.add(md.group(1)[:-3] if md.group(1).endswith(".md") else md.group(1))
