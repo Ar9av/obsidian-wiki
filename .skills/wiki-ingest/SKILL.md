@@ -394,7 +394,7 @@ For each page in your plan:
   <lines to remove, verbatim from current page>
 
   ## Updated Fields
-  updated: <new ISO timestamp>
+  updated: <obsidian-wiki memory now>
   sources: [<new source added>]
   ```
 - `index.md` and `log.md` are always updated immediately (low-risk tracking files). `hot.md` notes that staged writes are pending.
@@ -432,7 +432,7 @@ relationships:
 ```yaml
 base_confidence: <computed>   # [0.0, 1.0] — see llm-wiki/SKILL.md Confidence formula
 lifecycle: draft
-lifecycle_changed: "<ISO date today>"
+lifecycle_changed: "<obsidian-wiki memory now --date>"
 tier: supporting              # default for new pages; promote to core when ≥5 incoming links
 ```
 

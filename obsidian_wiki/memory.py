@@ -31,10 +31,11 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional, Sequence
 
+from obsidian_wiki import clock
 from obsidian_wiki.cache import advisory_lock
 from obsidian_wiki.provenance import archive_wikilink_relpath
 from obsidian_wiki.vault import BLOCK_SCALAR_RE, FRONTMATTER_RE, iter_md, split_frontmatter
@@ -110,11 +111,22 @@ class MemoryError_(RuntimeError):
 
 
 def utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    """UTC in the ``Z`` spelling: the stamp this writer produced before vaults had a timezone."""
+    return clock.stamp(None)
 
 
-def today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+def now_stamp(vault: Path) -> str:
+    """The full timestamp for a write to *vault*, in the vault's configured zone.
+
+    ``timezone:`` in ``index.md`` picks the zone; without it this is
+    :func:`utc_now`. See :mod:`obsidian_wiki.clock`.
+    """
+    return clock.stamp(clock.wiki_timezone(vault))
+
+
+def today(tz: Optional[tzinfo] = None) -> str:
+    """Bare calendar date in *tz* (UTC when the vault has no zone)."""
+    return clock.today(tz)
 
 
 def memory_lock(vault: Path, *, timeout: float = 10.0):
@@ -218,7 +230,7 @@ def mark_adopted(vault: Path) -> None:
     Delete the file to re-arm the guard — say, after restoring a curated
     index.md from ``_archives/`` — and ``memory migrate`` will ask again.
     """
-    atomic_write(Path(vault) / ADOPTED_REL, f"adopted: {utc_now()}\nby: {GENERATED_MARKER}\n")
+    atomic_write(Path(vault) / ADOPTED_REL, f"adopted: {now_stamp(vault)}\nby: {GENERATED_MARKER}\n")
 
 
 def check_scope(scope: str) -> str:
@@ -327,7 +339,7 @@ def append_log(
     log+index+hot as one update holds it across all three.
     """
     vault = _require_vault(vault)
-    line = format_log_line(verb, fields, timestamp=timestamp)
+    line = format_log_line(verb, fields, timestamp=timestamp or now_stamp(vault))
     log = vault / "log.md"
 
     def _write() -> None:
@@ -795,8 +807,10 @@ def load_profile(vault: Path, scope: str = "") -> list:
     return facts
 
 
-def render_profile(facts: Sequence, *, created: str = "", updated: str = "") -> str:
-    header = _PROFILE_HEADER.format(created=created or today(), updated=updated or today())
+def render_profile(
+    facts: Sequence, *, created: str = "", updated: str = "", tz: Optional[tzinfo] = None
+) -> str:
+    header = _PROFILE_HEADER.format(created=created or today(tz), updated=updated or today(tz))
     rows = "\n".join(
         f"| {_cell(f.key)} | {_cell(f.value)} | {f.confidence:.2f} | {_cell(f.source)} | {_cell(f.updated)} |"
         for f in sorted(facts, key=lambda f: f.key.casefold())
@@ -821,12 +835,13 @@ def set_fact(
         raise MemoryError_("bad_key", "fact key must not be empty")
     if not 0.0 <= confidence <= 1.0:
         raise MemoryError_("bad_confidence", f"confidence must be in [0.0, 1.0]: {confidence}")
-    fact = Fact(key, value.strip(), confidence, source.strip(), today())
+    tz = clock.wiki_timezone(vault)
+    fact = Fact(key, value.strip(), confidence, source.strip(), today(tz))
 
     def _write() -> None:
         facts = [f for f in load_profile(vault, scope) if f.key.casefold() != key.casefold()]
         facts.append(fact)
-        atomic_write(profile_path(vault, scope), render_profile(facts))
+        atomic_write(profile_path(vault, scope), render_profile(facts, tz=tz))
 
     if lock:
         with memory_lock(vault):
@@ -844,7 +859,7 @@ def forget_fact(vault: Path, key: str, *, scope: str = "", lock: bool = True) ->
         kept = [f for f in facts if f.key.casefold() != key.strip().casefold()]
         if len(kept) == len(facts):
             return False
-        atomic_write(profile_path(vault, scope), render_profile(kept))
+        atomic_write(profile_path(vault, scope), render_profile(kept, tz=clock.wiki_timezone(vault)))
         return True
 
     if lock:
@@ -913,9 +928,11 @@ def load_todos(vault: Path, scope: str = "") -> list:
     return todos
 
 
-def render_todos(todos: Sequence, *, created: str = "", updated: str = "") -> str:
+def render_todos(
+    todos: Sequence, *, created: str = "", updated: str = "", tz: Optional[tzinfo] = None
+) -> str:
     header = _TODOS_HEADER.format(
-        created=created or today(), updated=updated or today(), stale=DEFAULT_TODO_STALE_DAYS
+        created=created or today(tz), updated=updated or today(tz), stale=DEFAULT_TODO_STALE_DAYS
     )
     order = {status: position for position, status in enumerate(TODO_STATUSES)}
     rows = "\n".join(
@@ -940,18 +957,19 @@ def add_todo(vault: Path, text: str, *, origin: str = "", scope: str = "", lock:
     text = text.strip()
     if not text:
         raise MemoryError_("bad_todo", "todo text must not be empty")
+    tz = clock.wiki_timezone(vault)
     holder: list = []
 
     def _write() -> None:
         todos = load_todos(vault, scope)
         existing = next((t for t in todos if t.text.casefold() == text.casefold() and t.status == "open"), None)
         if existing is not None:  # idempotent: re-adding an open thread just touches it
-            todo = replace(existing, touched=today())
+            todo = replace(existing, touched=today(tz))
             todos = [todo if t.id == existing.id else t for t in todos]
         else:
-            todo = Todo(_next_todo_id(todos), text, "open", origin.strip(), today(), today())
+            todo = Todo(_next_todo_id(todos), text, "open", origin.strip(), today(tz), today(tz))
             todos.append(todo)
-        atomic_write(todos_path(vault, scope), render_todos(todos))
+        atomic_write(todos_path(vault, scope), render_todos(todos, tz=tz))
         holder.append(todo)
 
     if lock:
@@ -966,6 +984,7 @@ def set_todo_status(vault: Path, todo_id: str, status: str, *, scope: str = "", 
     vault = _require_vault(vault)
     if status not in TODO_STATUSES:
         raise MemoryError_("bad_status", f"status must be one of {', '.join(TODO_STATUSES)}")
+    tz = clock.wiki_timezone(vault)
     holder: list = []
 
     def _write() -> None:
@@ -973,10 +992,10 @@ def set_todo_status(vault: Path, todo_id: str, status: str, *, scope: str = "", 
         match = next((t for t in todos if t.id.casefold() == todo_id.strip().casefold()), None)
         if match is None:
             raise MemoryError_("no_such_todo", f"no todo with id {todo_id!r}")
-        updated = replace(match, status=status, touched=today())
+        updated = replace(match, status=status, touched=today(tz))
         atomic_write(
             todos_path(vault, scope),
-            render_todos([updated if t.id == match.id else t for t in todos]),
+            render_todos([updated if t.id == match.id else t for t in todos], tz=tz),
         )
         holder.append(updated)
 
@@ -998,7 +1017,7 @@ def prune_todos(vault: Path, *, scope: str = "", lock: bool = True) -> int:
         kept = [t for t in todos if t.status == "open"]
         holder.append(len(todos) - len(kept))
         if len(kept) != len(todos):
-            atomic_write(todos_path(vault, scope), render_todos(kept))
+            atomic_write(todos_path(vault, scope), render_todos(kept, tz=clock.wiki_timezone(vault)))
 
     if lock:
         with memory_lock(vault):
@@ -1148,7 +1167,7 @@ def build_hot(
         ]
         blocks = [
             "---\ntitle: Hot Cache\n"
-            f"updated: {utc_now()}\n"
+            f"updated: {now_stamp(vault)}\n"
             f"pages: {len(pages)}\n"
             f"generated_by: {GENERATED_MARKER} hot\n---",
             "# Hot Cache",
@@ -1365,7 +1384,7 @@ def migrate(vault: Path, *, link_format: str = "wikilink", backup: bool = True) 
     vault = _require_vault(vault)
     status = migration_status(vault)
     hot = vault / "hot.md"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = clock.compact(clock.wiki_timezone(vault))
     backup_dir = vault / MIGRATION_BACKUP_DIR / f"pre-memory-migration-{stamp}"
     saved = []
 
@@ -1412,6 +1431,7 @@ def memory_status(vault: Path) -> dict:
     todos = load_todos(vault)
     return {
         "vault": str(vault),
+        "timezone": clock.timezone_name(vault) or "UTC",
         "pages": index_drift.total,
         "index_drift": {
             "added": list(index_drift.added),

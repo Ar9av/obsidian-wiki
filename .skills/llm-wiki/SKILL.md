@@ -200,7 +200,7 @@ base_confidence: 0.65
 lifecycle: draft
 lifecycle_changed: 2024-03-15
 tier: supporting
-created: 2024-03-15T10:30:00Z
+created: 2024-03-15T10:30:00Z   # both from `obsidian-wiki memory now`, which honors the vault's timezone: key
 updated: 2024-03-15T10:30:00Z
 # Optional. Written only by `obsidian-wiki snapshots set` / `apply` — do not hand-author.
 # Quoted wikilinks with |title: Obsidian Properties does not treat Markdown [text](path) as links.

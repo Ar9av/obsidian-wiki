@@ -166,8 +166,8 @@ category: <synthesis|concepts|references|journal|skills>
 tags: [<2-5 domain tags from taxonomy>]
 sources:
   - conversation:<ISO-date>
-created: <ISO-8601 timestamp>
-updated: <ISO-8601 timestamp>
+created: <obsidian-wiki memory now>
+updated: <obsidian-wiki memory now>
 summary: >-
   <1-2 sentences, ≤200 chars, answering "what knowledge does this page hold?">
 provenance:
@@ -176,7 +176,7 @@ provenance:
   ambiguous: 0.X
 base_confidence: 0.42
 lifecycle: draft
-lifecycle_changed: <ISO date today>
+lifecycle_changed: <obsidian-wiki memory now --date>
 ---
 ```
 

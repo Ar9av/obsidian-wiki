@@ -25,6 +25,7 @@ obsidian-wiki setup --project .        # also install project-local skills + boo
 obsidian-wiki setup --project-only     # skip the global install (use with --project)
 obsidian-wiki setup --copy             # copy skill files instead of symlinking
 obsidian-wiki setup --remote https://github.com/you/my-wiki.git   # configure sync non-interactively
+obsidian-wiki setup --timezone America/Detroit   # stamp the wiki in this zone (timezone: in index.md)
 
 obsidian-wiki doctor --json --pretty
 obsidian-wiki doctor --vault /other/vault --project .
@@ -354,7 +355,8 @@ For what the surface *is* — the generated-vs-yours split, the session hooks, t
 
 | Command | What it does |
 |---|---|
-| `memory status` | Index drift, log size, hot-cache budget, profile and todo counts |
+| `memory status` | Index drift, log size, hot-cache budget, profile and todo counts, the zone in use |
+| `memory now` | The timestamp to write into a page, in the vault's own zone (`--date` for the bare date) |
 | `memory sync` | Log, index, and hot cache as one locked update — the post-write call |
 | `memory log VERB key=value` | Append one parseable operation line to `log.md` |
 | `memory index` | Reconcile `index.md` against the pages actually on disk |
@@ -374,6 +376,15 @@ obsidian-wiki memory index
 obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric."
 
 obsidian-wiki memory status --json
+```
+
+### Timestamps
+
+`memory now` prints the stamp a skill should write into `created:` / `updated:`: UTC in the `Z` spelling by default, or — when the frontmatter of `index.md` carries `timezone: America/Detroit` — that zone, with its own offset for the instant. `--date` prints the bare calendar day. The same clock stamps the log, `hot.md`, the `_meta/` tables, and backup directory names, and `memory status` shows the zone in use. A zone name Python cannot resolve is an error, not a UTC stamp. See [Memory Surface → Timestamps](memory.md#timestamps-and-the-vaults-timezone).
+
+```bash
+obsidian-wiki memory now            # 2026-10-10T14:40:37-04:00
+obsidian-wiki memory now --date     # 2026-10-10
 ```
 
 ### What is generated and what is yours

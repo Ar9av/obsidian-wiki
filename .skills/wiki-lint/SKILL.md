@@ -588,8 +588,8 @@ summary: Auto-generated consolidation report from wiki-lint --consolidate run on
 lifecycle: draft
 lifecycle_changed: <date>
 tier: peripheral
-created: <ISO timestamp>
-updated: <ISO timestamp>
+created: <obsidian-wiki memory now>
+updated: <obsidian-wiki memory now>
 ---
 
 # Consolidation Report — <YYYY-MM-DD>

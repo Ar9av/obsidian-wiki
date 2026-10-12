@@ -16,7 +16,7 @@ import json
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +25,7 @@ from fastapi.responses import HTMLResponse
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
+from obsidian_wiki import clock
 from obsidian_wiki.cache import _iter_entries
 from obsidian_wiki.context_pack import ContextError, build_context_pack
 from obsidian_wiki.graphrag import query as graph_query
@@ -102,7 +103,7 @@ def write_page(
     target = _resolve(rel)
     if target.exists() and not upsert:
         raise HTTPException(409, f"page already exists: {rel}")
-    today = date.today().isoformat()
+    today = clock.today(clock.wiki_timezone(VAULT))
     created = today
     if target.exists():
         # Preserve the original created: date across updates.

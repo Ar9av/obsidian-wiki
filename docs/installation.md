@@ -91,6 +91,7 @@ For local-only config, copy `.env.example` to `.env` and set `OBSIDIAN_VAULT_PAT
 4. **Project-local symlinks** — `.claude/skills/`, `.cursor/skills/`, `.windsurf/skills/`, `.agents/skills/`, `.pi/skills/`, `.kiro/skills/`
 5. **Always-on rule files** — `CLAUDE.md`, `GEMINI.md`, `AGENTS.md`, `.hermes.md`, `.cursor/rules/…`, `.windsurf/rules/…`, `.kiro/steering/…`, `.agent/rules/…`, `.agent/workflows/…`, `.github/copilot-instructions.md`
 6. **GitHub sync** (optional) — see [Configuration → Syncing your vault to GitHub](configuration.md#syncing-your-vault-to-github)
+7. **Timezone** (optional) — `--timezone America/Detroit`, or answer the one-time prompt for a new vault; every stamp the wiki writes then carries that zone. See [Memory Surface → Timestamps](memory.md#timestamps-and-the-vaults-timezone)
 
 `obsidian-wiki setup` and `setup.sh` share one implementation, so pip and source installs produce the identical result.
 

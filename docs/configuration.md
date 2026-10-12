@@ -61,6 +61,15 @@ The deterministic `lint`, `trust-record`, and `trust-check` commands use the sam
 
 Local git repo clones work in `OBSIDIAN_SOURCES_DIR` (public or private, any host). Clone locally, then add the path. Repo directories are auto-detected via a `.git` folder and enumerated with `git ls-files`, so whatever the repo's own `.gitignore` excludes — `node_modules`, build output, venvs, secrets — is skipped automatically rather than relying on a hardcoded skip-list.
 
+## Settings that live in the vault
+
+Two keys sit in the frontmatter of the root `index.md` rather than in a config file, so they travel with the vault and apply to every caller — CLI, server, Python API — whichever config that caller resolved. `memory index` preserves them across rebuilds.
+
+| Key | What it does | Default |
+|---|---|---|
+| `timezone` | IANA zone for every stamp the memory writer produces (`2026-10-10T14:40:37-04:00`); `obsidian-wiki memory now` prints it for skills. `setup --timezone <zone>` writes it, and a new vault on a terminal is asked once | UTC, `Z` spelling |
+| `index_folder_hubs` | `true` lists a folder that has its own `index.md` once, as a hub, instead of inlining its pages | `false` |
+
 ## Session hooks
 
 ![Session lifecycle](images/memory-session-lifecycle.png)

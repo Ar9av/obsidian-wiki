@@ -47,6 +47,7 @@ Omit `vault` to use the Config Resolution Protocol: `OBSIDIAN_VAULT_PATH`, then 
 | `search(query, *, limit=8)` | list of `{path, title, summary, score, tier, should_read}` |
 | `get(path)` | the page as markdown |
 | `context(topic, *, budget=8000, recent=False)` | a token-bounded slice for a prompt |
+| `now()` | the timestamp to write into a page you author yourself, in the vault's zone (`timezone:` in `index.md`; UTC `Z` without it) |
 
 `content` is a string or OpenAI-shaped messages (`[{"role": ..., "content": ...}]`). Messages are rendered verbatim — summarising is the caller's job.
 

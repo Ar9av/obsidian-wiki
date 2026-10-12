@@ -49,6 +49,23 @@ This is the distinction that matters most in daily use.
 
 The word cap is real. It defaults to 500, overridable with `OBSIDIAN_HOT_MAX_WORDS`, and counts content only — frontmatter and the generated-file note do not spend the budget. Over budget, sections drop in increasing order of value: activity lines first, then contradictions, then threads, and the takeaways are truncated last, because they are the only part written on purpose.
 
+## Timestamps and the vault's timezone
+
+Every stamp the writer puts in a vault — the bracketed time on a log line, `updated:` on `hot.md`, the dates on profile facts and todos, the adoption record, backup directory names — comes from one clock. By default it is UTC in the `Z` spelling (`2026-10-10T18:40:37Z`), which is what the writer has always produced.
+
+A vault can name its own zone in the frontmatter of `index.md` (`obsidian-wiki setup --timezone America/Detroit` writes it, and a brand-new vault created on a terminal is asked once):
+
+```yaml
+---
+title: Wiki Index
+timezone: America/Detroit
+---
+```
+
+From then on every new stamp carries that zone's offset for its own instant (`2026-10-10T14:40:37-04:00`, and `-05:00` once daylight saving ends), and a bare date is the calendar day there rather than in UTC — the difference that files an evening's work under tomorrow's date for anyone west of Greenwich. The key lives in the file it governs, like `index_folder_hubs`, so it travels with the vault and applies to the CLI, the server, and the Python API alike, whichever `.env` they resolved; `memory index` preserves the frontmatter, so it survives every rebuild. A misspelled zone fails the write with the name in the error instead of writing UTC under a local label.
+
+Skills write their own `created:` and `updated:` into pages. `obsidian-wiki memory now` prints the stamp to use (`--date` for the bare form), so an agent never has to know which zone the vault is in. Existing stamps are left exactly as they are: the clock governs new writes only.
+
 ## Adopting an existing vault
 
 If your vault predates this writer, its memory files are hand-curated and **nothing overwrites them until you say so.**
