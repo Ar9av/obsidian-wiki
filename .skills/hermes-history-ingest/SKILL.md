@@ -143,7 +143,7 @@ For each impacted project, create/update `projects/<name>/<name>.md`.
   ```yaml
   base_confidence: 0.42
   lifecycle: draft
-  lifecycle_changed: <ISO date today>
+  lifecycle_changed: <obsidian-wiki memory now --date>
   ```
   Leave `lifecycle` unchanged on update.
 - Add provenance markers:

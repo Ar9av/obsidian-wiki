@@ -363,7 +363,7 @@ For each project with content, create or update the project overview page at `pr
 ```yaml
 base_confidence: 0.42
 lifecycle: draft
-lifecycle_changed: <ISO date today>
+lifecycle_changed: <obsidian-wiki memory now --date>
 ```
 On update, leave `lifecycle` and `lifecycle_changed` unchanged — only a human editor transitions lifecycle state.
 

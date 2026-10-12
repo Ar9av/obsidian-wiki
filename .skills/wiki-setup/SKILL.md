@@ -30,6 +30,11 @@ If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
 4. **Have QMD installed?** → `QMD_WIKI_COLLECTION` / `QMD_PAPERS_COLLECTION` / `QMD_TRANSPORT`
    - Optional. Enables semantic search in `wiki-query` and source discovery in `wiki-ingest`.
    - Default to `QMD_TRANSPORT=mcp` unless the user wants the agent to call the local `qmd` CLI directly.
+
+5. **Which timezone should the wiki's timestamps use?** → `timezone:` in `index.md` (not `.env`)
+   - Optional. An IANA name such as `America/Detroit`; blank means UTC in the `Z` spelling.
+   - Lives in the vault so it applies to every writer (CLI, server, Python API) and travels with it.
+   - Written by `obsidian-wiki setup --timezone <name>` (step 3 below) or by hand; `obsidian-wiki memory now` prints stamps in it.
    - If using CLI mode, set `QMD_CLI_SEARCH_MODE=quality` by default; suggest `balanced` if reranking is too slow.
    - If unsure, skip for now — both skills fall back to `Grep` automatically.
    - Install instructions: see `.env.example` (QMD section).
@@ -119,6 +124,8 @@ mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,j
 - `_staging/` — Review queue for LLM-written pages when `WIKI_STAGED_WRITES=true`. Pages here are not visible in Obsidian's graph until promoted via `/wiki-stage-commit`.
 
 ## Step 3: Create Special Files
+
+`obsidian-wiki setup --vault <path> [--timezone <IANA name>]` creates all of these in one go. The templates below are what it writes, for setups done by hand.
 
 ### index.md
 
@@ -232,6 +239,7 @@ Tell the user about these recommended community plugins (they install manually):
 Run a quick sanity check:
 - [ ] Vault directory exists with: `concepts/`, `entities/`, `skills/`, `references/`, `synthesis/`, `journal/`, `projects/`, `_archives/`, `_raw/`
 - [ ] `index.md` exists at vault root
+- [ ] `index.md` frontmatter carries `timezone:` if the user chose one (`obsidian-wiki memory status` shows the zone in use)
 - [ ] `log.md` exists at vault root
 - [ ] `hot.md` exists at vault root
 - [ ] `.manifest.json` exists at vault root (empty `{}` is fine)

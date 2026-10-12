@@ -164,7 +164,7 @@ sources:
   - "<URL>"
 source_url: "<URL>"
 created: <ISO-8601 timestamp>
-updated: <ISO-8601 timestamp>
+updated: <obsidian-wiki memory now>
 summary: >-
   <1-2 sentences describing what this source covers, ≤200 chars>
 provenance:
@@ -173,7 +173,7 @@ provenance:
   ambiguous: 0.X
 base_confidence: <0.17 + 0.5 × classify(url) for a single source>
 lifecycle: draft
-lifecycle_changed: <ISO date today>
+lifecycle_changed: <obsidian-wiki memory now --date>
 ---
 ```
 
@@ -203,7 +203,7 @@ category: synthesis
 tags: [<3-5 domain tags>, research]
 sources: [<list of source URLs or page paths>]
 created: <ISO-8601 timestamp>
-updated: <ISO-8601 timestamp>
+updated: <obsidian-wiki memory now>
 summary: >-
   Synthesis of <N>-round research on <topic>. Covers <core findings in ≤200 chars>.
 provenance:
@@ -212,7 +212,7 @@ provenance:
   ambiguous: 0.X
 base_confidence: <min(N_unique_sources/3,1.0)×0.5 + avg_source_quality×0.5>
 lifecycle: draft
-lifecycle_changed: <ISO date today>
+lifecycle_changed: <obsidian-wiki memory now --date>
 ---
 
 # Research: <Topic>

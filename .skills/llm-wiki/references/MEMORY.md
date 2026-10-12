@@ -61,10 +61,16 @@ contexts" is useful. "Created 3 files" is not.
 | `memory index` | You moved, renamed, or deleted pages outside a normal write |
 | `memory hot --takeaways "…"` | You want to update the narrative without an ingest |
 | `memory status` | Checking whether the surface is current before or after work |
+| `memory now` | You need the `created:` / `updated:` stamp for a page you are writing (`--date` for a bare date) |
 | `memory recap` | You need the injectable profile + threads + activity block |
 
 `--check` reports drift and exits 2 without writing. `--json` is available on
 all of them.
+
+`memory now` honors `timezone:` in the root `index.md` frontmatter (an IANA name
+such as `America/Detroit`) and prints UTC in the `Z` spelling without it. The
+same clock stamps the log, `hot.md`, and the tables. Write what it prints;
+never `date -u`.
 
 ## Owner profile and todos
 

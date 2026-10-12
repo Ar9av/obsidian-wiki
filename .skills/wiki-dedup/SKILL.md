@@ -220,7 +220,7 @@ aliases: [<secondary aliases>]
 category: <secondary category>
 tags: []
 created: <secondary original created>
-updated: <ISO timestamp now>
+updated: <obsidian-wiki memory now>
 ---
 
 This page has been merged into [[<canonical page title>]].
