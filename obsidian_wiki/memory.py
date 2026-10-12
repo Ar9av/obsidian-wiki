@@ -1421,6 +1421,167 @@ def migrate(vault: Path, *, link_format: str = "wikilink", backup: bool = True) 
     }
 
 
+TIMEZONE_BACKUP_PREFIX = "pre-timezone-migration-"
+_TIMEZONE_SKIP_DIRS = frozenset({MIGRATION_BACKUP_DIR, "_archived"})
+_BARE_DATE_KEY_RE = re.compile(
+    r"^(?:created|updated|lifecycle_changed|reviewed_at|adopted):[ \t]*\"?\d{4}-\d{2}-\d{2}\"?[ \t]*$",
+    re.MULTILINE,
+)
+
+
+def _timezone_targets(vault: Path, skip: Sequence[str]) -> list:
+    """Every file the timezone migration may rewrite: pages, the memory files,
+    the ``_meta/`` tables, drafts in ``_raw/`` and ``_staging/``, and the
+    adoption record. Never ``_archives/`` (the backups), ``_raw/_archived/``
+    (source snapshots), hidden dirs, instruction files, ``.okignore`` matches,
+    or anything that is not Markdown — JSON ledgers keep their own stamps."""
+    import fnmatch
+
+    from obsidian_wiki.vault import _walk_md, is_instruction_file, okignore_patterns, okignored, skipped_dir
+
+    patterns = okignore_patterns(vault)
+    targets = []
+    for path in sorted(_walk_md(vault)):
+        rel = path.relative_to(vault)
+        if skipped_dir(rel, _TIMEZONE_SKIP_DIRS) or is_instruction_file(rel) or okignored(rel, patterns):
+            continue
+        targets.append(path)
+    adopted = vault / ADOPTED_REL
+    if adopted.is_file():
+        targets.append(adopted)
+    return [
+        path for path in targets
+        if not any(fnmatch.fnmatch(path.relative_to(vault).as_posix(), pattern) for pattern in skip)
+    ]
+
+
+def _timezone_target_zone(vault: Path, zone: str) -> str:
+    name = (zone or "").strip().strip("\"'")
+    if not name:
+        name = clock.timezone_name(vault)
+    if not name:
+        raise MemoryError_(
+            "no_timezone",
+            "no timezone to convert to: pass one (`memory timezone America/Detroit`) "
+            "or set `timezone:` in index.md first",
+        )
+    clock.parse_timezone(name)  # TimezoneError on an unknown name, before any file is read
+    return name
+
+
+def timezone_migration_plan(vault: Path, zone: str = "", *, skip: Sequence[str] = ()) -> dict:
+    """What ``migrate_timezone`` would change, without writing anything.
+
+    Every zoned stamp in every target file is re-rendered in the vault's zone
+    (or *zone*, which ``--apply`` would also record in ``index.md``). Bare dates
+    and naive stamps are counted and left alone.
+    """
+    vault = _require_vault(vault)
+    name = _timezone_target_zone(vault, zone)
+    tz = clock.parse_timezone(name)
+    files = []
+    stamps = naive_total = bare_total = 0
+    for path in _timezone_targets(vault, skip):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        _new, changes, naive = clock.convert_text(text, tz)
+        naive_total += naive
+        bare_total += len(_BARE_DATE_KEY_RE.findall(split_frontmatter(text)[0]))
+        if changes:
+            rel = path.relative_to(vault).as_posix()
+            files.append({
+                "path": rel,
+                "stamps": [{"line": c.line, "old": c.old, "new": c.new} for c in changes],
+            })
+            stamps += len(changes)
+    return {
+        "vault": str(vault),
+        "timezone": name,
+        "key_current": clock.timezone_name(vault),
+        "files": files,
+        "file_count": len(files),
+        "stamp_count": stamps,
+        "naive_skipped": naive_total,
+        "bare_dates": bare_total,
+        "skip": list(skip),
+    }
+
+
+def migrate_timezone(vault: Path, zone: str = "", *, skip: Sequence[str] = (), backup: bool = True) -> dict:
+    """Rewrite every zoned stamp in the vault in its zone, with a backup first.
+
+    Under the memory lock: the original of every file that will change is
+    copied to ``_archives/pre-timezone-migration-<stamp>/<same path>``, the
+    key is recorded in ``index.md`` when *zone* was given, the files are
+    rewritten atomically, and one ``TIMEZONE`` line is appended to the log —
+    in the new zone, after the log itself was converted. Re-running is a
+    no-op: a stamp already in the zone renders identically.
+    """
+    vault = _require_vault(vault)
+    name = _timezone_target_zone(vault, zone)
+    tz = clock.parse_timezone(name)
+    backup_dir = vault / MIGRATION_BACKUP_DIR / f"{TIMEZONE_BACKUP_PREFIX}{clock.compact(tz)}"
+    index = vault / "index.md"
+    files = []
+    stamps = naive_total = bare_total = 0
+    saved: list = []
+
+    def _save(path: Path, text: str) -> None:
+        if not backup:
+            return
+        target = backup_dir / path.relative_to(vault)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, text)
+        saved.append(path.relative_to(vault).as_posix())
+
+    with memory_lock(vault):
+        set_key = bool(zone.strip()) and clock.timezone_name(vault) != name
+        if set_key and index.is_file():
+            _save(index, index.read_text(encoding="utf-8"))
+            clock.set_timezone(vault, name)
+        for path in _timezone_targets(vault, skip):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            new_text, changes, naive = clock.convert_text(text, tz)
+            naive_total += naive
+            bare_total += len(_BARE_DATE_KEY_RE.findall(split_frontmatter(text)[0]))
+            if not changes:
+                continue
+            rel = path.relative_to(vault).as_posix()
+            if rel not in saved:
+                _save(path, text)
+            atomic_write(path, new_text)
+            files.append({
+                "path": rel,
+                "stamps": [{"line": c.line, "old": c.old, "new": c.new} for c in changes],
+            })
+            stamps += len(changes)
+        line = append_log(
+            vault,
+            "TIMEZONE",
+            {
+                "zone": name,
+                "files": len(files),
+                "stamps": stamps,
+                "backup": f"{MIGRATION_BACKUP_DIR}/{backup_dir.name}" if saved else "",
+            },
+            lock=False,
+        )
+
+    return {
+        "vault": str(vault),
+        "timezone": name,
+        "key_set": set_key,
+        "files": files,
+        "file_count": len(files),
+        "stamp_count": stamps,
+        "naive_skipped": naive_total,
+        "bare_dates": bare_total,
+        "skip": list(skip),
+        "backup": saved,
+        "backup_dir": str(backup_dir) if saved else "",
+        "log_line": line,
+    }
+
+
 def memory_status(vault: Path) -> dict:
     """Machine-readable health of the memory surface."""
     vault = _require_vault(vault)

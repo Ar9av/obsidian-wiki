@@ -24,6 +24,7 @@ frontmatter, so the key survives every regeneration.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Optional, Union
@@ -137,3 +138,78 @@ def compact(tz: Optional[tzinfo] = None, *, now: Optional[datetime] = None) -> s
     if tz is None:
         return moment.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return moment.astimezone(tz).strftime("%Y%m%dT%H%M%S%z")
+
+
+# --------------------------------------------------------------------------
+# converting the stamps already in a vault
+# --------------------------------------------------------------------------
+
+#: A full ISO-8601 timestamp with a zone: ``2026-10-10T18:40:37Z``,
+#: ``2026-10-10T14:40:37-04:00``, ``2026-10-10T14:40:37.123-0400``. Bare dates,
+#: naive stamps (no zone) and the compact backup-directory form
+#: (``20261010T184037Z``) deliberately do not match: the first two cannot be
+#: converted without guessing, the last names a directory that exists.
+STAMP_RE = re.compile(
+    r"(?<![\w/])"
+    r"(?P<date>\d{4}-\d{2}-\d{2})T(?P<time>\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?)"
+    r"(?P<zone>Z|[+-]\d{2}:?\d{2})"
+    r"(?!\w)"
+)
+_NAIVE_RE = re.compile(r"(?<![\w/])\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?![\w:+-])")
+
+
+@dataclass(frozen=True)
+class StampChange:
+    line: int   # 1-based
+    old: str
+    new: str
+
+
+def convert_stamp(text: str, tz: Optional[tzinfo]) -> Optional[str]:
+    """Re-render one full stamp in *tz* (``Z`` form when *tz* is ``None``).
+
+    Returns ``None`` when the text is not a parseable zoned stamp. The instant
+    is preserved; only the spelling changes, so a stamp already in the zone
+    comes back unchanged and a second run is a no-op.
+    """
+    match = STAMP_RE.fullmatch(text.strip())
+    if not match:
+        return None
+    time = match.group("time")
+    if time.count(":") == 1:
+        time += ":00"
+    zone = match.group("zone")
+    if zone == "Z":
+        zone = "+00:00"
+    elif ":" not in zone:
+        zone = f"{zone[:3]}:{zone[3:]}"
+    try:
+        moment = datetime.fromisoformat(f"{match.group('date')}T{time}{zone}")
+    except ValueError:
+        return None
+    return stamp(tz, now=moment)
+
+
+def convert_text(text: str, tz: Optional[tzinfo]) -> "tuple[str, list, int]":
+    """Every zoned stamp in *text* re-rendered in *tz*.
+
+    Returns ``(new_text, changes, naive)``: the converted text, one
+    :class:`StampChange` per stamp whose spelling changed, and how many naive
+    stamps (no zone, so no conversion possible) were seen and left alone.
+    """
+    changes: list = []
+    out_lines = []
+    naive = 0
+    for number, line in enumerate(text.split("\n"), start=1):
+        naive += len(_NAIVE_RE.findall(line))
+
+        def _swap(match: "re.Match[str]") -> str:
+            old = match.group(0)
+            new = convert_stamp(old, tz)
+            if new is None or new == old:
+                return old
+            changes.append(StampChange(number, old, new))
+            return new
+
+        out_lines.append(STAMP_RE.sub(_swap, line))
+    return "\n".join(out_lines), changes, naive

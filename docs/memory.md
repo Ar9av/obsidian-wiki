@@ -64,7 +64,9 @@ timezone: America/Detroit
 
 From then on every new stamp carries that zone's offset for its own instant (`2026-10-10T14:40:37-04:00`, and `-05:00` once daylight saving ends), and a bare date is the calendar day there rather than in UTC — the difference that files an evening's work under tomorrow's date for anyone west of Greenwich. The key lives in the file it governs, like `index_folder_hubs`, so it travels with the vault and applies to the CLI, the server, and the Python API alike, whichever `.env` they resolved; `memory index` preserves the frontmatter, so it survives every rebuild. A misspelled zone fails the write with the name in the error instead of writing UTC under a local label.
 
-Skills write their own `created:` and `updated:` into pages. `obsidian-wiki memory now` prints the stamp to use (`--date` for the bare form), so an agent never has to know which zone the vault is in. Existing stamps are left exactly as they are: the clock governs new writes only.
+Skills write their own `created:` and `updated:` into pages. `obsidian-wiki memory now` prints the stamp to use (`--date` for the bare form), so an agent never has to know which zone the vault is in.
+
+The key governs new writes. To bring the vault's history along, `obsidian-wiki memory timezone America/Detroit` previews, per file, every existing stamp that would change — frontmatter, log lines, `hot.md`, page bodies, each converted by its own instant — and `--apply` copies every file it will touch to `_archives/pre-timezone-migration-<stamp>/`, records the key, rewrites the files, and logs one `TIMEZONE` line. Bare dates and naive stamps are left alone and counted; `--skip GLOB` protects a file whose stamps are quoted source text; a second run changes nothing. Details and flags in [CLI Reference → Timestamps](cli.md#timestamps).
 
 ## Adopting an existing vault
 

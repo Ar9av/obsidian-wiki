@@ -357,6 +357,7 @@ For what the surface *is* — the generated-vs-yours split, the session hooks, t
 |---|---|
 | `memory status` | Index drift, log size, hot-cache budget, profile and todo counts, the zone in use |
 | `memory now` | The timestamp to write into a page, in the vault's own zone (`--date` for the bare date) |
+| `memory timezone [ZONE]` | Convert every existing stamp in the vault to its zone; preview by default, `--apply` with a backup |
 | `memory sync` | Log, index, and hot cache as one locked update — the post-write call |
 | `memory log VERB key=value` | Append one parseable operation line to `log.md` |
 | `memory index` | Reconcile `index.md` against the pages actually on disk |
@@ -386,6 +387,20 @@ obsidian-wiki memory status --json
 obsidian-wiki memory now            # 2026-10-10T14:40:37-04:00
 obsidian-wiki memory now --date     # 2026-10-10
 ```
+
+**Converting what is already there.** Setting the key changes new writes only; `memory timezone` brings the vault's history along:
+
+```bash
+obsidian-wiki memory timezone America/Detroit            # preview: per file, what would change
+obsidian-wiki memory timezone America/Detroit --apply    # record the key, back up, convert, log
+obsidian-wiki memory timezone                            # later runs read the key from index.md
+```
+
+The preview writes nothing and exits 2 while there is work to do (the same contract as `--check`), listing each file with sample before/after stamps; `--verbose` lists every stamp, `--json` has them all. `--apply` copies the original of every file it will change to `_archives/pre-timezone-migration-<stamp>/` under the same relative path, records `timezone:` in `index.md` when you passed a zone, rewrites the files atomically under the memory lock, and appends one `TIMEZONE` line to the log.
+
+What converts: every full, zoned stamp (`…Z` or any offset) in every Markdown file — frontmatter keys, `log.md` lines, `hot.md`, page bodies, drafts in `_raw/` and `_staging/`, the adoption record — each by its own instant, so a June stamp and a December stamp get the right offsets. What stays: bare dates (`2026-10-10` has no time to convert), naive stamps (no zone, so no conversion is possible), the compact backup-directory names in log lines, `_archives/`, `_raw/_archived/` source snapshots, instruction files, `.okignore` matches, and anything that is not Markdown (`.manifest.json`, the trust ledger). Both skipped kinds are counted in the report. `--skip GLOB` (repeatable, vault-relative) excludes a file whose stamps are quoted source text. A stamp already in the zone renders identically, so running twice changes nothing; `UTC` as the zone converts back.
+
+A page in the trust ledger whose fingerprinted content changes (`created:`, body text) will show as stale on the next `trust-check`; re-record it.
 
 ### What is generated and what is yours
 
