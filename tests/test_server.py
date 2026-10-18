@@ -221,3 +221,31 @@ def test_bind_host_is_loopback_unless_asked(client, monkeypatch, wiki_host, expe
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw))
     sys.modules["obsidian_wiki.server"].main()
     assert seen["host"] == expected
+
+
+MCP_LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+# TestClient sends Host: testserver, which loopback rebinding protection refuses.
+MCP_HEADERS = {"accept": "application/json, text/event-stream", "host": "localhost:8080"}
+
+
+def test_mcp_needs_a_key(client):
+    """A mounted app skips route dependencies; /mcp must still refuse a keyless caller."""
+    assert client.post("/mcp/", json=MCP_LIST, headers=MCP_HEADERS).status_code == 200
+    client.headers.pop("authorization")
+    assert client.post("/mcp/", json=MCP_LIST, headers=MCP_HEADERS).status_code == 401
+    client.headers["authorization"] = "Bearer nope"
+    assert client.post("/mcp/", json=MCP_LIST, headers=MCP_HEADERS).status_code == 401
+
+
+def test_mcp_answers_a_lan_host_when_bound_to_every_interface(tmp_path, monkeypatch):
+    """WIKI_HOST=0.0.0.0 (the Docker image) must not 421 a request by LAN address (#266)."""
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("WIKI_API_KEY", KEY)
+    monkeypatch.setenv("WIKI_HOST", "0.0.0.0")
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    with TestClient(server.app) as c:
+        r = c.post("/mcp/", json=MCP_LIST, headers={
+            **MCP_HEADERS, "authorization": f"Bearer {KEY}", "host": "192.168.1.5:8080",
+        })
+    assert r.status_code == 200

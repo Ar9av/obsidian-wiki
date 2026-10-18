@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
@@ -153,12 +153,13 @@ def context_pack(
 
 # --- HTTP -------------------------------------------------------------------
 
-def require_key(request: Request) -> None:
-    if ANONYMOUS:
-        return
-    header = request.headers.get("authorization", "")
+def _key_ok(header: str) -> bool:
     token = header[7:] if header.lower().startswith("bearer ") else ""
-    if not hmac.compare_digest(token, API_KEY):
+    return ANONYMOUS or hmac.compare_digest(token, API_KEY)
+
+
+def require_key(request: Request) -> None:
+    if not _key_ok(request.headers.get("authorization", "")):
         raise HTTPException(401, "missing or invalid API key")
 
 
@@ -303,7 +304,24 @@ mcp.tool(name="memory_sync", description="Reconcile index.md and hot.md after wr
 
 # Must be built before `mcp.session_manager` exists. Mounted at /mcp below, so
 # its own path is "/". Stateless: no server-side session state to lose on restart.
-_mcp_app = mcp.streamable_http_app(streamable_http_path="/", stateless_http=True)
+# `host` must match the bind address: left at its loopback default, mcp turns on
+# DNS-rebinding protection and answers every LAN or container request with 421.
+_mcp_app = mcp.streamable_http_app(
+    streamable_http_path="/", stateless_http=True,
+    host=os.environ.get("WIKI_HOST", "127.0.0.1"),
+)
+
+
+def _keyed(inner):
+    """Route dependencies do not reach a mounted app, so /mcp checks the key itself."""
+    async def app(scope, receive, send):
+        if scope["type"] == "http":
+            header = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
+            if not _key_ok(header):
+                await JSONResponse({"detail": "missing or invalid API key"}, 401)(scope, receive, send)
+                return
+        await inner(scope, receive, send)
+    return app
 
 
 @asynccontextmanager
@@ -315,7 +333,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="obsidian-wiki memory", lifespan=lifespan)
-app.mount("/mcp", _mcp_app)
+app.mount("/mcp", _keyed(_mcp_app))
 
 
 @app.get("/health")
