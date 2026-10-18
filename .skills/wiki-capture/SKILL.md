@@ -285,6 +285,10 @@ Apply the same KEEP/SKIP discipline as Step 1, and one extra rule that matters m
   that is the document's content and belongs on a page, not in their profile.
 - **Stable, not incidental.** "Uses Postgres" is a fact. "Ran a migration today"
   is an event; that belongs in the log.
+- **Time-bound facts expire.** "Has exams this weekend" or "travelling until the
+  20th" is worth carrying into the next few sessions, not forever. Record it with
+  `--until YYYY-MM-DD` (the last day it holds) and the recap stops injecting it
+  once that date passes.
 - **Calibrate the confidence.** Stated outright is ~0.9. Demonstrated repeatedly
   is ~0.75. Inferred from one session's behaviour is ~0.5 — and if you are below
   0.5, do not write it at all.

@@ -187,6 +187,7 @@ class ProfileWrite(BaseModel):
     value: str = ""
     confidence: float = 0.6
     source: str = "agent"
+    until: str = ""
     user_id: str = ""
 
 
@@ -229,8 +230,12 @@ def memory_recap(project: str = "", max_words: int = 350, min_confidence: float 
 
 def memory_profile(action: str = "list", key: str = "", value: str = "",
                    confidence: float = 0.6, source: str = "agent",
-                   user_id: str = "") -> dict[str, Any]:
-    """Read or update durable facts about a person. `user_id` scopes them."""
+                   until: str = "", user_id: str = "") -> dict[str, Any]:
+    """Read or update facts about a person. `user_id` scopes them.
+
+    Pass `until` (YYYY-MM-DD) for a time-bound fact ("travelling until Friday")
+    so it stops being injected once it is over.
+    """
     from obsidian_wiki import memory as mem
 
     scope = _scope(user_id)
@@ -240,7 +245,7 @@ def memory_profile(action: str = "list", key: str = "", value: str = "",
         if not key or not value:
             raise HTTPException(400, "key and value are required for action='set'")
         return {"fact": mem.set_fact(
-            VAULT, key, value, confidence=confidence, source=source, scope=scope
+            VAULT, key, value, confidence=confidence, source=source, until=until, scope=scope
         ).__dict__}
     if action == "forget":
         return {"removed": mem.forget_fact(VAULT, key, scope=scope)}
@@ -513,7 +518,7 @@ def http_profile_list(user_id: str = "") -> dict[str, Any]:
 def http_profile_set(body: ProfileWrite) -> dict[str, Any]:
     return memory_profile(
         body.action, key=body.key, value=body.value,
-        confidence=body.confidence, source=body.source, user_id=body.user_id,
+        confidence=body.confidence, source=body.source, until=body.until, user_id=body.user_id,
     )
 
 

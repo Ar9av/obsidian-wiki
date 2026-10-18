@@ -448,6 +448,8 @@ obsidian-wiki memory todo done t1
 
 They are markdown tables so Obsidian renders them and a human can edit them in place; the parser round-trips hand edits, including values containing a literal `|`. Confidence is the writer's own calibration, not a measurement. Re-adding an open thread with the same text touches it rather than duplicating it.
 
+A fact that is only true for a while takes `--until YYYY-MM-DD` — `memory profile set exams "finals this weekend" --until 2026-10-20`. Once the date passes it drops out of `memory recap`, so the next session isn't told about an exam that already happened. The row stays in the table (marked expired in `profile list`) until you `forget` it. Profiles written before the `Until` column existed parse unchanged.
+
 Staleness is **reported, never enforced**. An open item untouched for 30 days is flagged by `memory todo list` and in `memory recap`; nothing closes it on your behalf.
 
 ### Session injection

@@ -508,6 +508,20 @@ def test_recap_gathers_profile_threads_and_activity(vault: Path) -> None:
     assert "INGEST" in recap
 
 
+def test_recap_drops_a_time_bound_fact_once_it_is_over(vault: Path) -> None:
+    """"Exams this weekend" must not still be injected next month."""
+    mem.set_fact(vault, "exams", "this weekend", until="2000-01-02")
+    mem.set_fact(vault, "trip", "in Lisbon", until="2999-01-01")
+    facts = {f.key: f for f in mem.load_profile(vault)}
+    assert facts["exams"].until == "2000-01-02" and facts["exams"].is_expired()
+    recap = mem.build_recap(vault)
+    assert "exams" not in recap
+    assert "**trip**: in Lisbon" in recap
+    with pytest.raises(mem.MemoryError_) as excinfo:
+        mem.set_fact(vault, "k", "v", until="next friday")
+    assert excinfo.value.code == "bad_until"
+
+
 def test_recap_is_honest_about_an_empty_vault(vault: Path) -> None:
     assert "No vault memory recorded yet" in mem.build_recap(vault)
 

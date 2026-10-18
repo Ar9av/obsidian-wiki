@@ -108,6 +108,7 @@ Three rules worth knowing:
 
 - **Only record what the user actually told you.** A durable fact about a person should never be inferred from a document that was ingested — that is the document's content, and it belongs on a page.
 - **Confidence is the writer's own calibration**, not a measurement. Stated outright is around 0.9; inferred from one session's behaviour is around 0.5.
+- **Time-bound facts take `--until YYYY-MM-DD`.** "Exams this weekend" drops out of the session recap once the date passes instead of being repeated for months; the row stays in the table until you `forget` it.
 - **Staleness is reported, never enforced.** An open thread untouched for 30 days is flagged in `memory todo list` and in the recap. Nothing closes it on your behalf.
 
 ### Who writes them

@@ -284,6 +284,7 @@ class Memory:
         *,
         confidence: float = 0.6,
         source: str = "agent",
+        until: str = "",
         user_id: Optional[str] = None,
     ) -> dict:
         """Record a durable fact about the person. Re-keying replaces it.
@@ -293,7 +294,7 @@ class Memory:
         """
         fact = _mem.set_fact(
             self.vault, key, value,
-            confidence=confidence, source=source, scope=self._scope(user_id),
+            confidence=confidence, source=source, until=until, scope=self._scope(user_id),
         )
         return dict(fact.__dict__)
 

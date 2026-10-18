@@ -2685,7 +2685,12 @@ def cmd_memory(args: argparse.Namespace) -> int:
                 facts = mem.load_profile(vault)
                 return emit(
                     {"facts": [f.__dict__ for f in facts]},
-                    [f"{f.key}: {f.value}  ({f.confidence:.2f}, {f.source}, {f.updated})" for f in facts]
+                    [
+                        f"{f.key}: {f.value}  ({f.confidence:.2f}, {f.source}, {f.updated}"
+                        + (f", until {f.until}{' — expired' if f.is_expired() else ''}" if f.until else "")
+                        + ")"
+                        for f in facts
+                    ]
                     or ["no profile facts recorded"],
                 )
             if sub_action == "set":
@@ -2694,7 +2699,7 @@ def cmd_memory(args: argparse.Namespace) -> int:
                     return 1
                 fact = mem.set_fact(
                     vault, rest[1], " ".join(rest[2:]),
-                    confidence=args.confidence, source=args.source,
+                    confidence=args.confidence, source=args.source, until=args.until or "",
                 )
                 return emit({"fact": fact.__dict__}, [f"set {fact.key}: {fact.value} ({fact.confidence:.2f})"])
             if sub_action == "forget":
@@ -3370,6 +3375,7 @@ need quoting: query="how do transformers work".""",
     mm_profile = mm.add_argument_group("profile set")
     mm_profile.add_argument("--confidence", type=float, default=0.6, help="how sure you are, 0..1 (default: 0.6)")
     mm_profile.add_argument("--source", default="conversation", help="where the fact came from")
+    mm_profile.add_argument("--until", metavar="YYYY-MM-DD", help="time-bound fact: drop it from the recap after this date")
 
     mm_todo = mm.add_argument_group("todo")
     mm_todo.add_argument("--origin", help="originating page for `todo add`")

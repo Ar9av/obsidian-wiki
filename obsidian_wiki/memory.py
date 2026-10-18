@@ -31,7 +31,7 @@ from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta, timezone, tzinfo
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional, Sequence
 
@@ -743,6 +743,10 @@ class Fact:
     confidence: float
     source: str
     updated: str
+    until: str = ""  # YYYY-MM-DD after which the fact no longer holds; empty = durable
+
+    def is_expired(self, on: Optional[str] = None) -> bool:
+        return bool(self.until) and self.until < (on or today())
 
 
 def _cell(text: str) -> str:
@@ -753,8 +757,12 @@ def _uncell(text: str) -> str:
     return text.replace(r"\|", "|").strip()
 
 
-def _parse_table(text: str, columns: int) -> list:
-    """Rows of the first markdown table in *text*, header and rule dropped."""
+def _parse_table(text: str, columns: int, optional: int = 0) -> list:
+    """Rows of the first markdown table in *text*, header and rule dropped.
+
+    *optional* trailing columns may be missing (a table written before they
+    existed); they come back as empty strings.
+    """
     rows = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -765,7 +773,8 @@ def _parse_table(text: str, columns: int) -> list:
             continue
         if all(set(cell) <= {"-", ":", " "} and cell for cell in cells):
             continue  # the |---|---| rule
-        rows.append(cells[:columns])
+        cells += [""] * optional
+        rows.append(cells[: columns + optional])
     return rows[1:] if rows else []  # drop the header row
 
 
@@ -783,10 +792,11 @@ generated_by: obsidian-wiki memory profile
 
 *Durable facts about the vault owner, injected into an agent's context at session
 start. Written by `obsidian-wiki memory profile set`; safe to edit by hand — the
-table round-trips. Confidence is the writer's own calibration, not a measurement.*
+table round-trips. Confidence is the writer's own calibration, not a measurement.
+A fact with an Until date drops out of the session recap once that date passes.*
 
-| Fact | Value | Confidence | Source | Updated |
-|---|---|---|---|---|
+| Fact | Value | Confidence | Source | Updated | Until |
+|---|---|---|---|---|---|
 """
 
 
@@ -795,15 +805,15 @@ def load_profile(vault: Path, scope: str = "") -> list:
     if not path.is_file():
         return []
     facts = []
-    for row in _parse_table(path.read_text(encoding="utf-8"), 5):
-        key, value, confidence, source, updated = row
+    for row in _parse_table(path.read_text(encoding="utf-8"), 5, optional=1):
+        key, value, confidence, source, updated, until = row
         if not key:
             continue
         try:
             score = float(confidence)
         except ValueError:
             score = 0.5
-        facts.append(Fact(key, value, score, source, updated))
+        facts.append(Fact(key, value, score, source, updated, until))
     return facts
 
 
@@ -812,7 +822,7 @@ def render_profile(
 ) -> str:
     header = _PROFILE_HEADER.format(created=created or today(tz), updated=updated or today(tz))
     rows = "\n".join(
-        f"| {_cell(f.key)} | {_cell(f.value)} | {f.confidence:.2f} | {_cell(f.source)} | {_cell(f.updated)} |"
+        f"| {_cell(f.key)} | {_cell(f.value)} | {f.confidence:.2f} | {_cell(f.source)} | {_cell(f.updated)} | {_cell(f.until)} |"
         for f in sorted(facts, key=lambda f: f.key.casefold())
     )
     return header + (rows + "\n" if rows else "")
@@ -825,18 +835,30 @@ def set_fact(
     *,
     confidence: float = 0.6,
     source: str = "conversation",
+    until: str = "",
     scope: str = "",
     lock: bool = True,
 ) -> Fact:
-    """Add or replace one durable fact about the owner."""
+    """Add or replace one fact about the owner.
+
+    *until* (YYYY-MM-DD) marks a time-bound fact — "exams this weekend" — so it
+    stops being injected once it is over instead of lingering until a human
+    notices. The row stays in the table; `forget` removes it.
+    """
     vault = _require_vault(vault)
     key = key.strip()
     if not key:
         raise MemoryError_("bad_key", "fact key must not be empty")
     if not 0.0 <= confidence <= 1.0:
         raise MemoryError_("bad_confidence", f"confidence must be in [0.0, 1.0]: {confidence}")
+    until = until.strip()
+    if until:
+        try:
+            until = date.fromisoformat(until).isoformat()
+        except ValueError:
+            raise MemoryError_("bad_until", f"until must be YYYY-MM-DD: {until}") from None
     tz = clock.wiki_timezone(vault)
-    fact = Fact(key, value.strip(), confidence, source.strip(), today(tz))
+    fact = Fact(key, value.strip(), confidence, source.strip(), today(tz), until)
 
     def _write() -> None:
         facts = [f for f in load_profile(vault, scope) if f.key.casefold() != key.casefold()]
@@ -1248,7 +1270,11 @@ def build_recap(
     separate file reads the model has to remember to make.
     """
     vault = _require_vault(vault)
-    facts = [f for f in load_profile(vault, scope) if f.confidence >= min_confidence]
+    on = today(clock.wiki_timezone(vault))
+    facts = [
+        f for f in load_profile(vault, scope)
+        if f.confidence >= min_confidence and not f.is_expired(on)
+    ]
     todos = [t for t in load_todos(vault, scope) if t.status == "open"]
     entries = read_log(vault, limit=5)
 
