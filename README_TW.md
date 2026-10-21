@@ -160,6 +160,13 @@ memory.recap()                       # 在 session 開始時注入
 - **它會把脈絡帶到下一個 session。** 擁有者檔案、未完成的線索，以及一份滾動的快照，會在 session 開始時注入，你不用再把自己重新介紹一遍。
 - **在你原本工作的地方就能用。** 一個 `.skills/` 目錄，symlink 到你使用的每一個 agent。
 
+**它不是什麼**
+
+- **不是逐字稿錄音機。** 除非你或某個 skill 判斷值得保留，否則什麼都不會被存下來。session 結束時的 hook 只會建議做一次 capture。
+- **不是同步服務，也不是備份。** 它就是一個資料夾。放進 git 或你自己的同步工具。
+- **不是神諭。** 頁面的品質取決於來源。推論出來的陳述會被標記，lint 會標出開始偏向臆測的頁面。
+- **不是檔案轉換器。** 你的 agent 會自己讀文字、PDF 和圖片。音訊和影片會被略過，Office 檔案則取決於你的 agent。[每種輸入實際會得到什麼](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md#what-each-input-actually-gets)（英文）
+
 更多細節請見 **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**（英文）
 
 ## 和其他做法比較
