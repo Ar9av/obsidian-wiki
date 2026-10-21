@@ -4,6 +4,16 @@ Everything lives in [`.skills/`](../.skills/). Each skill is a markdown file the
 
 Slash commands (`/skill-name`) work in Claude Code, Cursor, Windsurf, and most CLI agents. Everywhere else, just describe what you want.
 
+## Start with three
+
+You need three skills to get value from the vault. Everything else on this page is there when you need it.
+
+| Skill | When |
+|---|---|
+| `wiki-setup` | Once, to create the vault |
+| `wiki-capture` | When a session produced something worth keeping |
+| `wiki-query` | When you want it back |
+
 ## Setup & vaults
 
 | Skill | What it does | Slash command |

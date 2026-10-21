@@ -69,6 +69,8 @@ Plugin 裡的 skill 會加上命名空間（`/obsidian-wiki:wiki-ingest`），�
 
 ## 你實際會做的事
 
+**先從三個開始。** `/wiki-setup` 執行一次，`/wiki-capture` 把剛想通的事存起來，`/wiki-query` 把它找回來。以下其他功能，需要時再用。
+
 **餵養它。** 任何文字形式的東西：文件、PDF、聊天匯出、會議逐字稿、截圖、網址。
 
 ```text
