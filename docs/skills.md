@@ -43,7 +43,7 @@ You need three skills to get value from the vault. Everything else on this page 
 
 | Skill | What it does | Slash command |
 |---|---|---|
-| `wiki-query` | Answer questions from the vault with citations. Tiered — reads summaries before page bodies | `/wiki-query` |
+| `wiki-query` | Answer questions from the vault with citations. Tiered — reads summaries before page bodies. Say "challenge this" to have it argue against a plan using your own past decisions and failures | `/wiki-query` |
 | `wiki-narrate` | Render a cited briefing, plain-language explanation, or progressive lecture from a topic | `/wiki-narrate <topic>` |
 | `wiki-digest` | Newsletter-style summary of what you learned over a day, week, or month | `/wiki-digest [period]` |
 | `wiki-context-pack` | Produce a token-bounded context slice for a downstream agent or skill | `/wiki-context-pack` |

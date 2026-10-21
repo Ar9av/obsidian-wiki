@@ -1,7 +1,7 @@
 ---
 name: wiki-query
 description: >
-  Search and synthesize answers from the compiled Obsidian wiki, including cited and multi-hop answers. Use for questions about existing wiki knowledge or fast index-only lookups. Supports named-vault routing such as wiki-query @work; not for ingesting new sources.
+  Search and synthesize answers from the compiled Obsidian wiki, including cited and multi-hop answers. Use for questions about existing wiki knowledge or fast index-only lookups, and for challenge requests ("challenge this", "argue against X", "poke holes in my plan") that look for the vault's own evidence against a plan. Supports named-vault routing such as wiki-query @work; not for ingesting new sources.
 ---
 
 # Wiki Query — Knowledge Retrieval
@@ -120,6 +120,7 @@ Classify the query type:
 - **Path / multi-hop query** — "How is X connected to Y?" / "What links X to Y?" / "Trace the chain from X to Z" / "What does X depend on transitively?" → X and Y don't link directly; the connection runs through intermediate pages. Use the multi-hop graph traversal in Step 4b.
 - **Synthesis query** — "What's the current thinking on X?" → Find all pages that touch X, synthesize
 - **Gap query** — "What don't I know about X?" → Find what's missing, check open questions sections
+- **Challenge query** — "challenge this" / "argue against X" / "poke holes in my plan" / "what did I decide about X?" → The user is about to commit to something. Look for the vault's own evidence *against* it. See "Challenge queries" under Step 5.
 
 Also decide the **mode**:
 - **Index-only mode** — triggered by "quick answer", "just scan", "don't read the pages", "fast lookup". Stops at Step 3. Answers from frontmatter + `index.md` only.
@@ -290,6 +291,13 @@ Pages with no lifecycle field (legacy pages predating the schema) are treated th
 2. Resolve a local checkout root by trying these in order and stopping at the first that exists: `.projects.<name>.source_cwd_hint` (a `~`-relative hint), then a legacy `.projects.<name>.source_cwd` (an absolute path, older manifests only), then the page's `source_path` frontmatter. Expand `~` in any candidate and confirm the directory actually exists before using it. A legacy absolute path is used only as a local convenience — never reported as the project's identity.
 
 Report the **`Source code:`** line using `source_repo`. When a local checkout resolved in step 2, append the concrete path so the reader can act on it (e.g. `<repo> — local checkout at ~/code/name/public/lib/anticheat.js`). When the query implies a code fix is wanted and a local checkout exists, name the specific files to edit and **offer to implement it as an explicit, separate next step** — but never edit during the query itself (see the READ-ONLY guard above). If no local checkout resolves, report the repo and say the code is not checked out on this machine.
+
+**Challenge queries.** The job is to argue with the user using their own notes, not to be agreeable. Run the normal retrieval on the idea's topic, then search further for:
+- earlier decisions on the same question, especially ones that went the other way (`synthesis/`, `projects/`, pages with "decision", "decided", "chose", "rejected", "won't do");
+- things that failed or were rolled back: post-mortems, "gotcha", "broke", "reverted", `lifecycle: disputed` or `archived` pages, `contradicts` relationships;
+- open questions and constraints the idea would run into.
+
+Lead the answer with the strongest counter-evidence, each point quoted or closely paraphrased with its `[[page]]` and date, e.g. *"[[synthesis/rust-rewrite]] (2025-11-02) says the rewrite was abandoned over build times. What is different now?"* Then list what the vault says in favour, if anything. End with one or two questions the user should answer before going ahead. If the vault holds nothing against the idea, say so plainly. Never invent an objection the notes don't support: an empty challenge is a useful answer.
 
 ### Step 6: Log the Query
 
