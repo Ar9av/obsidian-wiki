@@ -74,7 +74,7 @@ Two keys sit in the frontmatter of the root `index.md` rather than in a config f
 
 ![Session lifecycle](images/memory-session-lifecycle.png)
 
-Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks install`; check them with `hooks status` or `doctor`. `wiki-session-recap.sh` runs at SessionStart and injects the owner profile, open threads, and recent vault activity. `wiki-stop-capture.sh` runs at Stop and nudges a quick capture when the session changed anything.
+Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks install`; check them with `hooks status` or `doctor`. `wiki-session-recap.sh` runs at SessionStart and injects the owner profile, open threads, and recent vault activity. `wiki-stop-capture.sh` runs at Stop and nudges a quick capture when the session changed anything. `wiki-prompt-recall.sh` is opt-in (`hooks install --only UserPromptSubmit`): it adds the few notes relevant to each prompt, or nothing.
 
 | Variable | What it does | Default |
 |---|---|---|
@@ -85,6 +85,8 @@ Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks
 | `WIKI_RECAP_PROJECT` | Override the project the recap is scoped to (default: git repo name) | *(auto)* |
 | `WIKI_RECAP_DEBUG` | `1` makes the recap hook explain each silent exit on stderr | *(off)* |
 | `WIKI_STOP_CAPTURE` | `false` skips the end-of-session capture nudge | *(on)* |
+| `WIKI_PROMPT_RECALL` | `false` silences the opt-in per-prompt recall hook | *(on once registered)* |
+| `WIKI_RECALL_TIMEOUT` | Seconds before a per-prompt recall is abandoned | `5` |
 | `WIKI_STOP_REARM_SECONDS` | Elapsed time before the capture nudge can fire again | `21600` |
 | `WIKI_STOP_REARM_EDITS` | New edits required before the nudge can fire again | `10` |
 

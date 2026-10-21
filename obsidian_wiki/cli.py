@@ -914,7 +914,9 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
 
                 entries = _hk.status()
                 reach = _hk.reachability()
-                unregistered = [e.script for e in entries if not e.registered]
+                unregistered = [
+                    e.script for e in entries if not e.registered and e.event not in _hk.OPT_IN
+                ]
                 if unregistered:
                     # The hooks are optional, so an install that never asked
                     # for them is not misconfigured — but it also has no
@@ -2789,17 +2791,21 @@ def cmd_hooks(args: argparse.Namespace) -> int:
             for entry in entries:
                 healthy = entry.registered and entry.bundled and entry.executable
                 detail = ("registered" if entry.registered else "NOT registered")
+                if not entry.registered and entry.event in hk.OPT_IN:
+                    healthy = bool(entry.bundled and entry.executable)
+                    detail += " (opt-in)"
                 if not entry.bundled:
                     detail += ", script not bundled"
                 elif not entry.executable:
                     detail += ", not executable"
-                lines.append(f"{'ok ' if healthy else '-- '}{entry.event:13} {entry.script:24} {detail}")
+                lines.append(f"{'ok ' if healthy else '-- '}{entry.event:16} {entry.script:24} {detail}")
             if reach["reachable"]:
                 lines.append("ok  reachable      " + (reach["console_script"] or "python3 -m obsidian_wiki.cli"))
             else:
                 lines.append(f"--  NOT reachable  {reach['hint']}")
             payload = {"hooks": [e.__dict__ for e in entries], "reachability": reach}
-            rc = 0 if all(e.registered for e in entries) and reach["reachable"] else 1
+            required = [e for e in entries if e.event not in hk.OPT_IN]
+            rc = 0 if all(e.registered for e in required) and reach["reachable"] else 1
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -2834,6 +2840,31 @@ def cmd_context_pack(args: argparse.Namespace) -> int:
         print(json.dumps(pack, indent=2 if args.pretty else None))
     else:
         print(render_markdown(pack), end="")
+    return 0
+
+
+def cmd_recall(args: argparse.Namespace) -> int:
+    """Print a few notes relevant to a prompt, or nothing; the per-prompt hook's backend."""
+    from obsidian_wiki.context_pack import ContextError, recall_brief
+
+    prompt = args.prompt or ""
+    if args.hook:
+        # Claude Code's UserPromptSubmit payload: {"prompt": "...", ...} on stdin.
+        try:
+            payload = json.loads(sys.stdin.read() or "{}")
+        except json.JSONDecodeError:
+            return 0
+        prompt = str(payload.get("prompt", "")) if isinstance(payload, dict) else ""
+    vault = _resolve_context_pack_vault(args.vault)
+    if vault is None:
+        return 1
+    try:
+        brief = recall_brief(vault, prompt, max_notes=args.max_notes, max_chars=args.max_chars)
+    except ContextError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if brief:
+        print(brief)
     return 0
 
 
@@ -3317,7 +3348,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="register the SessionStart (memory recap) and Stop (capture) hooks for Claude Code",
     )
     hk.add_argument("hooks_action", choices=["install", "uninstall", "status"], help="what to do")
-    hk.add_argument("--only", choices=["SessionStart", "Stop"], help="act on one hook only")
+    hk.add_argument(
+        "--only",
+        choices=["SessionStart", "Stop", "UserPromptSubmit"],
+        help="act on one hook only; UserPromptSubmit (per-prompt recall) is opt-in and installs only this way",
+    )
     hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     hk.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     hk.set_defaults(func=cmd_hooks)
@@ -3425,6 +3460,17 @@ need quoting: query="how do transformers work".""",
     cp.add_argument("--json", action="store_true", help="emit structured JSON")
     cp.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     cp.set_defaults(func=cmd_context_pack)
+
+    rc = sub.add_parser(
+        "recall",
+        help="print up to a few vault notes relevant to a prompt, or nothing when none clearly are",
+    )
+    rc.add_argument("prompt", nargs="?", help="the prompt to match; omit with --hook")
+    rc.add_argument("--vault", help="override OBSIDIAN_VAULT_PATH")
+    rc.add_argument("--hook", action="store_true", help="read a Claude Code UserPromptSubmit payload from stdin")
+    rc.add_argument("--max-notes", type=int, default=4, help="most notes to list (default: 4)")
+    rc.add_argument("--max-chars", type=int, default=900, help="character budget for the brief (default: 900)")
+    rc.set_defaults(func=cmd_recall)
 
     return p
 

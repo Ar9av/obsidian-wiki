@@ -430,3 +430,65 @@ def build_context_pack(
     _set_counters(pack)
     pack["estimated_tokens"] = estimate_tokens(render_markdown(pack))
     return pack
+
+
+# Words too common in a typed prompt to say anything about which page it means.
+_RECALL_STOP_WORDS = _STOP_WORDS | frozenset({
+    "about", "add", "all", "any", "can", "could", "does", "fix", "from", "get", "have",
+    "help", "into", "just", "let", "like", "make", "need", "not", "now", "please", "run",
+    "should", "some", "that", "the", "then", "there", "this", "use", "want", "was", "were",
+    "what", "when", "where", "which", "who", "why", "will", "with", "would", "you", "your",
+})
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _words(text: str) -> set[str]:
+    return {word.casefold() for word in _WORD_RE.findall(text)}
+
+
+def recall_brief(
+    vault: Path,
+    prompt: str,
+    *,
+    max_notes: int = 4,
+    max_chars: int = 900,
+    min_score: float = 7.0,
+) -> str:
+    """A few vault notes relevant to *prompt*, or "" when nothing clearly is.
+
+    Built for a per-prompt hook, so abstaining is the default: a page counts
+    only on whole-word hits in its title, aliases, tags, or summary (never the
+    body, where common words match everything), from at least two distinct
+    prompt words, and it must clear *min_score* on those alone. Injecting nothing beats injecting noise on every turn.
+    """
+    # ponytail: scans every page per prompt; fine to a few thousand pages, index it past that.
+    terms = {term for term in _words(prompt) if len(term) >= 3 and term not in _RECALL_STOP_WORDS}
+    if not terms:
+        return ""
+    scored = []
+    for page in load_pages(vault):
+        title = _words(page.title) | _words(" ".join(page.aliases))
+        tags, summary = _words(" ".join(page.tags)), _words(page.summary)
+        hits = [
+            (5.0 if term in title else 0.0) + (3.0 if term in tags else 0.0) + (2.0 if term in summary else 0.0)
+            for term in terms
+        ]
+        score = sum(hits)
+        # Two distinct prompt words must agree: one shared word is a coincidence.
+        if score >= min_score and sum(1 for hit in hits if hit) >= 2:
+            scored.append((score, page))
+    scored.sort(key=lambda item: (-item[0], TIER_ORDER.get(item[1].tier, 1), item[1].path))
+
+    lines: list[str] = []
+    used = 0
+    for _, page in scored[:max_notes]:
+        line = f"- [[{page.path.removesuffix('.md')}]] — {page.summary or page.title}"
+        if used + len(line) > max_chars:
+            line = line[: max(max_chars - used - 1, 0)].rstrip() + "…"
+            if len(line) < 20:
+                break
+        lines.append(line)
+        used += len(line) + 1
+        if used >= max_chars:
+            break
+    return "\n".join(lines)
