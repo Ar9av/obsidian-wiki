@@ -1199,3 +1199,48 @@ def test_lint_missing_archive_wikilink_is_broken_path(tmp_path: Path) -> None:
         "target": "_raw/_archived/ghost.md",
     } in report["findings"]["broken_links"]
 
+
+
+def test_lint_vault_warns_on_undated_counts_and_skips_dated_ones(tmp_path: Path) -> None:
+    page = _page(tmp_path, "projects/alpha.md", links=["journal/today"])
+    page.write_text(
+        page.read_text(encoding="utf-8")
+        + "\n".join(
+            [
+                "The repo has 23 stars, Apache-2.0.",
+                "Chrome Web Store: 69 users.",
+                "Traction: 291★ and 55+ customers.",
+                "MRR is $4,000.",
+                "GitHub: 1,754 stars (as of 2026-07-13).",
+                "3. Installs global skills.",
+                "> Quoted: 10 users.",
+                "Run `seed --users 5 users` once.",
+                "```",
+                "40 stars",
+                "```",
+                "## 2026-07-01 snapshot",
+                "12 open deals.",
+                "## Later",
+                "8 subscribers.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    journal = _page(tmp_path, "journal/today.md", links=["projects/alpha"])
+    journal.write_text(journal.read_text(encoding="utf-8") + "500 downloads.\n", encoding="utf-8")
+
+    report = lint_vault(tmp_path, require_trust_ledger=False)
+    claims = report["findings"]["undated_claims"]
+
+    assert [claim["text"] for claim in claims] == [
+        "The repo has 23 stars, Apache-2.0.",
+        "Chrome Web Store: 69 users.",
+        "Traction: 291★ and 55+ customers.",
+        "MRR is $4,000.",
+        "8 subscribers.",
+    ]
+    assert all(claim["page"] == "projects/alpha.md" for claim in claims)
+    lines = page.read_text(encoding="utf-8").splitlines()
+    assert all(lines[claim["line"] - 1].strip() == claim["text"] for claim in claims)
+    assert report["status"] == "warn"

@@ -341,6 +341,8 @@ provenance:
 
 These are best-effort numbers written by the ingest skill at create/update time. `wiki-lint` recomputes them and flags drift. The block is optional — pages without it are treated as fully extracted by convention.
 
+**Date anything that changes.** Counts and amounts go stale: stars, users, customers, downloads, deals, MRR. Write them with a stamp, `291★ (as of 2026-06-30)`, or under a dated heading, or link to where the live number lives instead of copying it. A bare "23 stars" reads as true forever. `obsidian-wiki lint` reports undated ones as `undated_claims`.
+
 ## Typed Relationships
 
 Plain `[[wikilinks]]` in page bodies carry no semantic weight — they indicate "related to" but not *how*. The optional `relationships:` frontmatter block adds typed, directional edges to the knowledge graph.
