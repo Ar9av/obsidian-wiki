@@ -68,6 +68,10 @@ Other paths — `git clone`, Claude Code plugin, Skills CLI, multiple vaults →
 
 ## What you actually do
 
+<p align="center">
+  <img width="760" alt="The loop: feed it, it compiles into linked pages, ask it, keep it honest; every session starts from what the last one left behind" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/main/assets/loop.svg" />
+</p>
+
 **Start with three.** `/wiki-setup` once, `/wiki-capture` to save what you just worked out, `/wiki-query` to get it back. Everything below is there when you need it.
 
 **Feed it.** Anything text-shaped: docs, PDFs, chat exports, meeting transcripts, screenshots, URLs.
