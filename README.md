@@ -68,6 +68,8 @@ Other paths — `git clone`, Claude Code plugin, Skills CLI, multiple vaults →
 
 ## What you actually do
 
+**Start with three.** `/wiki-setup` once, `/wiki-capture` to save what you just worked out, `/wiki-query` to get it back. Everything below is there when you need it.
+
 **Feed it.** Anything text-shaped: docs, PDFs, chat exports, meeting transcripts, screenshots, URLs.
 
 ```text
