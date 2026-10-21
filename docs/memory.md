@@ -137,6 +137,12 @@ obsidian-wiki hooks install
 
 `wiki-stop-capture.sh` runs at Stop and nudges a `/wiki-capture --quick` when the session changed anything.
 
+`wiki-prompt-recall.sh` is an opt-in third hook, at UserPromptSubmit. On each prompt it adds up to 4 note links with their summaries, or nothing when no note clearly matches, which is most of the time. A note counts only when at least two words of the prompt match its title, aliases, tags, or summary. It is not installed by default because it touches every turn:
+
+```bash
+obsidian-wiki hooks install --only UserPromptSubmit
+```
+
 **Neither hook can fail a session.** Every error path — no vault configured, package not importable, vault directory missing, slow filesystem — exits 0 with no output. A hook that breaks session startup is worse than a hook that contributes nothing.
 
 The cost of that silence is that a missing registration or an unreachable package is invisible from inside a session. `obsidian-wiki hooks status` and `doctor` both check for it, and `WIKI_RECAP_DEBUG=1` makes the recap hook say why it exited.
@@ -151,6 +157,8 @@ Tune or disable per session:
 | `WIKI_RECAP_TIMEOUT` | `10` | Seconds before the recap is abandoned |
 | `WIKI_RECAP_PROJECT` | *(auto)* | Override the scoped project (default: git repo name) |
 | `WIKI_STOP_CAPTURE` | *(on)* | `false` skips the end-of-session capture nudge |
+| `WIKI_PROMPT_RECALL` | *(on once registered)* | `false` silences the opt-in per-prompt recall hook |
+| `WIKI_RECALL_TIMEOUT` | `5` | Seconds before a per-prompt recall is abandoned |
 
 `HIVEMIND_CAPTURE=false` is the older spelling of `WIKI_STOP_CAPTURE=false` and is still honoured.
 

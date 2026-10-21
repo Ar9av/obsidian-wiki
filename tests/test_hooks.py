@@ -30,6 +30,10 @@ def _commands(home: Path, event: str) -> list:
     return hk._registered_commands(_settings(home), event)
 
 
+#: What a plain `hooks install` registers: everything but the opt-in hooks.
+DEFAULT_HOOKS = [(event, name) for event, name in hk.HOOKS if event not in hk.OPT_IN]
+
+
 def test_both_hooks_are_bundled_and_executable() -> None:
     for _event, name in hk.HOOKS:
         script = hk.hook_script(name)
@@ -39,10 +43,20 @@ def test_both_hooks_are_bundled_and_executable() -> None:
 
 def test_install_registers_both_hooks_on_a_fresh_home(home: Path) -> None:
     result = hk.install(home)
-    assert sorted(result["added"]) == sorted(name for _, name in hk.HOOKS)
+    assert sorted(result["added"]) == sorted(name for _, name in DEFAULT_HOOKS)
     assert result["missing"] == []
-    for event, name in hk.HOOKS:
+    for event, name in DEFAULT_HOOKS:
         assert any(name in command for command in _commands(home, event))
+    assert "UserPromptSubmit" not in _settings(home)["hooks"], "per-prompt recall is opt-in"
+
+
+def test_the_opt_in_recall_hook_installs_only_when_named(home: Path) -> None:
+    result = hk.install(home, only="UserPromptSubmit")
+    assert result["added"] == ["wiki-prompt-recall.sh"]
+    assert set(_settings(home)["hooks"]) == {"UserPromptSubmit"}
+    hk.install(home)
+    assert set(_settings(home)["hooks"]) == {"SessionStart", "UserPromptSubmit", "Stop"}
+    assert sorted(hk.uninstall(home)["removed"]) == sorted(name for _, name in hk.HOOKS)
 
 
 def test_install_is_idempotent(home: Path) -> None:
@@ -50,7 +64,7 @@ def test_install_is_idempotent(home: Path) -> None:
     before = _settings(home)
     result = hk.install(home)
     assert result["added"] == []
-    assert sorted(result["already"]) == sorted(name for _, name in hk.HOOKS)
+    assert sorted(result["already"]) == sorted(name for _, name in DEFAULT_HOOKS)
     assert _settings(home) == before
 
 
@@ -90,7 +104,7 @@ def test_uninstall_removes_only_ours(home: Path) -> None:
     path.write_text(json.dumps(data), encoding="utf-8")
 
     result = hk.uninstall(home)
-    assert sorted(result["removed"]) == sorted(name for _, name in hk.HOOKS)
+    assert sorted(result["removed"]) == sorted(name for _, name in DEFAULT_HOOKS)
     data = _settings(home)
     assert "SessionStart" not in data["hooks"]
     assert _commands(home, "Stop") == ["echo mine"]
@@ -117,11 +131,12 @@ def test_malformed_settings_are_refused_not_overwritten(home: Path) -> None:
 
 
 def test_status_reports_each_hook(home: Path) -> None:
-    assert [e.registered for e in hk.status(home)] == [False, False]
+    assert [e.registered for e in hk.status(home)] == [False, False, False]
     hk.install(home)
     entries = hk.status(home)
-    assert all(e.registered and e.bundled and e.executable for e in entries)
-    assert [e.event for e in entries] == ["SessionStart", "Stop"]
+    assert [e.event for e in entries] == ["SessionStart", "UserPromptSubmit", "Stop"]
+    assert all(e.bundled and e.executable for e in entries)
+    assert [e.registered for e in entries] == [True, False, True]
 
 
 def test_reachability_reports_a_path_the_hook_can_use() -> None:
@@ -147,8 +162,9 @@ def test_cli_status_exits_nonzero_until_installed(home: Path) -> None:
 
     after = subprocess.run([sys.executable, "-m", "obsidian_wiki.cli", "hooks", "status", "--json"],
                            capture_output=True, text=True, env=env)
+    assert after.returncode == 0, "an unregistered opt-in hook must not fail status"
     data = json.loads(after.stdout)
-    assert all(entry["registered"] for entry in data["hooks"])
+    assert all(entry["registered"] for entry in data["hooks"] if entry["event"] not in hk.OPT_IN)
 
 
 def test_memory_and_hooks_commands_do_not_print_the_stale_install_nag(home: Path, tmp_path: Path) -> None:
@@ -176,7 +192,7 @@ def test_setup_registers_the_hooks_by_default(tmp_path: Path) -> None:
     )
     assert proc.returncode == 0, proc.stderr
     assert "Session hooks:" in proc.stdout
-    assert all(entry.registered for entry in hk.status(home))
+    assert all(entry.registered for entry in hk.status(home) if entry.event not in hk.OPT_IN)
 
 
 def test_setup_honours_no_hooks(tmp_path: Path) -> None:
@@ -248,7 +264,7 @@ def test_windows_paths_are_written_in_git_bash_form(monkeypatch: pytest.MonkeyPa
 def test_the_script_path_is_quoted(home: Path) -> None:
     """Home directories have spaces in them."""
     hk.install(home)
-    for event, name in hk.HOOKS:
+    for event, name in DEFAULT_HOOKS:
         command = next(c for c in _commands(home, event) if name in c)
         assert f'"{hk._git_bash_path(hk.hook_script(name))}"' in command
 

@@ -1,8 +1,10 @@
 """Install, remove, and inspect the Claude Code session hooks.
 
 Two hooks bracket a session: ``wiki-session-recap.sh`` at SessionStart injects
-the vault's memory, ``wiki-stop-capture.sh`` at Stop nudges a capture. They
-only take effect once registered in ``~/.claude/settings.json``.
+the vault's memory, ``wiki-stop-capture.sh`` at Stop nudges a capture. An
+opt-in third, ``wiki-prompt-recall.sh`` at UserPromptSubmit, adds the few notes
+relevant to each prompt. They only take effect once registered in
+``~/.claude/settings.json``.
 
 Until now that registration was a prose procedure in ``wiki-setup`` — locate
 the script, hand-merge JSON, don't clobber other hooks — and only the Stop hook
@@ -25,8 +27,12 @@ from typing import Optional
 #: (event, script name) — the order they run in a session.
 HOOKS = (
     ("SessionStart", "wiki-session-recap.sh"),
+    ("UserPromptSubmit", "wiki-prompt-recall.sh"),
     ("Stop", "wiki-stop-capture.sh"),
 )
+#: Installed only when asked for by name (``--only``). Per-prompt recall adds
+#: context to every turn, so it is the user's call, not a default.
+OPT_IN = frozenset({"UserPromptSubmit"})
 
 
 def _pkg_dir() -> Path:
@@ -203,7 +209,7 @@ def install(home: Optional[Path] = None, *, only: Optional[str] = None) -> dict:
     added, skipped, missing = [], [], []
 
     for event, name in HOOKS:
-        if only and event != only:
+        if (only and event != only) or (not only and event in OPT_IN):
             continue
         script = hook_script(name)
         if script is None:

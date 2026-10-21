@@ -38,11 +38,14 @@ Commands other than `setup`, `info`, and `doctor` warn you when the install has 
 
 Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture.
 
+A third, `wiki-prompt-recall.sh` at UserPromptSubmit, is opt-in: it adds up to 4 relevant note links with their summaries (about 900 characters) to a prompt, and nothing when no note clearly matches. It runs `obsidian-wiki recall --hook`. `hooks install` never adds it; register it by name.
+
 **`setup` registers both for you.** Pass `--no-hooks` to skip. The commands below are for changing your mind later, or for checking what is wired up.
 
 | Command | What it does |
 |---|---|
 | `hooks install` | Register both hooks; idempotent, appends without touching your other hooks |
+| `hooks install --only UserPromptSubmit` | Register the opt-in per-prompt recall hook |
 | `hooks uninstall` | Remove our entries and nothing else |
 | `hooks status` | Registered? Bundled? Executable? Can the hook reach the package? Exit 1 if not |
 
@@ -68,6 +71,7 @@ then re-run `obsidian-wiki setup`.
 | `query <question>` | Answer a question from the configured vault's index |
 | `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, `snapshot_mismatch` (a warning when optional `snapshots:` does not match the ledger invert — the page is reported, never rewritten, and `--strict` does not promote it), and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten), and counts or amounts with no date on the line, such as `23 stars` or `55 customers` (`undated_claims`, a warning with page and line; dated headings, `journal/`, code, and quotes are exempt). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
 | `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
+| `recall [prompt]` | Print up to 4 notes relevant to a prompt as `[[link]] — summary` lines, or nothing. A note counts only when at least two prompt words match its title, aliases, tags, or summary as whole words. `--hook` reads a Claude Code UserPromptSubmit payload from stdin; `--max-notes`, `--max-chars` |
 
 ```bash
 obsidian-wiki query "what do I know about MCP security?"
@@ -466,6 +470,8 @@ The hook never breaks session startup: a missing vault, a missing install, an em
 | `WIKI_RECAP_MAX_WORDS` | `350` | Word budget for the injected block |
 | `WIKI_RECAP_MIN_CONFIDENCE` | `0.0` | Drop profile facts below this confidence |
 | `WIKI_RECAP_TIMEOUT` | `10` | Seconds before the recap is abandoned |
+| `WIKI_PROMPT_RECALL` | *(on once registered)* | `false` silences the opt-in per-prompt recall hook |
+| `WIKI_RECALL_TIMEOUT` | `5` | Seconds before a per-prompt recall is abandoned |
 
 ## Staged writes
 
