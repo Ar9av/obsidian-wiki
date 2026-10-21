@@ -69,6 +69,10 @@ Plugin 裡的 skill 會加上命名空間（`/obsidian-wiki:wiki-ingest`），�
 
 ## 你實際會做的事
 
+<p align="center">
+  <img width="760" alt="循環：餵養它、編譯成互相連結的頁面、向它提問、保持正確；每個 session 都從上一次留下的地方開始" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/main/assets/loop.svg" />
+</p>
+
 **先從三個開始。** `/wiki-setup` 執行一次，`/wiki-capture` 把剛想通的事存起來，`/wiki-query` 把它找回來。以下其他功能，需要時再用。
 
 **餵養它。** 任何文字形式的東西：文件、PDF、聊天匯出、會議逐字稿、截圖、網址。

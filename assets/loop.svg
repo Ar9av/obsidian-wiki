@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 250" width="800" height="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>The obsidian-wiki loop: feed, compile, ask, keep honest</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8b93a1"/>
+    </marker>
+  </defs>
+  <rect x="0" y="0" width="800" height="250" rx="14" fill="#ffffff"/>
+
+  <g>
+    <rect x="21" y="30" width="170" height="120" rx="10" fill="#eef4fe" stroke="#4f8ef7" stroke-width="2"/>
+    <text x="106" y="62" text-anchor="middle" font-size="18" font-weight="700" fill="#1f2937">1 · Feed</text>
+    <text x="106" y="90" text-anchor="middle" font-size="13" fill="#374151">/wiki-capture</text>
+    <text x="106" y="110" text-anchor="middle" font-size="13" fill="#374151">/wiki-ingest</text>
+    <text x="106" y="130" text-anchor="middle" font-size="13" fill="#374151">/wiki-update</text>
+  </g>
+  <g>
+    <rect x="213" y="30" width="170" height="120" rx="10" fill="#ebf8f1" stroke="#3cc48a" stroke-width="2"/>
+    <text x="298" y="62" text-anchor="middle" font-size="18" font-weight="700" fill="#1f2937">2 · Compile</text>
+    <text x="298" y="90" text-anchor="middle" font-size="13" fill="#374151">merged into pages,</text>
+    <text x="298" y="110" text-anchor="middle" font-size="13" fill="#374151">not appended</text>
+    <text x="298" y="130" text-anchor="middle" font-size="13" fill="#374151">linked with [[wikilinks]]</text>
+  </g>
+  <g>
+    <rect x="405" y="30" width="170" height="120" rx="10" fill="#fef5e9" stroke="#f2a541" stroke-width="2"/>
+    <text x="490" y="62" text-anchor="middle" font-size="18" font-weight="700" fill="#1f2937">3 · Ask</text>
+    <text x="490" y="90" text-anchor="middle" font-size="13" fill="#374151">/wiki-query</text>
+    <text x="490" y="110" text-anchor="middle" font-size="13" fill="#374151">cited answers</text>
+    <text x="490" y="130" text-anchor="middle" font-size="13" fill="#374151">recap at session start</text>
+  </g>
+  <g>
+    <rect x="597" y="30" width="170" height="120" rx="10" fill="#fdeef1" stroke="#ef5d7a" stroke-width="2"/>
+    <text x="682" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#1f2937">4 · Keep honest</text>
+    <text x="682" y="90" text-anchor="middle" font-size="13" fill="#374151">/wiki-lint</text>
+    <text x="682" y="110" text-anchor="middle" font-size="13" fill="#374151">/wiki-dedup</text>
+    <text x="682" y="130" text-anchor="middle" font-size="13" fill="#374151">/cross-linker</text>
+  </g>
+
+  <g stroke="#8b93a1" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <line x1="193" y1="90" x2="210" y2="90"/>
+    <line x1="385" y1="90" x2="402" y2="90"/>
+    <line x1="577" y1="90" x2="594" y2="90"/>
+    <path d="M682 152 V200 H106 V156"/>
+  </g>
+  <text x="402" y="226" text-anchor="middle" font-size="14" fill="#4b5563">Every session starts from what the last one left behind</text>
+</svg>
