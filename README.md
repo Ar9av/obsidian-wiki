@@ -159,6 +159,13 @@ More → **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/doc
 - **It carries context across sessions.** An owner profile, open threads, and a running snapshot get injected at session start, so you don't re-explain yourself.
 - **Works where you already work.** One `.skills/` directory, symlinked into every agent you use.
 
+**What it isn't**
+
+- **Not a transcript recorder.** Nothing is saved unless you or a skill decides it's worth keeping. The end-of-session hook only suggests a capture.
+- **Not a sync service or a backup.** It's a folder. Put it in git or your own sync.
+- **Not an oracle.** Pages are as good as their sources. Inferred claims are marked, and lint flags pages drifting into guesswork.
+- **Not a file converter.** Your agent reads text, PDFs, and images itself. Audio and video are skipped, and Office files depend on your agent. [What each input actually gets](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md#what-each-input-actually-gets)
+
 More → **[Architecture](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/architecture.md)**
 
 ## How it compares
