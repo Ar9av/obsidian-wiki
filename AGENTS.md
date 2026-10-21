@@ -77,6 +77,7 @@ Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right s
 | "wiki insights" / "hubs" / "wiki structure" | `wiki-status` (insights mode) |
 | "is my vault at equilibrium" / "wiki equilibrium" / "is maintenance done" / "are my skills fighting" | `wiki-status` (equilibrium mode) |
 | "what do I know about X" / "find info on Y" / any question | `wiki-query` |
+| "challenge this" / "argue against X" / "what did I decide about X?" | `wiki-query` (challenge query) |
 | "use my vault as context" / "context pack for X" / "bounded context" | `wiki-context-pack` |
 | "narrate" / "briefing" / "explain this topic" / "/wiki-narrate" | `wiki-narrate` |
 | "audit" / "lint" / "find broken links" / "wiki health" | `wiki-lint` |
