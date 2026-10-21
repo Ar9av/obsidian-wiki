@@ -185,3 +185,17 @@ def test_stop_hook_kill_switch_is_no_longer_a_no_op() -> None:
             env={**os.environ, variable: "false"}, timeout=60,
         )
         assert result.returncode == 0, variable
+
+
+def test_hook_tells_a_freshly_set_up_vault_what_to_do_first(home: Path, tmp_path: Path) -> None:
+    from obsidian_wiki.cli import scaffold_vault
+
+    fresh = tmp_path / "fresh"
+    scaffold_vault(fresh)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".env").write_text(f"OBSIDIAN_VAULT_PATH={fresh}\n", encoding="utf-8")
+    result = _run(project, home=home)
+    assert result.returncode == 0
+    assert "## Getting started" in result.stdout
+    assert "/wiki-ingest" in result.stdout

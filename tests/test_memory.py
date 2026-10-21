@@ -526,6 +526,15 @@ def test_recap_is_honest_about_an_empty_vault(vault: Path) -> None:
     assert "No vault memory recorded yet" in mem.build_recap(vault)
 
 
+def test_recap_suggests_a_first_step_until_the_vault_is_used(vault: Path) -> None:
+    mem.append_log(vault, "INIT", {"vault_path": str(vault)})
+    recap = mem.build_recap(vault)
+    assert "## Getting started" in recap and "/wiki-capture" in recap
+    mem.append_log(vault, "INGEST", {"source": "notes.md"})
+    assert "Getting started" not in mem.build_recap(vault)
+    assert "Getting started" not in mem.build_recap(vault, project="nomatch")
+
+
 def test_recap_filters_low_confidence_facts(vault: Path) -> None:
     mem.set_fact(vault, "guess", "maybe Postgres", confidence=0.2)
     mem.set_fact(vault, "certain", "Python", confidence=0.95)

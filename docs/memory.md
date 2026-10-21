@@ -133,7 +133,7 @@ obsidian-wiki hooks install
 
 ![Session lifecycle](images/memory-session-lifecycle.png)
 
-`wiki-session-recap.sh` runs at SessionStart and prints the profile, open threads, and recent activity, which Claude Code adds to the session's context. Before it existed, every session started blind and the model had to remember to go read `hot.md`, which it mostly did not.
+`wiki-session-recap.sh` runs at SessionStart and prints the profile, open threads, and recent activity, which Claude Code adds to the session's context. Before it existed, every session started blind and the model had to remember to go read `hot.md`, which it mostly did not. On a vault that has been set up but not used yet, it prints a one-line "Getting started" hint (capture, ingest, query) instead, until the first real write.
 
 `wiki-stop-capture.sh` runs at Stop and nudges a `/wiki-capture --quick` when the session changed anything.
 

@@ -1313,6 +1313,17 @@ def build_recap(
     if not facts and not todos and not entries:
         lines.append("*No vault memory recorded yet.*")
         lines.append("")
+    elif not facts and not todos and all(e.verb == "INIT" for e in read_log(vault)):
+        # A vault that was set up and never used: say what to do first rather
+        # than replaying its creation line every session.
+        lines.append("## Getting started")
+        lines.append("")
+        lines.append(
+            "- The vault is empty. Save something worth keeping with `/wiki-capture`, "
+            "add documents with `/wiki-ingest <path>` (or drop drafts in `_raw/`), "
+            "and ask with `/wiki-query`."
+        )
+        lines.append("")
 
     text = "\n".join(lines).rstrip() + "\n"
     if word_count(text) > max_words:
