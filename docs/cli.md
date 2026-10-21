@@ -66,7 +66,7 @@ then re-run `obsidian-wiki setup`.
 | Command | What it does |
 |---|---|
 | `query <question>` | Answer a question from the configured vault's index |
-| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, `snapshot_mismatch` (a warning when optional `snapshots:` does not match the ledger invert — the page is reported, never rewritten, and `--strict` does not promote it), and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
+| `lint [vault]` | Find missing frontmatter, broken links, duplicates, orphans, `snapshot_mismatch` (a warning when optional `snapshots:` does not match the ledger invert — the page is reported, never rewritten, and `--strict` does not promote it), and `sources:` entries holding a machine absolute path (`machine_path_sources`, a warning — the page is reported, never rewritten), and counts or amounts with no date on the line, such as `23 stars` or `55 customers` (`undated_claims`, a warning with page and line; dated headings, `journal/`, code, and quotes are exempt). Paths listed in the vault-root `.okignore` (gitignore-style: `_inbox/`, `/notes/old`, `*.draft.md`; no `!` negation) are skipped, as they are by `graph-analyse` |
 | `eval` | Score the query index against a gold set — recall@k, MRR, intent accuracy |
 
 ```bash

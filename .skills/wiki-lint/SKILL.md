@@ -95,6 +95,8 @@ Pages whose `updated` timestamp is old relative to their sources.
 - Compare page `updated` timestamps to source file modification times
 - Flag pages where sources have been modified after the page was last updated
 
+**Undated claims (line-level).** `obsidian-wiki lint` reports `undated_claims`: lines stating a count or amount that goes stale (stars, users, customers, downloads, deals, MRR/ARR) with no date on the line. Lines under a dated heading, pages in `journal/` or named `YYYY-MM-…`, code, and blockquotes are exempt. A warning, never a failure. For each one, either re-check the number and stamp it `(as of YYYY-MM-DD)`, replace it with a link to where the live number lives, or move it under a dated heading as history.
+
 ### 5. Contradictions
 
 Claims that conflict across pages.
@@ -425,6 +427,7 @@ Report findings as a structured list:
 
 ### Stale Content (N found)
 - `references/paper-x.md` — source modified 2024-03-10, page last updated 2024-01-05
+- `projects/foo.md:28` — undated claim: "GitHub: 6★" (stamp it, link it, or date the heading)
 
 ### Contradictions (N found)
 - `concepts/scaling.md` claims "X" but `synthesis/efficiency.md` claims "not X"

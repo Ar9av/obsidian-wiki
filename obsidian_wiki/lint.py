@@ -70,6 +70,26 @@ _RELATIONSHIP_LIST_FIELD_RE = re.compile(
 _RELATIONSHIP_ITEM_START_RE = re.compile(r"^\s*-\s*(?:#.*)?$")
 _RELATIONSHIP_FIELD_RE = re.compile(r"^\s+(type|target):\s*(.*?)\s*$")
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+# Freshness: a count or amount with no date beside it reads as true forever
+# and silently rots ("23 stars", "the pipeline has 13 deals"). Every such fact
+# should be stamped `(as of YYYY-MM-DD)`, live in a dated note or under a
+# dated heading, or point at where the truth lives.
+# ponytail: fixed noun list tuned for precision; widen it if real vaults miss claims.
+_UNDATED_CLAIM_RE = re.compile(
+    r"\b\d+(?:[.,]\d+)*\s*[km]?\+?\s*(?:★|\s(?:open\s+|active\s+|paying\s+)?"
+    r"(?:users|customers|clients|deals|stars|subscribers|downloads|members|employees|"
+    r"tickets|PRs|pull requests|followers|signups|installs)\b)",
+    re.IGNORECASE,
+)
+_UNDATED_MONEY_RE = re.compile(
+    r"\b(?:MRR|ARR|revenue|balance|runway)\b[^.\n]{0,20}?\b(?:is|of|at)\s+[$€£]?\s?\d",
+    re.IGNORECASE,
+)
+_DATE_HINT_RE = re.compile(r"\b(?:19|20)\d{2}\b|\bas of\b", re.IGNORECASE)
+_HEADING_RE = re.compile(r"^(#{1,6})\s")
+_FENCE_LINE_RE = re.compile(r"^\s*(```|~~~)")
+_INLINE_CODE_SPAN_RE = re.compile(r"`[^`\n]*`")
+_DATED_STEM_RE = re.compile(r"^(?:19|20)\d{2}-\d{2}")
 
 
 def _frontmatter_field_block(frontmatter: str, field: str) -> str:
@@ -256,9 +276,45 @@ def _wikilink_page_target(raw: str) -> str | None:
     return name
 
 
+def _undated_claims(body: str, first_line: int) -> list[dict[str, Any]]:
+    """Lines claiming a current count or amount with no date to anchor it."""
+    claims: list[dict[str, Any]] = []
+    in_fence = False
+    dated_level: int | None = None
+    for offset, line in enumerate(body.splitlines()):
+        if _FENCE_LINE_RE.match(line):
+            in_fence = not in_fence
+            continue
+        if in_fence or line.lstrip().startswith(">"):
+            continue
+        heading = _HEADING_RE.match(line)
+        if heading:
+            level = len(heading.group(1))
+            if _DATE_HINT_RE.search(line):
+                dated_level = level if dated_level is None else min(dated_level, level)
+            elif dated_level is not None and level <= dated_level:
+                dated_level = None
+            continue
+        if dated_level is not None:
+            continue
+        prose = _INLINE_CODE_SPAN_RE.sub("", line)
+        if _DATE_HINT_RE.search(prose):
+            continue
+        if _UNDATED_CLAIM_RE.search(prose) or _UNDATED_MONEY_RE.search(prose):
+            claims.append({"line": first_line + offset, "text": line.strip()[:160]})
+    return claims
+
+
 def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8", errors="replace")
-    frontmatter = split_frontmatter(text)[0]
+    frontmatter, body = split_frontmatter(text)
+    relative_parts = path.relative_to(vault).parts
+    dated_page = relative_parts[0] == "journal" or bool(_DATED_STEM_RE.match(path.stem))
+    undated = (
+        []
+        if dated_page
+        else _undated_claims(body, text[: len(text) - len(body)].count("\n") + 1)
+    )
     fields = set(_FIELD_RE.findall(frontmatter))
     values = _parse_frontmatter_values(frontmatter)
     relative = path.relative_to(vault)
@@ -301,6 +357,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "snapshots": parse_snapshots_field(_frontmatter_field_block(frontmatter, "snapshots")),
         "values": values,
         "archive_broken": broken_archive_links,
+        "undated_claims": undated,
     }
 
 
@@ -411,6 +468,13 @@ def lint_vault(
         {"page": page["path"], "sources": page["absolute_sources"]}
         for page in pages
         if page["slug"] not in RESERVED_PAGE_STEMS and page["absolute_sources"]
+    ]
+
+    undated_claims = [
+        {"page": page["path"], **claim}
+        for page in pages
+        if page["slug"] not in RESERVED_PAGE_STEMS
+        for claim in page["undated_claims"]
     ]
 
     orphan_pages = []
@@ -569,6 +633,7 @@ def lint_vault(
         "machine_path_sources": machine_path_sources,
         "snapshot_mismatch": snapshot_mismatch,
         "orphan_pages": sorted(orphan_pages),
+        "undated_claims": undated_claims,
         "typed_relationship_issues": typed_relationship_issues,
         # Sorted by page: these findings get diffed between CI runs.
         "temporal_errors": sorted(temporal_errors, key=lambda item: item["page"]),
@@ -626,6 +691,7 @@ def lint_vault(
                 "machine_path_sources",
                 "snapshot_mismatch",
                 "orphan_pages",
+                "undated_claims",
                 "typed_relationship_issues",
                 "superseded_dangling",
             )
