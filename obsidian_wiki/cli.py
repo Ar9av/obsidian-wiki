@@ -437,6 +437,48 @@ VAULT_SUBDIRS = (
 )
 
 
+#: One color per category, shared by the graph view and the file explorer so a
+#: new vault looks organised the first time it is opened in Obsidian.
+CATEGORY_COLORS = {
+    "concepts": "#4f8ef7",
+    "entities": "#f2a541",
+    "skills": "#3cc48a",
+    "references": "#9b8cf2",
+    "synthesis": "#ef5d7a",
+    "journal": "#7fb8c9",
+    "projects": "#c9a227",
+}
+FOLDER_COLORS_SNIPPET = "obsidian-wiki-folders"
+
+
+def _folder_colors_css() -> str:
+    rules = "\n".join(
+        f'.nav-folder-title[data-path^="{name}"] {{ color: {color}; }}'
+        for name, color in CATEGORY_COLORS.items()
+    )
+    return (
+        "/* Written by obsidian-wiki setup: one color per wiki category, matching the graph view. */\n"
+        f"{rules}\n"
+        ".nav-folder-title[data-path^=\"_\"] { opacity: 0.55; }\n"
+    )
+
+
+def _graph_settings() -> dict:
+    return {
+        # Bookkeeping and staging folders are not knowledge; keep them out of the graph.
+        "search": "-path:_raw -path:_archives -path:_staging -path:_meta -path:_readouts "
+                  "-file:index -file:log -file:hot",
+        "showTags": False,
+        "showOrphans": True,
+        "showArrow": True,
+        "hideUnresolved": True,
+        "colorGroups": [
+            {"query": f"path:{name}", "color": {"a": 1, "rgb": int(color[1:], 16)}}
+            for name, color in CATEGORY_COLORS.items()
+        ],
+    }
+
+
 def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
     """Create the vault directory structure and special files if they don't exist yet.
 
@@ -550,8 +592,21 @@ def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
     appearance_json = vault_path / ".obsidian" / "appearance.json"
     if not appearance_json.exists():
         appearance_json.write_text(
-            json.dumps({"baseFontSize": 16}, indent=2) + "\n", encoding="utf-8"
+            json.dumps(
+                {"baseFontSize": 16, "enabledCssSnippets": [FOLDER_COLORS_SNIPPET]}, indent=2
+            )
+            + "\n",
+            encoding="utf-8",
         )
+
+    snippet = vault_path / ".obsidian" / "snippets" / f"{FOLDER_COLORS_SNIPPET}.css"
+    if not snippet.exists():
+        snippet.parent.mkdir(parents=True, exist_ok=True)
+        snippet.write_text(_folder_colors_css(), encoding="utf-8")
+
+    graph_json = vault_path / ".obsidian" / "graph.json"
+    if not graph_json.exists():
+        graph_json.write_text(json.dumps(_graph_settings(), indent=2) + "\n", encoding="utf-8")
 
     return created
 

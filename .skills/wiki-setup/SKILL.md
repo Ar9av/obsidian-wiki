@@ -221,9 +221,14 @@ Create minimal Obsidian config for a good out-of-box experience:
 ### .obsidian/appearance.json
 ```json
 {
-  "baseFontSize": 16
+  "baseFontSize": 16,
+  "enabledCssSnippets": ["obsidian-wiki-folders"]
 }
 ```
+
+### Folder colors and graph defaults
+
+`obsidian-wiki setup` also writes `.obsidian/snippets/obsidian-wiki-folders.css` (one color per category folder in the file explorer, `_` folders dimmed) and `.obsidian/graph.json` (the same colors in graph view, with `_raw/`, `_archives/`, `_staging/`, `_meta/`, `index`, `log`, and `hot` filtered out). If the CLI is available, run `obsidian-wiki setup --vault "$OBSIDIAN_VAULT_PATH"` rather than writing them by hand. Never overwrite an existing `.obsidian` file; to recolor later, use `graph-colorize`.
 
 ## Step 5: Recommend Obsidian Plugins
 
