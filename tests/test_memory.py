@@ -172,6 +172,25 @@ def test_index_honours_the_markdown_link_format(vault: Path) -> None:
     assert "[[" not in text
 
 
+def test_index_round_trips_names_a_wikilink_cannot_carry(vault: Path) -> None:
+    """`]`, `#` and `|` cannot appear in a wikilink target, so such entries render
+    as markdown links and the parser has to read them back as themselves (#294)."""
+    _page(vault, "concepts/2026-06[final].md", title="2026-06[final]")
+    _page(vault, "concepts/notes#1.md", title="notes#1")
+    mem.rebuild_index(vault)
+
+    text = (vault / "index.md").read_text(encoding="utf-8")
+    assert r"[2026-06[final\]](concepts/2026-06[final].md)" in text
+    assert "[notes#1](concepts/notes#1.md)" in text
+    assert "[[concepts/notes#1]]" not in text
+
+    result = mem.rebuild_index(vault, write=False)
+
+    assert result.added == ()
+    assert result.removed == ()
+    assert result.changed is False
+
+
 def test_index_drops_a_deleted_page_but_keeps_a_human_section(vault: Path) -> None:
     mem.rebuild_index(vault)
     index = vault / "index.md"
