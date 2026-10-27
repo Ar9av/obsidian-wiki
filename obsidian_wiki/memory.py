@@ -487,10 +487,28 @@ def _heading_for(category: str) -> str:
 # --------------------------------------------------------------------------
 
 
+#: Characters a ``[[wikilink]]`` target cannot carry: ``]`` ends the link, ``#``
+#: starts a heading anchor and ``|`` starts an alias. A page whose name holds one
+#: of them is unlinkable in that form.
+_WIKILINK_UNSAFE = frozenset("]#|")
+
+
+def _wikilink_target_is_valid(node: str) -> bool:
+    return not (_WIKILINK_UNSAFE & set(node))
+
+
+def _markdown_link_text(title: str) -> str:
+    """Escape ``]`` so a title cannot close the link text early."""
+    return title.replace("]", r"\]")
+
+
 def _index_entry(page: PageInfo, link_format: str, *, hub_pages: Optional[int] = None) -> str:
     node = page.path[:-3] if page.path.endswith(".md") else page.path
-    if link_format == "markdown":
-        link = f"[{page.title}]({page.path})"
+    if link_format == "markdown" or not _wikilink_target_is_valid(node):
+        # A name a wikilink cannot express falls back to the markdown form so
+        # ``rebuild_index`` can read its own output back (and hand the entry to
+        # Obsidian in a form it can resolve).
+        link = f"[{_markdown_link_text(page.title)}]({page.path})"
     elif hub_pages is not None:
         # A hub's node ends in `/index`, which Obsidian would display as
         # "index"; the alias shows the folder's own title instead.
@@ -703,7 +721,9 @@ def rebuild_index(
                     if match and archive_wikilink_relpath(vault, match.group(1)) is None:
                         listed.add(match.group(1).strip())
                     continue
-                md = re.match(r"^-\s*\[[^\]]*\]\(([^)]+)\)", line.strip())
+                # Link text may carry an escaped ``]`` (see _index_entry); the
+                # capture is the path, so the escape only has to be skipped.
+                md = re.match(r"^-\s*\[(?:\\.|[^\]])*\]\(([^)]+)\)", line.strip())
                 if md:
                     listed.add(md.group(1)[:-3] if md.group(1).endswith(".md") else md.group(1))
 
