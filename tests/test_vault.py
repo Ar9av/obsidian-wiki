@@ -51,6 +51,15 @@ def test_every_walker_honors_okignore_and_hidden_dirs(tmp_path: Path) -> None:
     assert lint_vault(tmp_path)["stats"]["pages"] == 1
 
 
+@pytest.mark.parametrize("pattern", ["Daily/", "/Daily"])
+def test_okignore_utf8_bom_keeps_first_pattern(tmp_path: Path, pattern: str) -> None:
+    _write(tmp_path, "concepts/kept.md")
+    _write(tmp_path, "Daily/secret.md")
+    (tmp_path / ".okignore").write_bytes(b"\xef\xbb\xbf" + f"{pattern}\n".encode("utf-8"))
+
+    assert [p.relative_to(tmp_path).as_posix() for p in iter_md(tmp_path)] == ["concepts/kept.md"]
+
+
 def _symlink_dir(link: Path, target: Path) -> None:
     link.parent.mkdir(parents=True, exist_ok=True)
     try:

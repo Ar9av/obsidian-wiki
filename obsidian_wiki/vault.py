@@ -38,7 +38,7 @@ def split_frontmatter(text: str) -> tuple[str, str]:
 def okignore_patterns(vault: Path) -> list[str]:
     """Patterns from the vault-root `.okignore` (gitignore syntax, subset)."""
     try:
-        lines = (vault / ".okignore").read_text(encoding="utf-8").splitlines()
+        lines = (vault / ".okignore").read_text(encoding="utf-8-sig").splitlines()
     except OSError:
         return []
     # ponytail: no `!` negation or `**`-specific semantics; add if a vault needs them.
