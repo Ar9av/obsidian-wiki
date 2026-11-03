@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from obsidian_wiki.cache import _is_file_key, _iter_entries
-from obsidian_wiki.vault import split_frontmatter
+from obsidian_wiki.vault import iter_md_under, split_frontmatter
 
 _PAGE_LIST_KEYS = ("pages_produced", "pages_created")
 _URL_FIELDS = ("url", "source", "source_url")
@@ -62,7 +62,7 @@ def clip_url_index(vault: Path) -> dict[str, list[str]]:
     root = _archived_dir(vault)
     if not root.is_dir():
         return {}
-    for path in sorted(root.rglob("*.md")):
+    for path in iter_md_under(vault, root):
         text = path.read_text(encoding="utf-8", errors="replace")
         frontmatter = split_frontmatter(text)[0]
         rel = path.relative_to(vault).as_posix()

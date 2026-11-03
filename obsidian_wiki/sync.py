@@ -33,7 +33,7 @@ _DERIVED_IGNORES = (".graph-cache.json",)
 def _git(vault_path: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-C", str(vault_path), *args],
-        capture_output=True, text=True,
+        capture_output=True, encoding="utf-8", errors="replace",
     )
 
 

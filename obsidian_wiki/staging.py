@@ -21,6 +21,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from obsidian_wiki.vault import iter_md_under, okignore_patterns, okignored
+
 STAGING_DIR = "_staging"
 RAW_DIR = "_raw"
 PATCH_SUFFIX = ".patch.md"
@@ -102,10 +104,15 @@ def list_staged(vault: Path) -> list[StagedEntry]:
     if not root.is_dir():
         return []
 
+    patterns = okignore_patterns(vault)
     entries: list[StagedEntry] = []
-    for staged in sorted(root.rglob("*.md")):
+    for staged in iter_md_under(vault, root):
         staged_rel = staged.relative_to(root)
         live_rel = _live_relative(staged_rel)
+        # The server diffs against the live page, which would print an ignored
+        # page's text for anything staged over it.
+        if okignored(Path(live_rel), patterns):
+            continue
         live = vault / live_rel
         if staged.name.endswith(PATCH_SUFFIX):
             kind = "patch"

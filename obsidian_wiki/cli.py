@@ -2219,6 +2219,7 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
     try:
         if args.all:
             removed_not_applicable: list[str] = []
+            removed_ignored = 0
             if path.is_file():
                 previous = check_trust_ledger(
                     vault,
@@ -2233,6 +2234,7 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
                     if item.get("reason")
                     == "confidence_not_applicable_but_ledger_entry_exists"
                 )
+                removed_ignored = previous["ignored_entries"]
             ledger = build_trust_ledger(
                 vault,
                 reviewed_at=args.reviewed_at,
@@ -2240,6 +2242,7 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
                 required_trust_keys=schema["required_trust_fields"],
             )
             ledger["removed_not_applicable"] = removed_not_applicable
+            ledger["removed_ignored"] = removed_ignored
             recorded_pages = len(ledger["pages"])
         else:
             ledger = update_trust_ledger(
@@ -2264,6 +2267,7 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
         "recorded_pages": recorded_pages,
         "not_applicable_pages": list(ledger.get("not_applicable", [])),
         "removed_not_applicable": list(ledger.get("removed_not_applicable", [])),
+        "removed_ignored": ledger["removed_ignored"],
         "reviewed_at": args.reviewed_at,
         "method": ledger["method"],
         "schema": {
@@ -2295,6 +2299,8 @@ def cmd_trust_record(args: argparse.Namespace) -> int:
                 f"base_confidence is not applicable: {removed}",
                 file=sys.stderr,
             )
+        if result["removed_ignored"]:
+            print(f"ignored ledger entries removed: {result['removed_ignored']}")
     return 0
 
 

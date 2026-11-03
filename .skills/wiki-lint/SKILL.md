@@ -255,6 +255,7 @@ Interpret results as follows:
 - `reviewed` — current material fingerprint and stored score both match the approved review; do **not** recompute from source strings.
 - `stale` — body, summary, sources, provenance, tags, or relationships changed; perform a new manual lineage + claim-coverage review.
 - `unreviewed` — page has no approved ledger entry; manual review is required.
+- `ignored_entries` — how many reviewed pages are now excluded by `.okignore`. A count only, so the pages stay unnamed. Any `trust-record` clears them.
 - `score_mismatches` — material content still matches, but stored `base_confidence` differs from the approved value; fail the lint.
 - `errors` — malformed/missing ledger data; fail the lint.
 

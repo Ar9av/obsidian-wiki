@@ -158,6 +158,36 @@ def test_snapshot_mismatch_warns_when_field_missing(tmp_path: Path) -> None:
     )
 
 
+def _write_ignored_archive(vault: Path) -> None:
+    """`_write_archive_and_manifest`, plus a second archive `.okignore` covers."""
+    _write_archive_and_manifest(vault)
+    hidden = vault / "_raw" / "_archived" / "private" / "hidden.md"
+    hidden.parent.mkdir(parents=True, exist_ok=True)
+    hidden.write_text("# clip\n", encoding="utf-8")
+    manifest = json.loads((vault / ".manifest.json").read_text(encoding="utf-8"))
+    manifest["sources"]["_raw/_archived/private/hidden.md"] = {"pages_produced": ["concepts/alpha.md"]}
+    (vault / ".manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    (vault / ".okignore").write_text("_raw/_archived/private\n", encoding="utf-8")
+
+
+def test_snapshot_mismatch_does_not_name_an_ignored_archive(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+    _write_ignored_archive(vault)
+
+    rows = lint_vault(vault)["findings"]["snapshot_mismatch"]
+
+    assert [row["expected"] for row in rows] == [["_raw/_archived/a.md"]]
+
+
+def test_a_page_citing_an_ignored_archive_is_not_a_mismatch(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault, alpha_snapshots="[_raw/_archived/a.md, _raw/_archived/private/hidden.md]")
+    _write_ignored_archive(vault)
+
+    assert lint_vault(vault)["findings"]["snapshot_mismatch"] == []
+
+
 def test_snapshot_mismatch_empty_when_field_matches(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _clean_pair(vault, alpha_snapshots="[_raw/_archived/a.md]")

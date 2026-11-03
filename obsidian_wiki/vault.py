@@ -114,6 +114,17 @@ def iter_instruction_files(vault: Path, skip_dirs: Iterable[str] = SKIP_DIRS) ->
     )
 
 
+def iter_md_under(vault: Path, root: Path) -> list[Path]:
+    """Every `.md` under `root` (a directory in `vault`), sorted, minus `.okignore`.
+
+    For the tool-owned subtrees `iter_md` skips, such as `_staging/` and `_raw/`.
+    `rglob` rather than `_walk_md`: a symlinked folder here isn't part of the vault
+    the way a mounted project folder is, and it could lead out of the vault.
+    """
+    patterns = okignore_patterns(vault)
+    return sorted(path for path in root.rglob("*.md") if not okignored(path.relative_to(vault), patterns))
+
+
 def iter_md(vault: Path, skip_dirs: Iterable[str] = SKIP_DIRS) -> list[Path]:
     """Every `.md` page under `vault`, sorted, minus hidden/skipped dirs,
     agent-instruction files, and `.okignore`."""
