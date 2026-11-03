@@ -51,12 +51,19 @@ which firecrawl
   ```
 
   Use it first when the URL points to a PDF: a `.pdf` path, a `/pdf/` route such as arXiv's, or a `Content-Type: application/pdf` response. It fetches through the Firecrawl API, so skip it for private or intranet URLs, and check with the user before a long PDF, since Firecrawl credits are charged per PDF page. Leave installing and signing in to the user: `npm install -g firecrawl-cli`, then `firecrawl login` or `FIRECRAWL_API_KEY` ([get a free API key](https://www.firecrawl.dev/app/api-keys?utm_source=obsidian-wiki&utm_medium=integration)). If it is missing or exits non-zero, continue with `defuddle`/`WebFetch`.
+- **If `firecrawl` is not available:** Step U1 falls back to [Jina Reader](https://jina.ai/reader) for PDF URLs and pages that come back blank. It needs no install, renders the page or parses the PDF, and returns markdown:
+
+  ```bash
+  out=$(mktemp) && curl -sf "https://r.jina.ai/<url>" -H "X-Return-Format: markdown" ${JINA_API_KEY:+-H "Authorization: Bearer $JINA_API_KEY"} -o "$out" && echo "$out"
+  ```
+
+  It runs without a key at a low rate limit, and `JINA_API_KEY` in config raises that limit. It sends the URL to Jina's servers, so skip it for private or intranet URLs too.
 
 ## Step U1: Fetch the URL
 
 Use `WebFetch` to retrieve the content at the provided URL (or skip if `defuddle` or `firecrawl` already returned the page in Step U0.5).
 
-- If the page comes back blank or nearly empty (only a nav or login link) because it renders with JavaScript, and `firecrawl` is available, try it once (Step U0.5). If that returns the page content, proceed to Step U2.
+- If the page comes back blank or nearly empty (only a nav or login link) because it renders with JavaScript, or it is a PDF that `defuddle`/`WebFetch` could not read, try `firecrawl` once if it is available, otherwise Jina Reader (Step U0.5). If that returns the page content, proceed to Step U2.
 - If the page is paywalled, JS-rendered (blank body), or returns an error: create a **stub page** with the title (inferred from the URL), the URL, and `stub: true` in frontmatter. Append this to the body: `> [Stub] Page could not be fetched — enrich manually.` Then skip to Step U7.
 - If the page fetches successfully: proceed to Step U2.
 

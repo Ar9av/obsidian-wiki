@@ -148,6 +148,14 @@ Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a ven
 | `PAGEINDEX_MIN_PAGES` | Only preprocess PDFs with at least this many pages | `30` |
 | `PAGEINDEX_WORKSPACE` | Cache dir for `*_structure.json` | `<PAGEINDEX_REPO>/results` |
 
+## URL ingest (optional)
+
+When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Reader](https://jina.ai/reader) for PDFs and JavaScript-rendered pages. It works without a key at a low rate limit. See `.skills/wiki-ingest/references/url-sources.md`.
+
+| Variable | What it does | Default |
+|---|---|---|
+| `JINA_API_KEY` | Raises the Jina Reader rate limit | *(empty, keyless)* |
+
 ## QMD semantic search (optional)
 
 By default, `wiki-ingest` and `wiki-query` use Grep/Glob — fully functional, no extra setup. If your vault grows large or you want concept-level matches across your sources, plug in [QMD](https://github.com/tobi/qmd), either through MCP or by letting the agent call the local `qmd` CLI.
