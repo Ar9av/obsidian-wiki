@@ -22,7 +22,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from obsidian_wiki.vault import FRONTMATTER_RE as _FRONTMATTER_RE
-from obsidian_wiki.vault import SKIP_DIRS, iter_md
+from obsidian_wiki.vault import SKIP_DIRS, iter_md, okignore_patterns, okignored
 
 TRUST_LEDGER_RELATIVE_PATH = Path("_meta/trust-ledger.json")
 TRUST_LEDGER_SCHEMA_VERSION = 1
@@ -432,6 +432,10 @@ def update_trust_ledger(
     removed_not_applicable = sorted(set(ledger["pages"]) & set(not_applicable))
     for rel in removed_not_applicable:
         del ledger["pages"][rel]
+    patterns = okignore_patterns(vault)
+    removed_ignored = [rel for rel in ledger["pages"] if okignored(Path(rel), patterns)]
+    for rel in removed_ignored:
+        del ledger["pages"][rel]
 
     selected: list[str] = []
     for raw in page_paths:
@@ -455,6 +459,7 @@ def update_trust_ledger(
     ledger["reviewed_at"] = reviewed_at
     ledger["not_applicable"] = sorted(not_applicable)
     ledger["removed_not_applicable"] = removed_not_applicable
+    ledger["removed_ignored"] = len(removed_ignored)
     return ledger
 
 
@@ -581,6 +586,7 @@ def _empty_report(
         "score_mismatches": [],
         "missing_pages": [],
         "errors": [],
+        "ignored_entries": 0,
         "counts": {},
     }
 
@@ -711,8 +717,14 @@ def check_trust_ledger(
             }
         )
 
+    patterns = okignore_patterns(vault)
     for rel in sorted(set(entries) - set(current)):
-        report["missing_pages"].append({"page": rel, "reason": "reviewed_page_missing"})
+        # Counted, never named: the page must stay out of the output, but its
+        # leaving the review gate must not go unnoticed.
+        if okignored(Path(rel), patterns):
+            report["ignored_entries"] += 1
+        else:
+            report["missing_pages"].append({"page": rel, "reason": "reviewed_page_missing"})
     return _finalise_report(report)
 
 
@@ -727,9 +739,10 @@ def _finalise_report(report: dict[str, Any]) -> dict[str, Any]:
         "errors",
     )
     report["counts"] = {key: len(report[key]) for key in keys}
+    report["counts"]["ignored_entries"] = report["ignored_entries"]
     if report["errors"] or report["score_mismatches"]:
         report["status"] = "fail"
-    elif report["stale"] or report["unreviewed"] or report["missing_pages"]:
+    elif report["stale"] or report["unreviewed"] or report["missing_pages"] or report["ignored_entries"]:
         report["status"] = "warn"
     else:
         report["status"] = "pass"

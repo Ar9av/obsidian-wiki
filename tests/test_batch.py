@@ -290,3 +290,46 @@ class TestBatchPlanCLI:
         data = json.loads(proc.stdout)
         # 5 files with max 2 per batch → 3 batches
         assert data["stats"]["batch_count"] == 3
+
+
+class TestOkignore:
+    def _sources(self, root):
+        for rel in ("kept.md", "quarantine/hidden.md"):
+            path = root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x\n", encoding="utf-8")
+
+    def _names(self, source, vault):
+        return [Path(f["path"]).name for f in discover_sources(source, vault=vault)]
+
+    def test_source_inside_the_vault_follows_it(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_raw")
+        (vault / ".okignore").write_text("_raw/quarantine\n", encoding="utf-8")
+        assert self._names(vault / "_raw", vault) == ["kept.md"]
+
+    def test_vault_itself_as_a_git_source_follows_it(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault)
+        (vault / ".okignore").write_text("quarantine/\n", encoding="utf-8")
+        subprocess.run(["git", "init", "-q", str(vault)], check=True)
+        assert "hidden.md" not in self._names(vault, vault)
+
+    def test_source_containing_the_vault_follows_it_only_inside(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault)
+        self._sources(tmp_path / "elsewhere")
+        (vault / ".okignore").write_text("quarantine/\n", encoding="utf-8")
+        found = {
+            Path(f["path"]).relative_to(tmp_path).as_posix()
+            for f in discover_sources(tmp_path, vault=vault)
+        }
+        assert "vault/quarantine/hidden.md" not in found
+        assert "elsewhere/quarantine/hidden.md" in found
+
+    def test_source_outside_the_vault_is_not_filtered(self, tmp_path):
+        vault = tmp_path / "vault"
+        vault.mkdir()
+        (vault / ".okignore").write_text("quarantine/\n", encoding="utf-8")
+        self._sources(tmp_path / "elsewhere")
+        assert sorted(self._names(tmp_path / "elsewhere", vault)) == ["hidden.md", "kept.md"]

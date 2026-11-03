@@ -39,6 +39,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from obsidian_wiki.vault import okignore_patterns, okignored
+
 # ---------------------------------------------------------------------------
 # File classification
 # ---------------------------------------------------------------------------
@@ -125,6 +127,10 @@ def _git_tracked_files(source_dir: Path) -> list[Path] | None:
 # Source discovery
 # ---------------------------------------------------------------------------
 
+def _okignored_in(vault_root: Path, path: Path, patterns: list[str]) -> bool:
+    return path.is_relative_to(vault_root) and okignored(path.relative_to(vault_root), patterns)
+
+
 def discover_sources(
     source_dir: Path,
     *,
@@ -154,6 +160,16 @@ def discover_sources(
             ]
             for fn in sorted(filenames):
                 candidates.append(Path(dirpath) / fn)
+
+    # Anything inside the vault follows its `.okignore`, wherever the walk began.
+    # The patterns are vault-relative, so they say nothing about files outside it.
+    patterns = okignore_patterns(vault) if vault is not None else []
+    if patterns:
+        vault_root, source_root = vault.resolve(), source_dir.resolve()
+        candidates = [
+            p for p in candidates
+            if not _okignored_in(vault_root, source_root / p.relative_to(source_dir), patterns)
+        ]
 
     files = []
     for p in candidates:

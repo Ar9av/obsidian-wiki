@@ -20,7 +20,7 @@ from obsidian_wiki.provenance import (
     parse_snapshots_field,
 )
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
-from obsidian_wiki.vault import iter_instruction_files, iter_md, split_frontmatter
+from obsidian_wiki.vault import iter_instruction_files, iter_md, okignore_patterns, okignored, split_frontmatter
 from obsidian_wiki.temporal import (
     SUPERSEDED_FIELD,
     superseded_target,
@@ -491,20 +491,27 @@ def lint_vault(
         (key or "").startswith("url:") for key, _ in _iter_entries(manifest_sources)
     )
     url_index = clip_url_index(vault) if need_urls else None
+    okignore = okignore_patterns(vault)
     snapshot_mismatch = []
     for page in pages:
         if page["slug"] in RESERVED_PAGE_STEMS:
             continue
-        expected = expected_snapshots_for_page(
-            vault,
-            page["path"],
-            manifest_sources,
-            inverted=inverted,
-            url_index=url_index,
-        )
+        # An ignored archive neither appears in the report nor counts as a mismatch,
+        # whether the manifest or the page is the side still naming it.
+        expected = [
+            rel
+            for rel in expected_snapshots_for_page(
+                vault,
+                page["path"],
+                manifest_sources,
+                inverted=inverted,
+                url_index=url_index,
+            )
+            if not okignored(Path(rel), okignore)
+        ]
         if not expected:
             continue
-        actual = page["snapshots"]
+        actual = [rel for rel in page["snapshots"] if not okignored(Path(rel), okignore)]
         if set(expected) != set(actual):
             snapshot_mismatch.append(
                 {

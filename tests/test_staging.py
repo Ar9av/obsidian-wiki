@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from obsidian_wiki.staging import (
@@ -200,3 +202,26 @@ def test_log_records_one_line_per_batch(vault):
 def test_log_is_silent_when_nothing_happened(vault):
     log_decisions(vault, [])
     assert not (vault / "log.md").exists()
+
+
+def test_list_staged_honors_okignore(tmp_path):
+    write(tmp_path, "_staging/concepts/kept.md", "kept\n")
+    write(tmp_path, "_staging/private/hidden.md", "hidden\n")
+    # Staged over an ignored live page: listing it would diff against that page.
+    write(tmp_path, "notes/old/live.md", "secret\n")
+    write(tmp_path, "_staging/notes/old/live.md", "revised\n")
+    write(tmp_path, ".okignore", "_staging/private\n/notes/old\n")
+
+    assert [Path(entry.live_path).as_posix() for entry in list_staged(tmp_path)] == ["concepts/kept.md"]
+
+
+def test_list_staged_does_not_follow_a_symlinked_directory(tmp_path):
+    vault = tmp_path / "vault"
+    write(vault, "_staging/concepts/kept.md", "kept\n")
+    write(tmp_path, "outside/secret.md", "secret\n")
+    try:
+        (vault / "_staging" / "link").symlink_to(tmp_path / "outside", target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks unavailable on this platform")
+
+    assert [Path(entry.live_path).as_posix() for entry in list_staged(vault)] == ["concepts/kept.md"]

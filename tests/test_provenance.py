@@ -4,6 +4,7 @@ from pathlib import Path
 
 from obsidian_wiki.provenance import (
     archive_wikilink_relpath,
+    clip_url_index,
     expected_snapshots_for_page,
     invert_pages,
     parse_snapshots_field,
@@ -218,3 +219,13 @@ def test_archive_wikilink_relpath_rejects_parent_traversal(tmp_path: Path) -> No
     vault = tmp_path / "vault"
     vault.mkdir()
     assert archive_wikilink_relpath(vault, "_raw/_archived/../attention") is None
+
+
+def test_clip_url_index_honors_okignore(tmp_path: Path) -> None:
+    for rel, url in (("kept", "https://example.test/kept"), ("private/hidden", "https://example.test/hidden")):
+        clip = tmp_path / "_raw" / "_archived" / f"{rel}.md"
+        clip.parent.mkdir(parents=True, exist_ok=True)
+        clip.write_text(f"---\nurl: {url}\n---\n\nclip\n", encoding="utf-8")
+    (tmp_path / ".okignore").write_text("_raw/_archived/private\n", encoding="utf-8")
+
+    assert clip_url_index(tmp_path) == {"https://example.test/kept": ["_raw/_archived/kept.md"]}

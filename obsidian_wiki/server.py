@@ -32,7 +32,7 @@ from obsidian_wiki.graphrag import query as graph_query
 from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.sync import _git
-from obsidian_wiki.vault import iter_md
+from obsidian_wiki.vault import iter_md, iter_md_under, okignore_patterns, okignored
 
 VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")).expanduser()
 API_KEY = os.environ.get("WIKI_API_KEY", "")
@@ -386,17 +386,49 @@ _MANIFEST_PAGE_KEYS = ("pages_produced", "pages_created", "pages_in_vault")
 
 
 def _count_md(rel: str) -> int:
-    directory = VAULT / rel
-    return len(list(directory.rglob("*.md"))) if directory.is_dir() else 0
+    return len(iter_md_under(VAULT, VAULT / rel))
+
+
+def _dirty_lines(porcelain_z: str) -> list[str]:
+    """Porcelain status lines, minus any path excluded by `.okignore`.
+
+    Takes `-z` output because plain porcelain C-quotes a path holding a space or
+    non-ASCII character, which no pattern would match.
+    """
+    patterns = okignore_patterns(VAULT)
+
+    def hidden(path: str) -> bool:
+        return okignored(Path(path), patterns)
+
+    def shown(path: str) -> str:
+        return "(ignored)" if hidden(path) else path
+
+    lines = []
+    fields = iter(porcelain_z.split("\0"))
+    for field in fields:
+        if not field:
+            continue
+        code, path = field[:2], field[3:]
+        # -z puts a rename's or copy's source in the next field, with no arrow.
+        source = next(fields) if "R" in code or "C" in code else None
+        if source is None:
+            if not hidden(path):
+                lines.append(field)
+        elif not (hidden(source) and hidden(path)):
+            # Half public is still a real change, so report it without the hidden side.
+            lines.append(f"{code} {shown(source)} -> {shown(path)}")
+    return lines
 
 
 def _git_status() -> dict[str, Any]:
     if not (VAULT / ".git").is_dir():
         return {"repo": False}
-    porcelain = _git(VAULT, "status", "--porcelain")
+    # Every untracked file, not git's collapsed `?? dir/`: that names a directory
+    # the filter can't see into, even when all it holds is ignored.
+    porcelain = _git(VAULT, "status", "--porcelain", "-z", "--untracked-files=all")
     branch = _git(VAULT, "rev-parse", "--abbrev-ref", "HEAD")
     log = _git(VAULT, "log", "-5", "--pretty=%h %s")
-    dirty = [line for line in porcelain.stdout.splitlines() if line.strip()]
+    dirty = _dirty_lines(porcelain.stdout)
     return {
         "repo": True,
         "branch": branch.stdout.strip(),

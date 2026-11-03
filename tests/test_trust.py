@@ -86,6 +86,7 @@ def test_reviewed_ledger_is_authoritative_instead_of_reclassifying_sources(tmp_p
         "score_mismatches": 0,
         "missing_pages": 0,
         "errors": 0,
+        "ignored_entries": 0,
     }
     assert {item["page"] for item in report["reviewed"]} == {
         "concepts/alpha.md",
@@ -1233,3 +1234,80 @@ def test_partial_trust_record_reports_malformed_ledger_without_traceback(tmp_pat
     assert "error: cannot update trust ledger" in record.stderr
     assert "Traceback" not in record.stderr
     assert ledger_path.read_text() == "[]\n"
+
+
+def _reviewed_then_ignored(tmp_path: Path) -> Path:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md")
+    _page(vault, "private/hidden.md")
+    _write_ledger(vault)
+    (vault / ".okignore").write_text("private/\n", encoding="utf-8")
+    return vault
+
+
+def test_check_counts_a_reviewed_page_ignored_later_without_naming_it(tmp_path: Path) -> None:
+    vault = _reviewed_then_ignored(tmp_path)
+
+    report = check_trust_ledger(vault)
+
+    # Still a warning: a page leaving the review gate has to stay visible.
+    assert report["status"] == "warn"
+    assert report["ignored_entries"] == 1
+    assert report["counts"]["ignored_entries"] == 1
+    assert report["missing_pages"] == []
+    assert "hidden" not in json.dumps(report)
+
+
+def test_a_deleted_page_is_still_reported_missing_by_name(tmp_path: Path) -> None:
+    vault = _reviewed_then_ignored(tmp_path)
+    (vault / "concepts" / "alpha.md").unlink()
+
+    report = check_trust_ledger(vault)
+
+    assert report["missing_pages"] == [{"page": "concepts/alpha.md", "reason": "reviewed_page_missing"}]
+    assert report["ignored_entries"] == 1
+
+
+def test_recording_one_page_prunes_ignored_entries(tmp_path: Path) -> None:
+    vault = _reviewed_then_ignored(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+    record_args = ("--reviewed-at", "2026-08-05T13:00:00+09:00", "--approved")
+
+    before = _run_cli(home, "trust-check", str(vault), "--strict")
+    assert before.returncode == 1
+    assert "ignored_entries: 1" in before.stdout
+    assert "hidden" not in before.stdout + before.stderr
+
+    record = _run_cli(home, "trust-record", str(vault), "--page", "concepts/alpha.md", *record_args, "--json")
+    assert record.returncode == 0, record.stderr
+    assert json.loads(record.stdout)["removed_ignored"] == 1
+    assert "hidden" not in (vault / "_meta" / "trust-ledger.json").read_text(encoding="utf-8")
+
+    after = _run_cli(home, "trust-check", str(vault), "--strict", "--json")
+    assert after.returncode == 0, after.stdout
+    assert json.loads(after.stdout)["ignored_entries"] == 0
+
+    again = _run_cli(home, "trust-record", str(vault), "--page", "concepts/alpha.md", *record_args, "--json")
+    assert json.loads(again.stdout)["removed_ignored"] == 0
+
+
+def test_recording_all_reports_the_ignored_entries_it_dropped(tmp_path: Path) -> None:
+    vault = _reviewed_then_ignored(tmp_path)
+    home = tmp_path / "home"
+    home.mkdir()
+
+    record = _run_cli(
+        home,
+        "trust-record",
+        str(vault),
+        "--all",
+        "--reviewed-at",
+        "2026-08-05T13:00:00+09:00",
+        "--approved",
+    )
+
+    assert record.returncode == 0, record.stderr
+    assert "ignored ledger entries removed: 1" in record.stdout
+    assert "hidden" not in record.stdout + record.stderr
+    assert "hidden" not in (vault / "_meta" / "trust-ledger.json").read_text(encoding="utf-8")
