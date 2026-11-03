@@ -41,7 +41,7 @@ Before fetching, check whether the `defuddle` CLI is available:
 which defuddle
 ```
 
-- **If available:** Use `defuddle <url>` (via Bash) to retrieve a clean, stripped-down markdown version of the page. This removes ads, navbars, cookie banners, and related-content sidebars — reducing token usage by ~40-60% on typical articles. Use the `defuddle` output as your content source for Step U4 instead of the raw WebFetch result.
+- **If available:** Use `defuddle parse <url> --markdown` (via Bash) to retrieve a clean, stripped-down markdown version of the page. This removes ads, navbars, cookie banners, and related-content sidebars — reducing token usage by ~40-60% on typical articles. Use the `defuddle` output as your content source for Step U4 instead of the raw WebFetch result.
 - **If not available:** Fall back to `WebFetch` as normal. No action needed.
 
 ## Step U1: Fetch the URL
