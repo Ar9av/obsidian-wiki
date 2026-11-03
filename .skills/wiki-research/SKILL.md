@@ -82,7 +82,7 @@ backends:
   # --- free / local ---
   - name: defuddle-fetch
     binary: defuddle
-    invoke: "defuddle '{url}'"
+    invoke: "defuddle parse '{url}' --markdown"
     when_to_use: any URL — cleaner extraction than WebFetch alone
     cost_tier: free
     env_key: ""
@@ -112,7 +112,7 @@ backends:
 
 1. Decompose the topic into **3-5 distinct angles** (e.g., for "vector databases": what they are, when to use them, leading implementations, trade-offs, production gotchas)
 2. For each angle, run **2-3 `WebSearch` queries** using varied phrasing
-3. For the top 2-3 results per angle, use `WebFetch` (or `defuddle <url>` if available — cleaner extraction) to get content. For each URL, also invoke any *active backends* whose `when_to_use` matches (e.g., a YouTube URL triggers `yt-dlp-transcript`); fold their output into extraction alongside `WebFetch` results, citing the source URL the backend returns.
+3. For the top 2-3 results per angle, use `WebFetch` (or `defuddle parse <url> --markdown` if available — cleaner extraction) to get content. For each URL, also invoke any *active backends* whose `when_to_use` matches (e.g., a YouTube URL triggers `yt-dlp-transcript`); fold their output into extraction alongside `WebFetch` results, citing the source URL the backend returns.
 4. From each fetched page, extract:
    - **Key claims** — what the source explicitly states
    - **Concepts** — ideas, terms, frameworks introduced
