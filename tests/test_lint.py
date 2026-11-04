@@ -1301,3 +1301,68 @@ def test_uncovered_sources_reports_sources_with_no_surviving_page(tmp_path: Path
         {"source": "docs/lost.md", "issue": "pages_missing", "missing": ["concepts/gone.md"]},
     ]
     assert report["status"] == "warn"
+def _redirect_stub(vault: Path, relpath: str, target: str, *, title: str | None = None) -> Path:
+    """A wiki-dedup merge leftover: same title/stem as the canonical page,
+    with a `redirects_to:` pointer in its frontmatter."""
+    path = _page(vault, relpath, title=title)
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace("\n---\n", f'\nredirects_to: "[[{target}]]"\n---\n', 1),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_lint_redirect_stub_is_not_a_duplicate(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/example.md", title="Example")
+    _redirect_stub(vault, "entities/example.md", "concepts/example", title="Example")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_titles"] == []
+    assert report["findings"]["duplicate_stems"] == []
+    assert report["findings"]["redirect_issues"] == []
+
+
+def test_lint_redirect_stub_with_missing_target_is_reported(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/example.md", title="Example")
+    _redirect_stub(vault, "entities/example.md", "concepts/gone", title="Example")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["redirect_issues"] == [
+        {"page": "entities/example.md", "target": "concepts/gone", "issue": "missing_target"}
+    ]
+    # A broken stub still stays out of the duplicate checks.
+    assert report["findings"]["duplicate_titles"] == []
+    assert report["findings"]["duplicate_stems"] == []
+
+
+def test_lint_redirect_chain_is_reported(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/example.md", title="Example")
+    _redirect_stub(vault, "entities/example.md", "concepts/example", title="Example")
+    _redirect_stub(vault, "references/example.md", "entities/example", title="Example")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["redirect_issues"] == [
+        {"page": "references/example.md", "target": "entities/example", "issue": "redirect_chain"}
+    ]
+
+
+def test_lint_two_real_pages_with_same_title_still_duplicate(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/example.md", title="Example")
+    _page(vault, "entities/example.md", title="Example")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["duplicate_titles"] == [
+        {"title": "example", "pages": ["concepts/example.md", "entities/example.md"]}
+    ]
+    assert report["findings"]["duplicate_stems"] == [
+        {"stem": "example", "pages": ["concepts/example.md", "entities/example.md"]}
+    ]

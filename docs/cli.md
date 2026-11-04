@@ -115,6 +115,17 @@ while titles differ (`"Vector Search"` and `"vector-search"` slug to the same st
 The check warns. A vault carrying a collision moves from `pass` to `warn`, which leaves
 `obsidian-wiki lint` at exit 0 and takes `obsidian-wiki lint --strict` to exit 1.
 
+### Redirect stubs
+
+A `wiki-dedup` merge leaves a redirect stub at the secondary page's path: the stub keeps
+its original title and filename so old links stay usable, and its frontmatter carries
+`redirects_to: "[[<canonical page>]]"`. A stub is not a content page, so stubs are
+excluded from the `duplicate_titles` and `duplicate_stems` candidate sets — a successful
+merge no longer reports the pair it just created. The pointer itself is validated
+instead: a stub whose target does not resolve, points at itself, or points at another
+stub is a `redirect_issues` finding (`missing_target`, `self_reference`, or
+`redirect_chain`). Like the duplicate checks, it warns rather than fails.
+
 ### Snapshot provenance (`snapshots:`)
 
 `sources:` names the upstream inputs a page was distilled from — URLs, repo paths, agent logs,
