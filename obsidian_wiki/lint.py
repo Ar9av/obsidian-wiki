@@ -361,6 +361,11 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
     }
 
 
+# Manifest fields that list the pages a source produced (provenance.py reads
+# the first two; pages_updated is the same list for an update run).
+_COVERAGE_PAGE_KEYS = ("pages_produced", "pages_created", "pages_updated")
+
+
 def lint_vault(
     vault: Path,
     *,
@@ -522,6 +527,39 @@ def lint_vault(
             )
     snapshot_mismatch.sort(key=lambda item: item["page"])
 
+    # Source coverage: every ingested source should still map to a page that
+    # exists. A source whose page list is empty or points only at missing
+    # files was dropped somewhere between ingest and now (a failed write, a
+    # rename, a dedup), and nothing else would surface it. Entries with no
+    # page list at all (older count-only shapes) are skipped, not guessed at.
+    uncovered_sources: list[dict[str, Any]] = []
+    for key, entry in _iter_entries(manifest_sources):
+        listed = [
+            str(raw).strip().strip("[]")
+            for field in _COVERAGE_PAGE_KEYS
+            if isinstance(entry.get(field), list)
+            for raw in entry[field]
+            if raw
+        ]
+        if not any(isinstance(entry.get(field), list) for field in _COVERAGE_PAGE_KEYS):
+            continue
+        missing = sorted(
+            {
+                page
+                for page in listed
+                if not (vault / page).is_file() and not (vault / f"{page}.md").is_file()
+            }
+        )
+        if not listed or len(missing) == len(set(listed)):
+            uncovered_sources.append(
+                {
+                    "source": key or "",
+                    "issue": "no_pages" if not listed else "pages_missing",
+                    "missing": missing,
+                }
+            )
+    uncovered_sources.sort(key=lambda item: item["source"])
+
     typed_relationship_issues: list[dict[str, Any]] = []
     for page in pages:
         for index, relationship in enumerate(page["relationships"]):
@@ -639,6 +677,7 @@ def lint_vault(
         "missing_summaries": sorted(missing_summaries),
         "machine_path_sources": machine_path_sources,
         "snapshot_mismatch": snapshot_mismatch,
+        "uncovered_sources": uncovered_sources,
         "orphan_pages": sorted(orphan_pages),
         "undated_claims": undated_claims,
         "typed_relationship_issues": typed_relationship_issues,
@@ -697,6 +736,7 @@ def lint_vault(
                 "missing_summaries",
                 "machine_path_sources",
                 "snapshot_mismatch",
+                "uncovered_sources",
                 "orphan_pages",
                 "undated_claims",
                 "typed_relationship_issues",

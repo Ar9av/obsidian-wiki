@@ -55,7 +55,7 @@ A `.manifest.json` tracks every source that's been ingested — path, timestamps
 
 `/wiki-update` adds a code-understanding step before distillation when the current project contains source code. Git answers **what changed**; `code-understand` answers **what that change touches**; the agent decides **what is worth remembering**; the vault stores only the distilled result.
 
-With the default `CODE_UNDERSTANDING_BACKEND=auto`, CodeGraph is used when available and the built-in extractor + `rg` is used otherwise. CodeGraph is an optional local accelerator, not part of the vault: its `.codegraph/` index stays beside the project and is never copied into wiki pages.
+With the default `CODE_UNDERSTANDING_BACKEND=auto`, CodeGraph is used when available, then a Graphify graph (`graphify-out/graph.json`, read only) when one exists, and the built-in extractor + `rg` otherwise. CodeGraph is an optional local accelerator, not part of the vault: its `.codegraph/` index stays beside the project and is never copied into wiki pages.
 
 Use `obsidian-wiki doctor --project .` from the project root to verify CodeGraph availability and index freshness. With `auto`, a healthy CodeGraph backend is preferred; otherwise the built-in fallback is used.
 

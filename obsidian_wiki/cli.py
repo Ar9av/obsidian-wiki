@@ -3179,12 +3179,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     cdu = sub.add_parser(
         "code-understand",
-        help="build a ranked code-understanding focus map for a project — CodeGraph when available, builtin AST + rg otherwise",
+        help="build a ranked code-understanding focus map for a project — CodeGraph or a Graphify graph when available, builtin AST + rg otherwise",
     )
     cdu.add_argument("--project", default=None, help="project directory (defaults to the current directory)")
     cdu.add_argument(
         "--backend",
-        choices=["auto", "builtin", "codegraph"],
+        choices=["auto", "builtin", "codegraph", "graphify"],
         default="auto",
         help="code-understanding backend (default: auto)",
     )

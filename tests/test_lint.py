@@ -1274,3 +1274,30 @@ def test_lint_vault_warns_on_undated_counts_and_skips_dated_ones(tmp_path: Path)
     lines = page.read_text(encoding="utf-8").splitlines()
     assert all(lines[claim["line"] - 1].strip() == claim["text"] for claim in claims)
     assert report["status"] == "warn"
+
+
+def test_uncovered_sources_reports_sources_with_no_surviving_page(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _clean_pair(vault)
+    (vault / ".manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": [
+                    {"path": "docs/kept.md", "pages_produced": ["concepts/alpha.md"]},
+                    {"path": "docs/partly.md", "pages_produced": ["concepts/beta", "concepts/gone.md"]},
+                    {"path": "docs/empty.md", "pages_produced": []},
+                    {"path": "docs/lost.md", "pages_created": ["concepts/gone.md"]},
+                    {"path": "docs/counts-only.md", "pages_created": 3},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = lint_vault(vault)
+
+    assert report["findings"]["uncovered_sources"] == [
+        {"source": "docs/empty.md", "issue": "no_pages", "missing": []},
+        {"source": "docs/lost.md", "issue": "pages_missing", "missing": ["concepts/gone.md"]},
+    ]
+    assert report["status"] == "warn"
