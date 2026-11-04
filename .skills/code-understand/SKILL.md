@@ -29,7 +29,7 @@ need the focus map for your own immediate work, not to persist knowledge.
 ## Running it
 
 ```bash
-obsidian-wiki code-understand --project <dir> [--backend auto|builtin|codegraph] \
+obsidian-wiki code-understand --project <dir> [--backend auto|builtin|codegraph|graphify] \
     [--changed <file>...] [--since <sha>] [--max-symbols N] [--pretty]
 ```
 
@@ -39,9 +39,11 @@ obsidian-wiki code-understand --project <dir> [--backend auto|builtin|codegraph]
   (e.g. files in the diff you're about to make).
 - `--since <sha>` — seed from everything changed since a git ref (e.g. `--since HEAD~5` or a
   base branch).
-- `--backend` — `auto` (default) uses CodeGraph when installed, falls back to the builtin
-  extractor otherwise; force `builtin` for the dependency-free path, or `codegraph` to require
-  the enhanced backend (fails loudly if it's not installed rather than silently degrading).
+- `--backend` — `auto` (default) uses CodeGraph when installed, then an existing Graphify graph
+  (`graphify-out/graph.json`, read only — never rebuilt), and falls back to the builtin
+  extractor otherwise; force `builtin` for the dependency-free path, `codegraph` to require
+  the enhanced backend (fails loudly if it's not installed rather than silently degrading), or
+  `graphify` to require the Graphify graph.
 - `--max-symbols` — cap the focus map size (default 50); keep this small for a quick
   orientation pass, raise it for a thorough one.
 

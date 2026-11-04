@@ -11,6 +11,10 @@ importance. Two backends:
 - ``codegraph`` — the optional codegraph CLI (https://github.com/ar9av/codegraph)
   when installed and explicitly requested (or auto-selected when available).
   Implemented in obsidian_wiki.code_understanding_codegraph.
+- ``graphify`` — reads a Graphify graph the user already built
+  (``graphify-out/graph.json``); never runs graphify. Auto-selected after
+  codegraph when that file exists. Implemented in
+  obsidian_wiki.code_understanding_graphify.
 
 Backend precedence: explicit flag > CODE_UNDERSTANDING_BACKEND env > 'auto'.
 Only an explicitly selected codegraph backend is validated eagerly
@@ -233,6 +237,8 @@ def code_understand(
     if mode == "auto":
         if environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or shutil.which("codegraph"):
             mode = "codegraph"
+        elif (project / "graphify-out" / "graph.json").is_file():
+            mode = "graphify"
         else:
             mode = "builtin"
             warnings.append("codegraph not available; using builtin extractor")
@@ -245,6 +251,10 @@ def code_understand(
 
         bin_path = environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or shutil.which("codegraph")
         provider = CodeGraphProvider(bin_path or "", project, proc_env)
+    elif mode == "graphify":
+        from obsidian_wiki.code_understanding_graphify import GraphifyProvider
+
+        provider = GraphifyProvider(project)
     else:
         from obsidian_wiki.code_understanding_builtin import BuiltinProvider
 

@@ -11,12 +11,20 @@ permissions:
 
 jobs:
   pytest:
-    name: pytest (${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: pytest (${{ matrix.os }}, ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.9", "3.12"]
+        # Hooks, paths, and encodings break differently off Linux (#213, #219,
+        # #265), so run the suite on the other two desktop OSes as well.
+        include:
+          - os: windows-latest
+            python-version: "3.12"
+          - os: macos-latest
+            python-version: "3.12"
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,6 +39,7 @@ jobs:
 
       - name: Configure git identity
         # Some tests build throwaway git repos and commit to them.
+        shell: bash
         run: |
           git config --global user.email "test@example.com"
           git config --global user.name "Wiki Tester"
