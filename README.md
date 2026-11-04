@@ -1,6 +1,6 @@
 <h1 align="center">obsidian-wiki</h1>
 
-<p align="center"><b>A digital brain you grow with your AI agent.</b></p>
+<p align="center"><b>A unified digital brain you grow with your AI agents.</b></p>
 
 <p align="center">
   It remembers what you figure out, connects it to what you already know,<br>
