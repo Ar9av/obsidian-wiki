@@ -29,6 +29,9 @@ Four artifacts, three of them generated and one hybrid:
 from __future__ import annotations
 
 import os
+import hashlib
+import json
+from contextlib import contextmanager
 import re
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone, tzinfo
@@ -129,6 +132,7 @@ def today(tz: Optional[tzinfo] = None) -> str:
     return clock.today(tz)
 
 
+@contextmanager
 def memory_lock(vault: Path, *, timeout: float = 10.0):
     """Serialise writes to the prose memory files.
 
@@ -137,23 +141,16 @@ def memory_lock(vault: Path, *, timeout: float = 10.0):
     single logical update, and interleaving another writer between them is what
     produced inconsistent snapshots before.
     """
-    return advisory_lock(Path(vault) / MEMORY_LOCK_NAME, timeout=timeout)
+    from .memory_transaction import recover
+    with advisory_lock(Path(vault) / MEMORY_LOCK_NAME, timeout=timeout):
+        recover(Path(vault))
+        yield
 
 
 def atomic_write(path: Path, text: str) -> None:
     """Replace *path* with *text* via a temp file and ``os.replace``."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    try:
-        tmp.write_text(text, encoding="utf-8")
-        os.replace(tmp, path)  # atomic on POSIX and Windows
-    except BaseException:
-        try:
-            tmp.unlink()
-        except FileNotFoundError:
-            pass
-        raise
+    from .memory_transaction import atomic_bytes
+    atomic_bytes(Path(path), text.encode("utf-8"))
 
 
 def _require_vault(vault: Path) -> Path:
@@ -682,6 +679,9 @@ def rebuild_index(
     of page by page (see ``collapse_folder_hubs``).
     """
     vault = _require_vault(vault)
+    if write and lock:
+        with memory_lock(vault):
+            return rebuild_index(vault, link_format=link_format, write=True, lock=False, force=force)
     index = vault / "index.md"
     if write and not force and not (is_adopted(vault) or is_generated(index)):
         raise MemoryError_(
@@ -1168,10 +1168,23 @@ def _contradiction_lines(pages: Sequence, limit: int, link_format: str) -> list:
     return lines[:limit]
 
 
+def _takeaways_revision(text: str) -> str:
+    return hashlib.sha256(_section_body(text, "Key Takeaways").encode("utf-8")).hexdigest()
+
+
+def takeaways_revision(vault: Path) -> str:
+    """Canonical section SHA-256; consumers obtain it from memory status JSON."""
+    path = Path(vault) / "hot.md"
+    text = path.read_text(encoding="utf-8") if path.exists() else ""
+    return _takeaways_revision(text)
+
+
 def build_hot(
     vault: Path,
     *,
     takeaways: Optional[str] = None,
+    expected_takeaways_sha256: Optional[str] = None,
+    pending_log_line: Optional[str] = None,
     link_format: str = "wikilink",
     max_words: Optional[int] = None,
     activity_limit: int = DEFAULT_RECENT_ACTIVITY,
@@ -1182,21 +1195,34 @@ def build_hot(
 
     Word-capped for real. When the render is over budget, sections are dropped
     in increasing order of value: activity lines first, then contradictions,
-    then threads, and ``Key Takeaways`` is truncated last because it is the only
-    part a model wrote on purpose.
+    then threads. Durable takeaways are never truncated; overflow raises.
     """
     vault = _require_vault(vault)
     cap = max_words or hot_max_words()
     hot = vault / "hot.md"
     existing = hot.read_text(encoding="utf-8") if hot.is_file() else ""
 
+    carried = _section_body(existing, "Key Takeaways")
+    if expected_takeaways_sha256 is not None:
+        if takeaways is None:
+            raise MemoryError_("takeaways_revision_without_replacement", "omit revision for carry-forward sync")
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_takeaways_sha256):
+            raise MemoryError_("takeaways_revision_invalid", "expected revision must be a lowercase SHA-256")
+        if expected_takeaways_sha256 != _takeaways_revision(existing):
+            raise MemoryError_("takeaways_conflict", "Key Takeaways changed; reread memory status --json and reconcile")
+    elif takeaways is not None and carried and carried != _TAKEAWAYS_PLACEHOLDER:
+        raise MemoryError_("takeaways_revision_required",
+                           "existing Key Takeaways require --expect-takeaways-sha256 from memory status --json "
+                           "(Python API: expected_takeaways_sha256)")
     if takeaways is None:
-        carried = _section_body(existing, "Key Takeaways")
         takeaways = carried if carried else _TAKEAWAYS_PLACEHOLDER
     takeaways = takeaways.strip() or _TAKEAWAYS_PLACEHOLDER
 
     pages = scan_pages(vault)
     activity = _recent_activity_lines(vault, activity_limit)
+    if pending_log_line:
+        activity.append(summarize_log_entry(parse_log_line(pending_log_line)))
+        activity = activity[-activity_limit:] if activity_limit else []
     threads = [t for t in load_todos(vault) if t.status == "open"][:thread_limit]
     contradictions = _contradiction_lines(pages, contradiction_limit, link_format)
 
@@ -1224,17 +1250,17 @@ def build_hot(
     text = _render(activity, contradictions, threads, takeaways)
     trimmed = False
     while content_words(text) > cap:
-        if len(activity) > 1:
+        if activity:
             activity = activity[1:]
         elif contradictions:
             contradictions = contradictions[:-1]
-        elif len(threads) > 1:
+        elif threads:
             threads = threads[:-1]
         else:
-            words = takeaways.split()
-            if len(words) <= 20:
-                break  # the skeleton alone exceeds the cap; report it instead of looping
-            takeaways = " ".join(words[: max(20, len(words) - 25)]) + " …"
+            raise MemoryError_("takeaways_overflow",
+                               f"durable takeaways and cache structure exceed {cap} words; "
+                               "move details to a knowledge page and provide a revision-checked summary, "
+                               "or explicitly choose a larger --max-words; nothing was truncated")
         trimmed = True
         text = _render(activity, contradictions, threads, takeaways)
 
@@ -1259,7 +1285,10 @@ def rebuild_hot(
             "to review the change and take a backup first",
         )
     if lock:
-        with memory_lock(vault):
+        guard = memory_lock(vault) if write else advisory_lock(vault / MEMORY_LOCK_NAME)
+        with guard:
+            if not write and (vault / ".memory-transaction.json").exists():
+                raise MemoryError_("memory_recovery_required", "pending transaction; let an official writer recover before preview")
             result = build_hot(vault, **kwargs)
             if write:
                 atomic_write(vault / "hot.md", result.text)
@@ -1649,6 +1678,7 @@ def memory_status(vault: Path) -> dict:
     todos = load_todos(vault)
     return {
         "vault": str(vault),
+        "transaction_pending": (vault / ".memory-transaction.json").exists(),
         "timezone": clock.timezone_name(vault) or "UTC",
         "pages": index_drift.total,
         "index_drift": {
@@ -1664,6 +1694,8 @@ def memory_status(vault: Path) -> dict:
             "max_words": hot_max_words(),
             "over_budget": content_words(hot_text) > hot_max_words(),
             "generated": bool(hot_values.get("generated_by")),
+            "takeaways": _section_body(hot_text, "Key Takeaways"),
+            "takeaways_sha256": _takeaways_revision(hot_text),
         },
         "migrated": is_adopted(vault) or (is_generated(vault / "index.md") and is_generated(hot)),
         "profile_facts": len(load_profile(vault)),
@@ -1673,3 +1705,52 @@ def memory_status(vault: Path) -> dict:
             "closed": sum(1 for t in todos if t.status != "open"),
         },
     }
+
+
+def sync_memory(vault: Path, verb: Optional[str] = None, fields: Optional[dict] = None, *,
+                takeaways: Optional[str] = None, expected_takeaways_sha256: Optional[str] = None,
+                link_format: str = "wikilink", max_words: Optional[int] = None,
+                operation_id: Optional[str] = None, check: bool = False) -> dict:
+    """Validate under memory_lock; commit log/index/hot with rollback/recovery."""
+    from .memory_transaction import commit
+    vault = _require_vault(vault)
+    lock = advisory_lock(vault / MEMORY_LOCK_NAME) if check else memory_lock(vault)
+    with lock:
+        if check and (vault / ".memory-transaction.json").exists():
+            raise MemoryError_("memory_recovery_required", "pending transaction; let an official writer recover before preview")
+        fields = dict(fields or {})
+        if {"memory_operation_id", "memory_request_sha256"} & fields.keys():
+            raise MemoryError_("memory_reserved_field", "memory operation fields are reserved")
+        request_hash = hashlib.sha256(json.dumps(
+            [verb, fields, takeaways, expected_takeaways_sha256, link_format, max_words],
+            sort_keys=True).encode()).hexdigest()
+        if operation_id is not None:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,63}", operation_id) or not verb:
+                raise MemoryError_("memory_operation_invalid", "operation ID requires a verb and 1-64 safe characters")
+            for entry in read_log(vault):
+                if entry.fields.get("memory_operation_id") == operation_id:
+                    if entry.fields.get("memory_request_sha256") != request_hash:
+                        raise MemoryError_("memory_operation_conflict", "operation ID belongs to another request")
+                    return {"line": entry.raw, "index": None, "hot": None, "skipped": "", "already_applied": True}
+            fields.update(memory_operation_id=operation_id, memory_request_sha256=request_hash)
+        line = format_log_line(verb, fields, timestamp=now_stamp(vault)) if verb else ""
+        for name in ("index.md", "hot.md"):
+            if not (is_adopted(vault) or is_generated(vault / name)):
+                if takeaways is not None or expected_takeaways_sha256 is not None:
+                    raise MemoryError_("unmigrated", "run memory migrate before replacing curated takeaways")
+                if verb and not check:
+                    append_log(vault, verb, fields, lock=False)
+                return {"line": line, "index": None, "hot": None,
+                        "skipped": "unmigrated memory: run memory migrate", "already_applied": False}
+        index = rebuild_index(vault, write=False, lock=False, link_format=link_format)
+        hot = build_hot(vault, takeaways=takeaways, expected_takeaways_sha256=expected_takeaways_sha256,
+                        pending_log_line=line, link_format=link_format, max_words=max_words)
+        path = vault / "log.md"
+        old_log = path.read_text(encoding="utf-8") if path.exists() else None
+        log = old_log if old_log is not None else chr(10).join(['---', 'title: Wiki Log', '---', '', '# Wiki Log', '', ''])
+        if line:
+            log += ("" if not log or log.endswith(chr(10)) else chr(10)) + line + chr(10)
+        if not check:
+            commit(vault, {"log.md": log if line or old_log is not None else None,
+                           "index.md": index.text, "hot.md": hot.text})
+        return {"line": line, "index": index, "hot": hot, "skipped": "", "already_applied": False}

@@ -266,7 +266,7 @@ One locked call updates the index, the log, and the hot cache:
 obsidian-wiki memory sync WIKI_RESEARCH \
   topic="<topic>" rounds=<N> sources_fetched=<N> \
   pages_created=<M> backends_used="<name,...|none>" \
-  --takeaways "<the research topic and its core finding, in one line>"
+  --takeaways "<the research topic and its core finding, in one line>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Do **not** list every page you created in a log field — `memory sync` reconciles the index from disk, and a huge field only crowds the hot cache. If the research is ongoing, record it: `obsidian-wiki memory todo add "<open question>" --origin synthesis/<page>.md`.
@@ -320,3 +320,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

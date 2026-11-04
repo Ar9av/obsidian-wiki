@@ -395,7 +395,7 @@ obsidian-wiki memory sync INGEST source=papers/attention.pdf pages_created=3
 # Individually, when that is all you need.
 obsidian-wiki memory log LINT issues_found=2 orphans=1
 obsidian-wiki memory index
-obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric."
+obsidian-wiki memory hot --takeaways "Retrieval is lexical; precision is the weak metric." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 
 obsidian-wiki memory status --json
 ```
@@ -648,3 +648,7 @@ and medium vaults never accumulate one. It is bounded to the 3 most recent keys,
 atomically (safe under concurrent runs), and ignored if corrupt — deleting it is always
 safe. Running `graph-analyse` warms the same cache that `graph-query` reads, so a nightly
 `daily-update` removes the first-query cost entirely.
+
+## Memory preservation compatibility
+
+Existing takeaway replacements require --expect-takeaways-sha256 from hot.takeaways_sha256 in memory status --json. Overflow rejects before mutation. Optional sync --operation-id makes identical retries no-ops. See [memory contracts and recovery](memory.md#durable-takeaways-fail-closed-update-contract). Mechanical carry-forward needs no flags.
