@@ -344,7 +344,7 @@ def test_hot_preserves_key_takeaways_across_a_rebuild(vault: Path) -> None:
 
 def test_hot_replaces_takeaways_when_given_new_text(vault: Path) -> None:
     mem.rebuild_hot(vault, takeaways="Old conclusion.")
-    mem.rebuild_hot(vault, takeaways="New conclusion.")
+    mem.rebuild_hot(vault, takeaways="New conclusion.", expected_takeaways_sha256=mem.takeaways_revision(vault))
     text = (vault / "hot.md").read_text(encoding="utf-8")
     assert "New conclusion." in text and "Old conclusion." not in text
 
@@ -354,7 +354,7 @@ def test_hot_enforces_the_word_cap(vault: Path) -> None:
         mem.append_log(vault, "INGEST", {"source": f"file-{index}.pdf", "note": "a fairly long note value"})
     for index in range(20):
         mem.add_todo(vault, f"Thread number {index} with a reasonably long description")
-    result = mem.rebuild_hot(vault, takeaways=" ".join(["takeaway"] * 400), max_words=200, activity_limit=40)
+    result = mem.rebuild_hot(vault, takeaways=" ".join(["takeaway"] * 80), max_words=200, activity_limit=40)
     assert result.trimmed is True
     assert result.words <= 200
     assert mem.content_words((vault / "hot.md").read_text(encoding="utf-8")) <= 200

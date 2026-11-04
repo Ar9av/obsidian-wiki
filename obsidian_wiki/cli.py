@@ -2563,6 +2563,10 @@ def cmd_memory(args: argparse.Namespace) -> int:
 
     try:
         action = args.memory_action
+        if args.operation_id and action != "sync":
+            raise ValueError("--operation-id is supported only by memory sync")
+        if args.expect_takeaways_sha256 and action not in ("hot", "sync"):
+            raise ValueError("--expect-takeaways-sha256 is supported only by memory hot/sync")
 
         if action == "status":
             status = mem.memory_status(vault)
@@ -2668,6 +2672,7 @@ def cmd_memory(args: argparse.Namespace) -> int:
                 vault,
                 write=not args.check,
                 takeaways=_memory_takeaways(args.takeaways),
+                expected_takeaways_sha256=args.expect_takeaways_sha256,
                 link_format=link_format,
                 max_words=args.max_words,
             )
@@ -2706,28 +2711,17 @@ def cmd_memory(args: argparse.Namespace) -> int:
             verb, fields = _verb_and_fields(rest, args.verb, args.field)
             index = hot = None
             skipped = ""
-            with mem.memory_lock(vault):
-                line = mem.append_log(vault, verb, fields, lock=False) if verb else ""
-                try:
-                    index = mem.rebuild_index(vault, link_format=link_format, lock=False)
-                    hot = mem.rebuild_hot(
-                        vault,
-                        lock=False,
-                        takeaways=_memory_takeaways(args.takeaways),
-                        link_format=link_format,
-                        max_words=args.max_words,
-                    )
-                except mem.MemoryError_ as exc:
-                    # An unmigrated vault must not fail the whole ingest: the
-                    # log line already landed and is append-only. Say so loudly
-                    # instead, so it is not silently skipped forever.
-                    if exc.code != "unmigrated":
-                        raise
-                    skipped = str(exc)
+            synced = mem.sync_memory(
+                vault, verb, fields, takeaways=_memory_takeaways(args.takeaways),
+                expected_takeaways_sha256=args.expect_takeaways_sha256,
+                link_format=link_format, max_words=args.max_words, operation_id=args.operation_id, check=args.check,
+            )
+            line, index, hot, skipped = (synced[k] for k in ("line", "index", "hot", "skipped"))
             if skipped:
                 print(f"warning: index.md and hot.md not updated — {skipped}", file=sys.stderr)
             payload = {
                 "log_line": line,
+                "already_applied": synced["already_applied"],
                 "skipped": skipped,
                 "index": None if index is None else {
                     "total": index.total, "added": list(index.added), "removed": list(index.removed),
@@ -2738,6 +2732,8 @@ def cmd_memory(args: argparse.Namespace) -> int:
             if index is not None and hot is not None:
                 lines.append(f"index: {index.total} page(s), +{len(index.added)} / -{len(index.removed)}")
                 lines.append(f"hot:   {hot.words} words" + (" (trimmed)" if hot.trimmed else ""))
+            elif synced["already_applied"]:
+                lines.append("memory operation already applied; no writes")
             else:
                 lines.append("index/hot: skipped (run `obsidian-wiki memory migrate`)")
             return emit(payload, lines)
@@ -3459,8 +3455,10 @@ need quoting: query="how do transformers work".""",
     mm_write = mm.add_argument_group("sync / hot")
     mm_write.add_argument(
         "--takeaways",
-        help="replace the Key Takeaways section; `-` reads it from stdin",
+        help="replace Key Takeaways (existing prose requires --expect-takeaways-sha256); `-` reads it from stdin",
     )
+    mm_write.add_argument("--expect-takeaways-sha256", help="current hot.takeaways_sha256 from memory status --json")
+    mm_write.add_argument("--operation-id", help="sync only: stable retry identity (same request is a no-op)")
     mm_write.add_argument("--max-words", type=int, help="word cap for hot/recap (default: OBSIDIAN_HOT_MAX_WORDS or 500)")
     mm_write.add_argument("--check", action="store_true", help="report drift and exit 2 without writing (CI gate)")
 

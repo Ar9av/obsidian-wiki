@@ -320,7 +320,7 @@ obsidian-wiki memory sync COPILOT_HISTORY_INGEST \
   projects=<projects> sessions=<sessions> checkpoints=<checkpoints> \
   pages_updated=<pages_updated> pages_created=<pages_created> \
   mode=<mode> \
-  --takeaways "Ingested 5 Copilot sessions across 2 projects; surfaced patterns in API design and testing strategy."
+  --takeaways "Ingested 5 Copilot sessions across 2 projects; surfaced patterns in API design and testing strategy." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update. `--takeaways` is the one-line conceptual summary that used to go in Recent Activity;
@@ -377,3 +377,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

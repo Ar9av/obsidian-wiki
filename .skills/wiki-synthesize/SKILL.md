@@ -151,7 +151,7 @@ One locked call updates the index, the log, and the hot cache:
 ```bash
 obsidian-wiki memory sync WIKI_SYNTHESIZE \
   pages_scanned=<N> synthesis_created=<M> candidates_skipped=<K> \
-  --takeaways "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …"
+  --takeaways "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Open questions the synthesis surfaced are threads, not takeaways — record each one:
@@ -212,3 +212,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

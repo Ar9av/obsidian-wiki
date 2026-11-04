@@ -252,3 +252,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

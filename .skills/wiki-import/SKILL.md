@@ -236,7 +236,7 @@ One locked call. The index is reconciled from the pages now on disk, so every cr
 obsidian-wiki memory sync IMPORT \
   source="<bundle path>" \
   pages_created=<N> pages_skipped=<K> pages_merged=<M> \
-  --takeaways "Imported <bundle>: <what it adds to the picture>"
+  --takeaways "Imported <bundle>: <what it adds to the picture>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Omit `--takeaways` if the import does not shift the overall picture; the previous takeaways carry across. Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
@@ -263,3 +263,5 @@ Only show the `Skipped` line if `skip` mode was explicitly requested. If `overwr
 - **Directory creation**: Always create missing category directories before writing pages.
 - **Broken wikilinks**: Since pages are being created together from the same export, most links will resolve. Any node referenced in `links` but absent from `nodes` (broken in the original export) will still appear as a wikilink — it just won't have a corresponding page file, which is valid.
 - **Filtered exports**: If the source `graph.json` was produced with visibility filtering (noted in `graph.metadata`), imported pages will only reflect the filtered set. Note this in the summary if `graph.graph` contains a `filtered` key.
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

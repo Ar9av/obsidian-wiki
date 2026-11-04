@@ -496,7 +496,7 @@ If the manifest doesn't exist yet, create it with `version: 1`.
 obsidian-wiki memory sync INGEST source="path/to/source" \
   pages_created=N pages_updated=M \
   mode=append \
-  --takeaways "Fowler's decomposition argument now anchors the microservices cluster."
+  --takeaways "Fowler's decomposition argument now anchors the microservices cluster." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 This appends the log line, reconciles `index.md` against the pages on disk, and
@@ -574,3 +574,5 @@ After ingesting, verify:
 ## Reference
 
 Read `references/ingest-prompts.md` for the LLM prompt templates used during extraction.
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

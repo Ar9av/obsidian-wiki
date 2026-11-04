@@ -169,7 +169,7 @@ One locked call updates the log, the index (tags appear in index entries), and t
 # audit
 obsidian-wiki memory sync TAG_AUDIT \
   tags_normalized=<N> unknown_tags=<M> pages_modified=<P> \
-  --takeaways "Tag audit: normalized 14 tags across 28 pages; 2 new canonical tags added."
+  --takeaways "Tag audit: normalized 14 tags across 28 pages; 2 new canonical tags added." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 
 # normalization
 obsidian-wiki memory sync TAG_NORMALIZE \
@@ -214,3 +214,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.
