@@ -350,6 +350,7 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         "slug": _slug(path.stem),
         "title": values.get("title", "").strip() or path.stem,
         "summary": values.get("summary", "").strip(),
+        "redirects_to": values.get("redirects_to", "").strip(),
         "fields": fields,
         "links": links,
         "relationships": _parse_relationships(frontmatter),
@@ -437,11 +438,18 @@ def lint_vault(
     # `Vector Search.md` beside `vector-search.md` still share one, since
     # nothing distinguishes them. Key this check with the graph's own page
     # selection so it reports exactly the pages the graph sees.
+    # Redirect stubs (wiki-dedup): a merged page keeps the secondary page's
+    # title and filename so old links stay usable, but it is not a content
+    # page. Stub paths are excluded from the duplicate checks below, and the
+    # pointers themselves are validated further down instead.
+    stub_paths = {page["path"] for page in pages if page["redirects_to"]}
+
     stem_index: dict[str, list[str]] = defaultdict(list)
     for graph_page in iter_graph_pages(vault):
-        stem_index[graph_page_slug(graph_page, vault)].append(
-            graph_page.relative_to(vault).as_posix()
-        )
+        graph_rel = graph_page.relative_to(vault).as_posix()
+        if graph_rel in stub_paths:
+            continue
+        stem_index[graph_page_slug(graph_page, vault)].append(graph_rel)
     duplicate_stems = [
         {"stem": stem, "pages": sorted(paths)}
         for stem, paths in sorted(stem_index.items())
@@ -450,6 +458,8 @@ def lint_vault(
 
     title_index: dict[str, list[str]] = defaultdict(list)
     for page in pages:
+        if page["path"] in stub_paths:
+            continue
         title_index[page["title"].strip().lower()].append(page["path"])
     duplicate_titles = [
         {"title": title, "pages": paths}
@@ -646,6 +656,29 @@ def lint_vault(
                 {"page": page["path"], "target": successor, "issue": "missing_target"}
             )
 
+    # Redirect pointers get the same treatment as `superseded_by`: a stub
+    # whose target is gone strands every old link that relied on it, and a
+    # stub pointing at another stub (or itself) never reaches content.
+    redirect_issues: list[dict[str, str]] = []
+    pages_by_id = {page["id"]: page for page in pages}
+    for page in pages:
+        if page["path"] not in stub_paths:
+            continue
+        target = _relationship_link(page["redirects_to"])
+        resolved_redirect = page_index.resolve(target, page["path"]) if target else None
+        if resolved_redirect is None:
+            redirect_issues.append(
+                {"page": page["path"], "target": target, "issue": "missing_target"}
+            )
+        elif resolved_redirect == page["id"]:
+            redirect_issues.append(
+                {"page": page["path"], "target": target, "issue": "self_reference"}
+            )
+        elif pages_by_id[resolved_redirect]["path"] in stub_paths:
+            redirect_issues.append(
+                {"page": page["path"], "target": target, "issue": "redirect_chain"}
+            )
+
     ledger_path = vault / TRUST_LEDGER_RELATIVE_PATH
     trust_report = (
         check_trust_ledger(
@@ -684,6 +717,7 @@ def lint_vault(
         # Sorted by page: these findings get diffed between CI runs.
         "temporal_errors": sorted(temporal_errors, key=lambda item: item["page"]),
         "superseded_dangling": sorted(superseded_dangling, key=lambda item: item["page"]),
+        "redirect_issues": sorted(redirect_issues, key=lambda item: item["page"]),
         "confidence_missing_fields": confidence_missing_fields,
         "trust_metadata_errors": trust_metadata_errors,
         "confidence_review_stale": trust_report["stale"] if trust_report else [],
@@ -741,6 +775,7 @@ def lint_vault(
                 "undated_claims",
                 "typed_relationship_issues",
                 "superseded_dangling",
+                "redirect_issues",
             )
         )
         or trust_findings_present
