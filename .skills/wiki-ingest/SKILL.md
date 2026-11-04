@@ -407,6 +407,7 @@ For each page in your plan:
 - Place in the correct category directory
 - Add `[[wikilinks]]` to at least 2-3 existing pages
 - Include the origin in the `sources` frontmatter field **and** a bottom **Sources** section (see Raw Mode snapshot provenance). YAML `sources:` is origin keys (`url:`, `agent:`, …), not the archive path. File/raw ingest: `snapshots set` (YAML `"[[_raw/_archived/stem|stem]]"`) plus `[[_raw/_archived/…]]` in the body. Live URL only if this ingest fetched the web with no snapshot.
+- Set `valid_from:` (`YYYY-MM-DD`) from the source's own date when it has one — see *Event time from the source* below.
 
 **If updating an existing page:**
 - Read the current page first
@@ -414,6 +415,14 @@ For each page in your plan:
 - Update the `updated` timestamp in frontmatter
 - Add the new origin to the `sources` list and to the bottom **Sources** section (same snapshot-vs-URL rules as create)
 - Resolve any contradictions between old and new information (note them if unresolvable)
+- If the page already has `valid_from:` and this source's own date is earlier, lower it to that date. Never add `valid_from:` to a page that has none, and never raise one.
+
+**Event time from the source.** `created`/`updated` are ingestion time and always come from `obsidian-wiki memory now`. The date the knowledge itself dates from goes in `valid_from:` (event time, read by `query --as-of`; see `docs/cli.md`). Take it from the source, in this order, and stop at the first hit:
+1. The source's frontmatter `created:` or `date:` (a `_raw/` note keeps its capture date here)
+2. A leading ISO date in the filename (`2026-03-14-slug.md`, as `wiki-capture` writes)
+3. A dated origin such as `conversation:2026-03-14` or `"<project> session (2026-03-14)"`
+
+Never use file mtime — it changes on copy and sync. Never write a date later than today (`obsidian-wiki memory now --date`): a future `valid_from` hides the page from current queries. If no date is found, omit `valid_from:`; the page is then current, as before. Don't set `valid_until:` from ingest — only a later source that supersedes the claim can say when it stopped being true.
 
 **Populate `relationships:` when context is clear** — if Step 2 identified typed relationships between this page and another, add a `relationships:` block to the frontmatter (defined in `llm-wiki/SKILL.md`, Typed Relationships section). Only add entries where the source text makes the direction and type unambiguous. When in doubt, use `related_to` or omit the block. Example:
 

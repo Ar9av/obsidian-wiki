@@ -187,6 +187,12 @@ valid_until: 2026-03-31           # inclusive: the last day the claim held
 superseded_by: "[[gateway-envoy]]"
 ```
 
+`wiki-ingest` sets `valid_from` when the source carries its own date (its frontmatter
+`created:`/`date:`, a leading ISO date in the filename, or a dated origin like
+`conversation:2026-03-14`), so a `_raw/` note captured in March keeps March as its
+event date even when it is ingested in November. Sources without a date get no
+`valid_from`. Ingest never sets `valid_until`.
+
 A page whose `valid_until` has passed is **historical**, not wrong. It stays in the
 vault and stays in the graph — only retrieval skips it, so the same question gets
 different answers depending on when you ask:
