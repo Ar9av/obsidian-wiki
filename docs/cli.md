@@ -18,6 +18,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | `info` | Show install paths, version, and resolved config |
 | `list` | List the bundled skills |
 | `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
+| `mcp` | Serve the vault's memory tools over stdio for an agent to launch; needs the `[server]` extra (see [Deployment](deployment.md#connect-an-agent-mcp)) |
 
 ```bash
 obsidian-wiki setup --vault ~/brain

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RawPromotionDocsTest(unittest.TestCase):
     def test_docs_and_skill_both_archive_promoted_raw_files(self) -> None:
-        skill = (ROOT / ".skills/wiki-ingest/SKILL.md").read_text(encoding="utf-8")
+        skill = (ROOT / "skills/wiki-ingest/SKILL.md").read_text(encoding="utf-8")
         docs = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
         self.assertIn("_raw/_archived/", skill)
         self.assertIn("_raw/_archived/", docs)

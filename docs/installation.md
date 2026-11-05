@@ -55,7 +55,7 @@ The fastest path — no commands required. Give your agent this repo and say:
 https://github.com/Ar9av/obsidian-wiki — set up my wiki
 ```
 
-The agent reads [`.skills/wiki-setup/SKILL.md`](../.skills/wiki-setup/SKILL.md) from the repo, asks where you want your vault to live, and initializes the full structure: directories, index, log, Obsidian config, and an optional auto-capture hook. The skill *is* the setup guide.
+The agent reads [`skills/wiki-setup/SKILL.md`](../skills/wiki-setup/SKILL.md) from the repo, asks where you want your vault to live, and initializes the full structure: directories, index, log, Obsidian config, and an optional auto-capture hook. The skill *is* the setup guide.
 
 This works in any agent that can read files (Claude Code, Cursor, Windsurf, Codex, Gemini CLI, Kiro, and more). After setup, every wiki skill is available immediately.
 
@@ -118,7 +118,17 @@ What's different:
 - **Skills are namespaced.** Slash commands become `/obsidian-wiki:wiki-ingest`, `/obsidian-wiki:wiki-query`, and so on. Plain-language requests ("ingest this folder") route the same way they always do.
 - **Skills only.** The plugin doesn't register the session hooks or put the `obsidian-wiki` CLI on your `PATH`. For those, install with pip as well and run `obsidian-wiki setup`.
 - **Updates follow the repo.** The plugin has no pinned version, so it tracks the latest commit on `main`: run `claude plugin marketplace update obsidian-wiki`, then `claude plugin update obsidian-wiki@obsidian-wiki`, and restart Claude Code.
-- **Claude Code only.** Other agents need one of the paths above.
+## Install as a plugin in other agents
+
+The same manifest works as a plugin for agents that read Claude Code marketplaces. Each gets all the skills from `skills/`:
+
+| Agent | Install |
+|---|---|
+| Codex | `codex plugin marketplace add Ar9av/obsidian-wiki`, then `codex plugin add obsidian-wiki@obsidian-wiki` |
+| Qwen Code | `qwen extensions install https://github.com/Ar9av/obsidian-wiki:obsidian-wiki` |
+| Cursor | Add `https://github.com/Ar9av/obsidian-wiki` as a plugin marketplace, then install `obsidian-wiki` |
+
+The same caveats apply: skills only, no hooks or CLI. Agents not listed here need one of the paths above.
 
 ## Install via Skills CLI (deprecated)
 

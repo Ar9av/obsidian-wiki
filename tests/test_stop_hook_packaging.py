@@ -52,7 +52,7 @@ class StopHookPackagingTest(unittest.TestCase):
 
 class WikiSetupSkillTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.skill = (ROOT / ".skills" / "wiki-setup" / "SKILL.md").read_text()
+        self.skill = (ROOT / "skills" / "wiki-setup" / "SKILL.md").read_text()
 
     def test_skill_points_at_packaged_hook_path(self) -> None:
         # Must reference the packaged layout, not only the source-checkout path.

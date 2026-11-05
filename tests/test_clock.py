@@ -268,7 +268,7 @@ class TestDocs:
     def test_the_knob_and_the_command_are_documented(self) -> None:
         memory_doc = (ROOT / "docs" / "memory.md").read_text(encoding="utf-8")
         cli_doc = (ROOT / "docs" / "cli.md").read_text(encoding="utf-8")
-        reference = (ROOT / ".skills" / "llm-wiki" / "references" / "MEMORY.md").read_text(encoding="utf-8")
+        reference = (ROOT / "skills" / "llm-wiki" / "references" / "MEMORY.md").read_text(encoding="utf-8")
         agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         for text, name in ((memory_doc, "docs/memory.md"), (cli_doc, "docs/cli.md"), (reference, "MEMORY.md")):
             assert "timezone:" in text, f"{name} does not name the timezone key"

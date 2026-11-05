@@ -23,7 +23,7 @@ except ModuleNotFoundError:  # Python < 3.11
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS_DIR = ROOT / "scripts"
 PACKAGED_SCRIPTS_DEST = "obsidian_wiki/_data/scripts"
-WRITING_PROFILE_TEMPLATE = ROOT / ".skills" / "llm-wiki" / "references" / "WRITING.md"
+WRITING_PROFILE_TEMPLATE = ROOT / "skills" / "llm-wiki" / "references" / "WRITING.md"
 
 REFERENCED_SCRIPTS = (
     "daily-update.sh",
@@ -61,7 +61,7 @@ class ScriptsPackagingTest(unittest.TestCase):
 
     def test_wheel_force_includes_skills_tree(self) -> None:
         mapping = self.pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
-        self.assertEqual(mapping.get(".skills"), "obsidian_wiki/_data/skills")
+        self.assertEqual(mapping.get("skills"), "obsidian_wiki/_data/skills")
 
     def test_scripts_dir_not_excluded_from_sdist(self) -> None:
         # Unlike /.claude, scripts/ isn't pruned, so the default VCS-tracked
@@ -81,7 +81,7 @@ class ScriptsPackagingTest(unittest.TestCase):
 
 class DailyUpdateSkillTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.skill = (ROOT / ".skills" / "daily-update" / "SKILL.md").read_text()
+        self.skill = (ROOT / "skills" / "daily-update" / "SKILL.md").read_text()
 
     def test_skill_resolves_scripts_via_repo_var(self) -> None:
         for name in REFERENCED_SCRIPTS:

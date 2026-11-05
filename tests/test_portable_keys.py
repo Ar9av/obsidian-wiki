@@ -1,6 +1,6 @@
 """Unit tests for the portable source key contract (v2).
 
-The contract is defined in ``.skills/llm-wiki/SKILL.md``: a stored key is
+The contract is defined in ``skills/llm-wiki/SKILL.md``: a stored key is
 vault-relative, home-relative (``~``), or a namespaced pseudo-key — never a bare
 machine absolute path. These tests pin the resolution and normalization rules
 that back it.

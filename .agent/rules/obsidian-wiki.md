@@ -11,7 +11,7 @@ This project is a **skill-based framework** for building and maintaining an Obsi
 
 1. Resolve config via `AGENTS.md`: honor an inline `@name` vault override first, then `.env`, then the global config (`~/.config/obsidian-wiki/config`, XDG-style; legacy `~/.obsidian-wiki/config` still honored). This gives `OBSIDIAN_VAULT_PATH` — where the wiki lives.
 2. Read `.manifest.json` at the vault root to see what's already been ingested.
-3. Skills are in `.skills/` (also at `.agents/skills/`). Each subfolder has a `SKILL.md`.
+3. Skills are in `skills/` (also at `.agents/skills/`). Each subfolder has a `SKILL.md`.
 
 ## When to Use Skills
 

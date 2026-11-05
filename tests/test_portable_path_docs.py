@@ -1,6 +1,6 @@
 """Structural doc checks for the portable source key contract (v2).
 
-The contract lives in ``.skills/llm-wiki/SKILL.md``. Only structural facts are
+The contract lives in ``skills/llm-wiki/SKILL.md``. Only structural facts are
 pinned here — that the contract section exists, that the CLI surface it adds is
 documented, and that the manifest example is genuinely portable. Wording is not
 asserted: prose can be rephrased without breaking the contract.
@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SKILLS_DIR = REPO_ROOT / ".skills"
+SKILLS_DIR = REPO_ROOT / "skills"
 
 
 def test_skill_files_exist() -> None:
