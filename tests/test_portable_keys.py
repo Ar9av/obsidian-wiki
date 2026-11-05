@@ -46,9 +46,10 @@ class TestResolveKey:
     def test_home_relative_expands(self, vault, home):
         assert resolve_key("~/.claude/x.jsonl", vault) == home / ".claude" / "x.jsonl"
 
-    def test_env_var_expands(self, vault, monkeypatch):
-        monkeypatch.setenv("WIKI_TEST_ROOT", "/srv/docs")
-        assert resolve_key("$WIKI_TEST_ROOT/a.md", vault) == vault.__class__("/srv/docs/a.md")
+    def test_env_var_expands(self, vault, monkeypatch, tmp_path):
+        # An absolute root: "/srv/docs" has no drive, so it is not absolute on Windows.
+        monkeypatch.setenv("WIKI_TEST_ROOT", str(tmp_path / "docs"))
+        assert resolve_key("$WIKI_TEST_ROOT/a.md", vault) == tmp_path / "docs" / "a.md"
 
     def test_absolute_used_as_is(self, vault, tmp_path):
         abs_path = tmp_path / "outside" / "a.md"

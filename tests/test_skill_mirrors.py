@@ -40,7 +40,9 @@ class SkillMirrorsTest(unittest.TestCase):
         for mirror in MIRRORS:
             for link in (ROOT / mirror / "skills").iterdir():
                 if link.is_symlink():
-                    self.assertEqual(os.readlink(link), f"../../skills/{link.name}", str(link))
+                    # Windows reports the link target with its own separator.
+                    target = os.readlink(link).replace(os.sep, "/")
+                    self.assertEqual(target, f"../../skills/{link.name}", str(link))
 
 
 if __name__ == "__main__":

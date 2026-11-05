@@ -37,7 +37,7 @@ REFERENCED_SCRIPTS = (
 @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
 class ScriptsPackagingTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     def test_referenced_scripts_exist(self) -> None:
         for name in REFERENCED_SCRIPTS:
@@ -54,7 +54,7 @@ class ScriptsPackagingTest(unittest.TestCase):
 
     def test_writing_profile_template_exists(self) -> None:
         self.assertTrue(WRITING_PROFILE_TEMPLATE.is_file())
-        body = WRITING_PROFILE_TEMPLATE.read_text()
+        body = WRITING_PROFILE_TEMPLATE.read_text(encoding="utf-8")
         self.assertIn("# Wiki Writing Profile", body)
         self.assertIn("## Language", body)
         self.assertIn("## Conditional Rules", body)
@@ -81,7 +81,7 @@ class ScriptsPackagingTest(unittest.TestCase):
 
 class DailyUpdateSkillTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.skill = (ROOT / "skills" / "daily-update" / "SKILL.md").read_text()
+        self.skill = (ROOT / "skills" / "daily-update" / "SKILL.md").read_text(encoding="utf-8")
 
     def test_skill_resolves_scripts_via_repo_var(self) -> None:
         for name in REFERENCED_SCRIPTS:

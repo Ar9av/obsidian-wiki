@@ -28,14 +28,14 @@ REQUIRED_SKILLS = (
 
 
 def test_llm_wiki_defines_writing_profile_resolution() -> None:
-    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text()
+    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
     assert CONTRACT in body
     assert "WRITING.md" in body
     assert "AGENTS.md" in body
 
 
 def test_llm_wiki_defines_exact_precedence_and_inheritance() -> None:
-    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text()
+    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
     assert (
         "framework invariants > current task/skill requirements > current project "
         "`AGENTS.md` > vault `AGENTS.md` > global `WRITING.md`"
@@ -45,7 +45,7 @@ def test_llm_wiki_defines_exact_precedence_and_inheritance() -> None:
 
 
 def test_llm_wiki_scopes_frontmatter_and_structured_content() -> None:
-    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text()
+    body = (ROOT / "skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
     assert "natural-language title and summary values in YAML frontmatter" in body
     assert (
         "cannot alter YAML syntax, required keys, structure, types, or machine-generated fields"
@@ -54,7 +54,7 @@ def test_llm_wiki_scopes_frontmatter_and_structured_content() -> None:
 
 
 def test_wiki_setup_resolves_global_path_and_template_without_repo_config() -> None:
-    body = (ROOT / "skills" / "wiki-setup" / "SKILL.md").read_text()
+    body = (ROOT / "skills" / "wiki-setup" / "SKILL.md").read_text(encoding="utf-8")
     assert 'GLOBAL_CONFIG_DIR="$(obsidian_wiki_config_dir)"' in body
     assert 'SKILL_FILE="<absolute path of this loaded wiki-setup/SKILL.md>"' in body
     assert 'if [ -n "${OBSIDIAN_WIKI_REPO:-}" ]; then' in body
@@ -65,7 +65,7 @@ def test_wiki_setup_resolves_global_path_and_template_without_repo_config() -> N
 
 
 def test_wiki_capture_applies_profile_before_every_mode() -> None:
-    body = (ROOT / "skills" / "wiki-capture" / "SKILL.md").read_text()
+    body = (ROOT / "skills" / "wiki-capture" / "SKILL.md").read_text(encoding="utf-8")
     hook = body.index("**Writing profile:**")
     for heading in (
         "## Quick Mode (`--quick`)",
@@ -77,6 +77,6 @@ def test_wiki_capture_applies_profile_before_every_mode() -> None:
 
 def test_every_current_prose_writer_references_the_contract() -> None:
     for skill in REQUIRED_SKILLS:
-        body = (ROOT / "skills" / skill / "SKILL.md").read_text()
+        body = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
         assert CONTRACT in body, skill
         assert "WRITING.md" in body, skill

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class InlineVaultTargetingDocsTest(unittest.TestCase):
     def read(self, relpath: str) -> str:
-        return (ROOT / relpath).read_text()
+        return (ROOT / relpath).read_text(encoding="utf-8")
 
     def test_central_protocol_documents_inline_override_before_fallbacks(self) -> None:
         llm_wiki = self.read("skills/llm-wiki/SKILL.md")
@@ -23,7 +23,7 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
     def test_skill_resolution_summaries_include_inline_override(self) -> None:
         stale = []
         for skill_file in sorted((ROOT / "skills").glob("*/SKILL.md")):
-            text = skill_file.read_text()
+            text = skill_file.read_text(encoding="utf-8")
             if "follow the Config Resolution Protocol" not in text:
                 continue
             if "walk up CWD for `.env`" in text and "inline `@name` override" not in text:

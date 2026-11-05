@@ -827,7 +827,7 @@ def test_schema_config_is_scoped_to_explicit_cwd_and_named_vaults(tmp_path: Path
 
 
 def test_correction_contract_requires_temporal_authority_and_immutable_hash_check(tmp_path: Path) -> None:
-    skill = (Path(__file__).parents[1] / "skills" / "wiki-capture" / "SKILL.md").read_text()
+    skill = (Path(__file__).parents[1] / "skills" / "wiki-capture" / "SKILL.md").read_text(encoding="utf-8")
     for field in (
         "authority_class:",
         "verification_state:",

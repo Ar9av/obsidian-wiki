@@ -12,6 +12,7 @@ projects, a fake codegraph CLI binary, and .codegraph index state.
 from __future__ import annotations
 
 import json
+import ntpath
 import os
 import stat
 import subprocess
@@ -37,6 +38,31 @@ def _pin_subprocess_imports_to_this_checkout() -> None:
     os.environ["PYTHONPATH"] = os.pathsep.join(
         [str(REPO_ROOT), *([p] if (p := os.environ.get("PYTHONPATH")) else [])]
     )
+
+
+if os.name == "nt":
+    # Tests fake the home directory through $HOME, the POSIX convention. Windows
+    # Python reads USERPROFILE instead, so honour HOME here: in this process
+    # through expanduser (which Path.home() uses), and in child processes by
+    # mirroring it into their USERPROFILE.
+    _real_expanduser = ntpath.expanduser
+    _real_popen_init = subprocess.Popen.__init__
+
+    def _home_aware_expanduser(path):
+        home = os.environ.get("HOME")
+        text = os.fspath(path)
+        if home and isinstance(text, str) and text[:1] == "~" and text[1:2] in ("", "/", "\\"):
+            return home + text[1:]
+        return _real_expanduser(path)
+
+    def _home_aware_popen_init(self, *args, env=None, **kwargs):
+        base = os.environ if env is None else env
+        if base.get("HOME"):
+            env = {**base, "USERPROFILE": base["HOME"]}
+        _real_popen_init(self, *args, env=env, **kwargs)
+
+    ntpath.expanduser = _home_aware_expanduser
+    subprocess.Popen.__init__ = _home_aware_popen_init
 
 
 def make_project(tmp_path: Path, files: dict[str, str], *, git: bool = True) -> Path:
@@ -66,6 +92,11 @@ def make_fake_codegraph_bin(tmp_path: Path) -> Path:
     dest = bin_dir / "codegraph"
     dest.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
     dest.chmod(dest.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    if os.name == "nt":
+        # Windows can't exec a shebang script; npm installs a .cmd shim instead.
+        shim = bin_dir / "codegraph.cmd"
+        shim.write_text(f'@"{sys.executable}" "%~dp0codegraph" %*\r\n', encoding="utf-8")
+        return shim
     return dest
 
 
