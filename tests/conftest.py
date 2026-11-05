@@ -65,6 +65,15 @@ if os.name == "nt":
     subprocess.Popen.__init__ = _home_aware_popen_init
 
 
+@pytest.fixture(autouse=True)
+def _home_outside_tmp_path(tmp_path_factory, monkeypatch) -> None:
+    """Windows keeps the temp dir inside the user's home, so every tmp_path is
+    "under $HOME" and home-relative behaviour leaks into unrelated tests. Point
+    HOME at a sibling of tmp_path, as on POSIX where /tmp is outside it."""
+    if os.name == "nt":
+        monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
+
+
 def make_project(tmp_path: Path, files: dict[str, str], *, git: bool = True) -> Path:
     """Write a mini source tree from files (relpath -> content) and, if git,
     commit it as an initial commit (needed for --since tests)."""

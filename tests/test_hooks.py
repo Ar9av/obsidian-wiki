@@ -165,6 +165,10 @@ def test_cli_status_exits_nonzero_until_installed(home: Path) -> None:
 
     after = subprocess.run([sys.executable, "-m", "obsidian_wiki.cli", "hooks", "status", "--json"],
                            capture_output=True, text=True, env=env)
+    if os.name == "nt" and not json.loads(after.stdout)["reachability"]["reachable"]:
+        # The hooks find the package via `obsidian-wiki` or `python3`; a source
+        # checkout on Windows has neither (python.org ships only python.exe).
+        pytest.skip("hooks cannot reach obsidian_wiki without python3 on Windows")
     assert after.returncode == 0, "an unregistered opt-in hook must not fail status"
     data = json.loads(after.stdout)
     assert all(entry["registered"] for entry in data["hooks"] if entry["event"] not in hk.OPT_IN)
