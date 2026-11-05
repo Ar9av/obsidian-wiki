@@ -76,7 +76,10 @@ def test_cli_hook_mode_reads_the_prompt_from_the_payload(vault: Path) -> None:
     assert garbage.returncode == 0 and garbage.stdout == ""
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+@pytest.mark.skipif(
+    os.name == "nt" or shutil.which("bash") is None,
+    reason="bash hooks are tested on POSIX; bash on Windows CI is the WSL stub, not Git Bash",
+)
 def test_the_hook_injects_on_a_match_and_is_silent_otherwise(vault: Path, tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

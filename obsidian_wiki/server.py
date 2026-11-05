@@ -489,7 +489,7 @@ def status() -> dict[str, Any]:
         "sources": sources,
         "recent_pages": [
             {
-                "path": str(p.relative_to(VAULT)),
+                "path": p.relative_to(VAULT).as_posix(),
                 "modified": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(),
             }
             for p in recent

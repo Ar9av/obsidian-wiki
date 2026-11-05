@@ -8,6 +8,7 @@ against a throwaway HOME.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -38,7 +39,9 @@ def test_both_hooks_are_bundled_and_executable() -> None:
     for _event, name in hk.HOOKS:
         script = hk.hook_script(name)
         assert script is not None, f"{name} not found in the package or checkout"
-        assert script.stat().st_mode & 0o111, f"{name} is not executable"
+        # Windows has no exec bit; the registered command runs `bash <script>`.
+        if os.name != "nt":
+            assert script.stat().st_mode & 0o111, f"{name} is not executable"
 
 
 def test_install_registers_both_hooks_on_a_fresh_home(home: Path) -> None:
@@ -162,6 +165,10 @@ def test_cli_status_exits_nonzero_until_installed(home: Path) -> None:
 
     after = subprocess.run([sys.executable, "-m", "obsidian_wiki.cli", "hooks", "status", "--json"],
                            capture_output=True, text=True, env=env)
+    if os.name == "nt" and not json.loads(after.stdout)["reachability"]["reachable"]:
+        # The hooks find the package via `obsidian-wiki` or `python3`; a source
+        # checkout on Windows has neither (python.org ships only python.exe).
+        pytest.skip("hooks cannot reach obsidian_wiki without python3 on Windows")
     assert after.returncode == 0, "an unregistered opt-in hook must not fail status"
     data = json.loads(after.stdout)
     assert all(entry["registered"] for entry in data["hooks"] if entry["event"] not in hk.OPT_IN)
@@ -220,7 +227,7 @@ def test_the_registered_command_pins_the_installing_interpreter(home: Path) -> N
     hk.install(home)
     command = _commands(home, "SessionStart")[0]
     assert command.startswith('PATH="')
-    assert str(Path(sys.executable).parent) in command
+    assert hk._git_bash_path(Path(sys.executable).parent) in command
 
 
 def test_the_pinned_path_is_not_symlink_resolved() -> None:
@@ -229,7 +236,7 @@ def test_the_pinned_path_is_not_symlink_resolved() -> None:
     bin_dir = hk._bin_dir()
     assert bin_dir == Path(sys.executable).parent
     command = hk._command_for(Path("/x/hook.sh"))
-    assert f'PATH="{Path(sys.executable).parent}:$PATH"' in command
+    assert f'PATH="{hk._git_bash_path(Path(sys.executable).parent)}:$PATH"' in command
 
 
 def test_reachability_searches_the_path_the_hook_will_get(home: Path) -> None:

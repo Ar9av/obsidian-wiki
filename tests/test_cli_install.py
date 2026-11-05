@@ -99,6 +99,8 @@ def test_install_skills_keeps_unrelated_symlink_errors(
 
     monkeypatch.setattr(cli, "skills_dir", lambda: source_root)
     monkeypatch.setattr(Path, "symlink_to", fail_symlink)
+    # An earlier install on a runner without symlink privilege leaves this set.
+    monkeypatch.setattr(cli, "_SYMLINK_FALLBACK", False)
 
     with pytest.raises(OSError, match="access denied"):
         cli.install_skills(tmp_path / "target-skills", "test")

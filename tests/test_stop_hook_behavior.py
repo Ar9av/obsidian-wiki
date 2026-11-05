@@ -57,7 +57,10 @@ _READONLY_BASH = [
 ]
 
 
-@unittest.skipIf(shutil.which("bash") is None, "requires bash")
+@unittest.skipIf(
+    os.name == "nt" or shutil.which("bash") is None,
+    "bash hooks are tested on POSIX; bash on Windows CI is the WSL stub, not Git Bash",
+)
 class StopHookBehaviorTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())

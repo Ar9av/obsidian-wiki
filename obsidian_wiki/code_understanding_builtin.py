@@ -131,7 +131,8 @@ class BuiltinProvider:
             path = obj.get("data", {}).get("path", {}).get("text", "")
             line = obj.get("data", {}).get("line_number")
             if path and isinstance(line, int):
-                matches.append((path, line))
+                # rg prints `src\foo.py` on Windows; focus-map files are POSIX.
+                matches.append((Path(path).as_posix(), line))
         return matches
 
     @staticmethod

@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class WikiNarrateDocsTest(unittest.TestCase):
     def read(self, relpath: str) -> str:
-        return (ROOT / relpath).read_text()
+        return (ROOT / relpath).read_text(encoding="utf-8")
 
     def test_skill_declares_the_canonical_command_and_voices(self) -> None:
         skill = self.read("skills/wiki-narrate/SKILL.md")

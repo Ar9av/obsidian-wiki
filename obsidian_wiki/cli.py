@@ -681,7 +681,7 @@ def _required_vault_paths(vault: Path) -> list[Path]:
 
 def _doctor_project_check(project_dir: Path) -> dict[str, str]:
     required = [project_dir / "AGENTS.md", *[project_dir / dest for _src, dest in BOOTSTRAP_FILES[1:]]]
-    missing = [str(path.relative_to(project_dir)) for path in required if not path.exists()]
+    missing = [path.relative_to(project_dir).as_posix() for path in required if not path.exists()]
     if missing:
         return {
             "status": "warn",
@@ -896,7 +896,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
     if vault is not None:
         if vault.is_dir():
             _doctor_add(checks, name="vault-path", status="pass", detail="vault directory exists", hint="")
-            missing_core = [str(path.relative_to(vault)) for path in _required_vault_paths(vault) if not path.exists()]
+            missing_core = [path.relative_to(vault).as_posix() for path in _required_vault_paths(vault) if not path.exists()]
             if missing_core:
                 _doctor_add(
                     checks,

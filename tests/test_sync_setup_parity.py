@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class SetupShDelegatesToCliTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.setup_sh = (ROOT / "setup.sh").read_text()
+        self.setup_sh = (ROOT / "setup.sh").read_text(encoding="utf-8")
 
     def test_calls_sync_setup_subcommand(self) -> None:
         self.assertIn("sync-setup", self.setup_sh)
@@ -45,13 +45,13 @@ class SetupShDelegatesToCliTest(unittest.TestCase):
 
 class EnvExampleDoesNotOverclaimTest(unittest.TestCase):
     def test_no_dangling_vault_github_remote_var(self) -> None:
-        env_example = (ROOT / ".env.example").read_text()
+        env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
         self.assertNotIn("VAULT_GITHUB_REMOTE", env_example)
 
 
 class CliExposesSyncSubcommandsTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.cli = (ROOT / "obsidian_wiki" / "cli.py").read_text()
+        self.cli = (ROOT / "obsidian_wiki" / "cli.py").read_text(encoding="utf-8")
 
     def test_sync_setup_subcommand_registered(self) -> None:
         self.assertIn('sub.add_parser(\n        "sync-setup"', self.cli)

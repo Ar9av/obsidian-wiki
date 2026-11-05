@@ -294,15 +294,18 @@ def test_doctor_strict_passes_when_optional_codegraph_missing(tmp_path: Path) ->
     )
     rg_bin = tmp_path / "rg-bin"
     rg_bin.mkdir()
-    rg_script = rg_bin / "rg"
-    rg_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    rg_script.chmod(0o755)
+    if os.name == "nt":  # which() only finds PATHEXT executables there
+        (rg_bin / "rg.cmd").write_text("@exit /b 0\r\n", encoding="utf-8")
+    else:
+        rg_script = rg_bin / "rg"
+        rg_script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        rg_script.chmod(0o755)
     no_bin = tmp_path / "no-bin"
     no_bin.mkdir()
 
     proc = _run_env(
         home,
-        {"PATH": f"{rg_bin}:{no_bin}", "CODE_UNDERSTANDING_BACKEND": "", "CODE_UNDERSTANDING_CODEGRAPH_BIN": ""},
+        {"PATH": f"{rg_bin}{os.pathsep}{no_bin}", "CODE_UNDERSTANDING_BACKEND": "", "CODE_UNDERSTANDING_CODEGRAPH_BIN": ""},
         "doctor",
         "--json",
         "--strict",
