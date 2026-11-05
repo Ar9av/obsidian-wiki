@@ -71,6 +71,10 @@ def _home_outside_tmp_path(tmp_path_factory, monkeypatch) -> None:
     "under $HOME" and home-relative behaviour leaks into unrelated tests. Point
     HOME at a sibling of tmp_path, as on POSIX where /tmp is outside it."""
     if os.name == "nt":
+        # Git for Windows reads HOME too; keep the runner's identity config.
+        gitconfig = Path(_real_expanduser("~")) / ".gitconfig"
+        if gitconfig.is_file() and "GIT_CONFIG_GLOBAL" not in os.environ:
+            monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
         monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
 
 
