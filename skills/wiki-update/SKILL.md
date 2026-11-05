@@ -1,0 +1,281 @@
+---
+name: wiki-update
+description: >
+  Sync knowledge from the current project into the Obsidian wiki. Use when work already in the current project should be distilled into the vault; named-vault routing includes @work update wiki. wiki-capture saves the current conversation and wiki-ingest handles external/new sources.
+---
+
+# Wiki Update — Sync Any Project to Your Wiki
+
+You are distilling knowledge from the current project into the user's Obsidian wiki. This skill works from any project directory, not just the obsidian-wiki repo.
+
+## Before You Start
+
+**Writing profile:** Before drafting or rewriting natural-language Markdown, read and apply the `Writing Profile Resolution` section in `llm-wiki/SKILL.md`. Framework schema, provenance, safety, and operation-specific requirements take precedence.
+`WRITING.md` preferences apply only to newly drafted or rewritten natural-language Markdown; preserve source content and structured records.
+
+1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md` (inline `@name` override → walk up CWD for `.env` → global config → prompt setup). This gives `OBSIDIAN_VAULT_PATH`, `OBSIDIAN_WIKI_REPO`, `OBSIDIAN_LINK_FORMAT` (`wikilink` default or `markdown`), and optional QMD settings such as `QMD_WIKI_COLLECTION`. Works from any project directory.
+3. Read `$OBSIDIAN_VAULT_PATH/.manifest.json` to check if this project has been synced before.
+4. Read `$OBSIDIAN_VAULT_PATH/index.md` to know what the wiki already contains.
+
+When writing internal links in Steps 4–5, apply the link format from `llm-wiki/SKILL.md` (Link Format section) using the `OBSIDIAN_LINK_FORMAT` value.
+
+## Step 1: Understand the Project
+
+Figure out what this project is by scanning the current working directory:
+
+- `README.md`, docs/, any markdown files
+- Source structure (frameworks, languages, key abstractions)
+- `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml` or whatever defines the project
+- Git log (focus on commit messages that signal decisions, not "fix typo" stuff)
+- Claude memory files if they exist (`.claude/` in the project)
+
+Derive a clean project name from the directory name.
+
+## Step 2: Compute the Delta
+
+Check `.manifest.json` for this project:
+
+- **First time?** Full scan. Everything is new.
+- **Synced before?** Look at `last_commit_synced`. Before computing the delta, verify the stored SHA is still reachable:
+  ```bash
+  git merge-base --is-ancestor <last_commit_synced> HEAD
+  ```
+  - **Exit 0 (ancestor):** Safe. Run `git log <last_commit_synced>..HEAD --oneline` to see what changed.
+  - **Exit 1 (not an ancestor — rebase or force-push occurred):** The stored SHA is no longer in this branch's history. Warn the user: *"Stored commit `<sha>` is no longer reachable — branch may have been rebased or force-pushed. Falling back to full scan."* Then treat as first-time sync: re-scan everything and update `last_commit_synced` to the current HEAD SHA at the end of Step 6.
+
+If nothing meaningful changed since last sync, tell the user and stop.
+
+## Step 3: Decide What to Distill
+
+This is the core question from Karpathy's pattern: **what would you want to know about this project if you came back in 3 months with zero context?**
+
+Worth distilling:
+
+- Architecture decisions and *why* they were made
+- Patterns discovered while building (things you'd Google again otherwise)
+- What tools, services, APIs the project depends on and how they're wired together
+- Key abstractions, how they connect, what the mental model is
+- Trade-offs that were evaluated, what was picked and why
+- Things learned while building that aren't obvious from reading the code
+
+Not worth distilling:
+
+- File listings, boilerplate, config that's obvious
+- Individual bug fixes with no broader lesson
+- Dependency versions, lock file contents
+- Implementation details the code already says clearly
+- Routine changes anyone could read from the diff
+
+The heuristic: **if reading the codebase answers the question, don't wiki it. If you'd have to re-derive the reasoning by reading git blame across 20 commits, wiki it.**
+
+### Step 3b: Build a code-understanding focus map (optional)
+
+**GUARD: If the `obsidian-wiki code-understand` command fails or is unavailable, skip this step and continue — it is an optimisation, not a requirement.**
+
+When this project contains code, run the local code-understanding extractor before distilling. It parses the codebase locally and returns a focus map — the ranked files and symbols the architecture hangs on — so you read the load-bearing parts instead of scanning everything.
+
+```bash
+obsidian-wiki code-understand --project "$(pwd)" --pretty
+```
+
+When this is not the first sync (Step 2 computed `last_commit_synced`), seed the focus map from the delta:
+
+```bash
+obsidian-wiki code-understand --project "$(pwd)" --since <last_commit_synced> --pretty
+```
+
+(First sync: omit `--since`.)
+
+#### What to do with the focus-map output
+
+1. **Read the output selectively** — when `backend: codegraph`, treat focus-map entries as structural facts with `file:line` citations; when `backend: graphify`, treat `graphify-extracted` and `changed-file` entries as facts and `graphify-inferred`/`graphify-ambiguous` entries as leads to verify in the file before citing; when `backend: builtin`, treat `defines`/`imports` entries as facts but treat `rg-reference` entries as weaker evidence — open the file and verify before citing. Open only the ranked `files`/`file:lines` the focus map points at; never paste the JSON into the wiki or the vault.
+2. **Cite the evidence** — every architectural claim written to a page references its evidence as `(file:lines)` from the focus map or from the opened source; keep using the existing provenance markers.
+3. **Prune stale relationships (required)** — when updating an existing `projects/<name>/` page, cross-check each previously recorded code relationship against the current focus map (or `obsidian-wiki ast-extract` for a symbol-level recheck). Remove relationships whose target symbol no longer exists or is no longer reachable; update the page and record the removals in `log.md`. This keeps false positives from accumulating.
+4. **Never** write `.codegraph/` or the `code-understand` JSON into `$OBSIDIAN_VAULT_PATH` — the graph is a cache/sidecar in the project repo, not wiki knowledge.
+5. **Offer CodeGraph when it's missing (optional)** — if the output reports `backend: builtin` because codegraph is unavailable and the user wants the enhanced backend, offer to install it for them: `npm install -g @colbymchenry/codegraph` (or set `CODE_UNDERSTANDING_CODEGRAPH_BIN` to an existing binary), then re-run this step so the focus map uses the graph. Never install without the user's go-ahead, and never let a missing codegraph block the sync.
+
+If `obsidian-wiki` is not installed or the command fails, skip this step and proceed to Step 4 as normal — it is an optimisation, not a requirement.
+
+## Step 4: Distill into Wiki Pages
+
+### Project-specific knowledge
+
+Goes under `$VAULT/projects/<project-name>/`:
+
+```
+projects/<project-name>/
+├── <project-name>.md          ← project overview (named after the project, NOT _project.md)
+├── concepts/                  ← project-specific ideas, architectures
+├── skills/                    ← project-specific how-tos, patterns
+└── references/                ← project-specific source summaries
+```
+
+The overview page (`<project-name>.md`) should have:
+- What the project is (one paragraph)
+- Key concepts and how they connect
+- Links to project-specific and global wiki pages
+
+### Global knowledge
+
+Things that aren't project-specific go in the global categories:
+
+| What you found | Where it goes |
+|---|---|
+| A general concept learned | `concepts/` |
+| A reusable pattern or technique | `skills/` |
+| A tool/service/person | `entities/` |
+| Cross-project analysis | `synthesis/` |
+
+### Page format
+
+Every page needs YAML frontmatter:
+
+```markdown
+---
+title: >-
+    Page Title
+category: concepts
+tags: [tag1, tag2]
+sources: [projects/<project-name>]
+summary: >-
+    One or two sentences (≤200 chars) describing what this page covers.
+provenance:
+  extracted: 0.6
+  inferred: 0.35
+  ambiguous: 0.05
+base_confidence: 0.59
+lifecycle: draft
+lifecycle_changed: TIMESTAMP_DATE
+created: TIMESTAMP
+updated: TIMESTAMP
+---
+
+Use folded scalar syntax (summary: >-) for title and summary to keep frontmatter parser-safe across punctuation (:, #, quotes) without escaping rules.
+Keep the title and summary contents indented by two spaces under summary: >-.
+
+# Page Title
+
+- A fact the codebase or a doc actually states.
+- A reason the design works this way. ^[inferred]
+
+Use [[wikilinks]] to connect to other pages.
+```
+
+**Write a `summary:` frontmatter field** on every new/updated page (1–2 sentences, ≤200 chars), using `>-` folded style. For project sync, a good summary answers "what does this page tell me about the project I wouldn't guess from its title?" This field powers cheap retrieval by `wiki-query`.
+
+**Apply provenance markers** per `llm-wiki` (Provenance Markers section). For project sync specifically:
+
+- **Extracted** — anything visible in the code, config, or a doc/commit message: file structure, dependencies, function signatures, what a file does.
+- **Inferred** — *why* a decision was made, design rationale, trade-offs, "the team chose X because Y" — unless a commit message, doc, or ADR states it explicitly.
+- **Ambiguous** — when the code and docs disagree, or when there's clearly an in-progress migration with two patterns living side by side.
+
+Compute the rough fractions and write the `provenance:` block on every new/updated page.
+
+### Updating vs creating
+
+- If a page already exists in the vault, **merge** new information into it. Don't create duplicates.
+- If you're adding to an existing page, update the `updated` timestamp and add the new source.
+- Check `index.md` to see what's already there before creating anything new.
+
+## Step 5: Cross-link
+
+After creating/updating pages:
+
+- Add `[[wikilinks]]` from new pages to existing related pages
+- Add `[[wikilinks]]` from existing pages back to the new ones where relevant
+- Link the project overview to all project-specific pages and relevant global pages
+
+## Step 6: Update Tracking
+
+### Update `.manifest.json`
+
+Add or update this project's entry. The project identity must be portable across machines: record the repository URL in `source_repo` (from `git remote get-url origin`, normalised to `host/owner/name`), and only an optional `source_cwd_hint` for where this machine happens to have it checked out. Never write a machine absolute path — see `llm-wiki/SKILL.md` → `.manifest.json` (Source key contract v2).
+
+```json
+{
+  "projects": {
+    "<project-name>": {
+      "source_repo": "github.com/owner/<project-name>",
+      "source_cwd_hint": "~/code/<project-name>",
+      "last_synced": "TIMESTAMP",
+      "last_commit_synced": "abc123f",
+      "pages_in_vault": ["projects/<project-name>/<project-name>.md", "..."]
+    }
+  }
+}
+```
+
+If the project is not a git repository, use a `repo:<stable-name>` pseudo-key for `source_repo` and keep `source_cwd_hint` as the only location field.
+
+### Update `index.md`
+
+Add entries for any new pages created.
+
+### Update `index.md`, `log.md`, and `hot.md`
+
+One locked call, not three hand edits:
+
+```bash
+obsidian-wiki memory sync WIKI_UPDATE project=<project-name> \
+  pages_created=X pages_updated=Y \
+  source_repo=github.com/owner/<project-name> \
+  --takeaways "Synced obsidian-wiki — wiki-capture and wiki-research added; the new capabilities are autonomous web research and conversation capture."
+```
+
+`--takeaways` should carry the most important architectural insight or decision
+surfaced during this sync, written conceptually rather than as a file list. Omit
+it to leave the previous takeaways untouched.
+
+If this project is an ongoing focus, record the thread so the next session picks
+it up:
+
+```bash
+obsidian-wiki memory todo add "<the open thread>" --origin projects/<project-name>.md
+```
+
+See `skills/llm-wiki/references/MEMORY.md` for the full procedure.
+
+## Step 7: Refresh QMD Wiki Index (optional — requires `QMD_WIKI_COLLECTION`)
+
+**GUARD: If `$QMD_WIKI_COLLECTION` is empty or unset, skip this step.** The markdown vault is the source of truth; QMD is only a search index.
+
+Run this step only after pages, `.manifest.json`, `index.md`, `log.md`, and `hot.md` have been written. If Step 2 found no meaningful changes and the sync stopped early, do not refresh QMD.
+
+This refresh currently requires the local QMD CLI. Use `$QMD_CLI` if set; otherwise use `qmd`. If the CLI is unavailable or returns an error, do not roll back the wiki update; report that the wiki was updated but QMD refresh was skipped or failed.
+
+For CLI refresh:
+
+```bash
+${QMD_CLI:-qmd} update
+```
+
+If the output says new hashes need vectors, or if pages were created/updated and embeddings may be stale, run:
+
+```bash
+${QMD_CLI:-qmd} embed
+```
+
+Verify at least one created or materially updated page is visible in the wiki collection:
+
+```bash
+${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/projects/<project-name>/<page>.md" -l 5
+```
+
+If the exact `qmd://` path is uncertain, use:
+
+```bash
+${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | rg "<project-name>"
+```
+
+Record QMD refresh in the final report as one of:
+- `QMD refreshed: update + embed + verified`
+- `QMD skipped: QMD_WIKI_COLLECTION unset`
+- `QMD skipped: qmd CLI unavailable`
+- `QMD failed: <short error summary>`
+
+## Tips
+
+- **Be aggressive about merging.** If the project uses React Server Components, don't create a new page if `concepts/react-server-components.md` already exists. Update the existing one and add this project as a source.
+- **Consult the tag taxonomy.** Read `$VAULT/_meta/taxonomy.md` if it exists, and use canonical tags.
+- **Don't copy code.** Distill the *knowledge*, not the implementation. "This project uses a debounced search pattern with 300ms delay" is useful. Pasting the actual debounce function is not.
+- **Project overview is the anchor.** The `<project-name>.md` file is what you'd read to get oriented. Make it good.

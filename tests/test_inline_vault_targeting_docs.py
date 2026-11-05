@@ -12,7 +12,7 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
         return (ROOT / relpath).read_text()
 
     def test_central_protocol_documents_inline_override_before_fallbacks(self) -> None:
-        llm_wiki = self.read(".skills/llm-wiki/SKILL.md")
+        llm_wiki = self.read("skills/llm-wiki/SKILL.md")
         agents = self.read("AGENTS.md")
 
         self.assertIn("0. **Inline vault override (`@name`)", llm_wiki)
@@ -22,7 +22,7 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
 
     def test_skill_resolution_summaries_include_inline_override(self) -> None:
         stale = []
-        for skill_file in sorted((ROOT / ".skills").glob("*/SKILL.md")):
+        for skill_file in sorted((ROOT / "skills").glob("*/SKILL.md")):
             text = skill_file.read_text()
             if "follow the Config Resolution Protocol" not in text:
                 continue
@@ -53,9 +53,9 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
 
     def test_core_skill_descriptions_include_named_vault_examples(self) -> None:
         examples = {
-            ".skills/wiki-query/SKILL.md": "wiki-query @work",
-            ".skills/wiki-update/SKILL.md": "@work update wiki",
-            ".skills/wiki-capture/SKILL.md": "@research save this",
+            "skills/wiki-query/SKILL.md": "wiki-query @work",
+            "skills/wiki-update/SKILL.md": "@work update wiki",
+            "skills/wiki-capture/SKILL.md": "@research save this",
         }
 
         for relpath, expected in examples.items():
@@ -63,7 +63,7 @@ class InlineVaultTargetingDocsTest(unittest.TestCase):
                 self.assertIn(expected, self.read(relpath))
 
     def test_wiki_query_does_not_prefer_default_over_inline_override(self) -> None:
-        wiki_query = self.read(".skills/wiki-query/SKILL.md")
+        wiki_query = self.read("skills/wiki-query/SKILL.md")
 
         self.assertIn("For cross-project queries without `@name`", wiki_query)
         self.assertNotIn("Prefer `~/.obsidian-wiki/config` for cross-project queries", wiki_query)

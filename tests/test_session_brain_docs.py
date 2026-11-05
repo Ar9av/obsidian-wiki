@@ -17,7 +17,7 @@ except ModuleNotFoundError:  # Python < 3.11
     tomllib = None
 
 ROOT = Path(__file__).resolve().parents[1]
-SKILLS = ROOT / ".skills"
+SKILLS = ROOT / "skills"
 AGENTS_MD = ROOT / "AGENTS.md"
 
 

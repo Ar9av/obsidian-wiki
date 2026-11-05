@@ -707,9 +707,9 @@ def test_distributed_schema_config_contract_names_all_four_variables(tmp_path: P
     )
     env_example = (root / ".env.example").read_text(encoding="utf-8")
     configuration = (root / "docs" / "configuration.md").read_text(encoding="utf-8")
-    lint_skill = (root / ".skills" / "wiki-lint" / "SKILL.md").read_text(encoding="utf-8")
-    llm_skill = (root / ".skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
-    capture_skill = (root / ".skills" / "wiki-capture" / "SKILL.md").read_text(encoding="utf-8")
+    lint_skill = (root / "skills" / "wiki-lint" / "SKILL.md").read_text(encoding="utf-8")
+    llm_skill = (root / "skills" / "llm-wiki" / "SKILL.md").read_text(encoding="utf-8")
+    capture_skill = (root / "skills" / "wiki-capture" / "SKILL.md").read_text(encoding="utf-8")
 
     for variable in variables:
         assert variable in env_example
@@ -827,7 +827,7 @@ def test_schema_config_is_scoped_to_explicit_cwd_and_named_vaults(tmp_path: Path
 
 
 def test_correction_contract_requires_temporal_authority_and_immutable_hash_check(tmp_path: Path) -> None:
-    skill = (Path(__file__).parents[1] / ".skills" / "wiki-capture" / "SKILL.md").read_text()
+    skill = (Path(__file__).parents[1] / "skills" / "wiki-capture" / "SKILL.md").read_text()
     for field in (
         "authority_class:",
         "verification_state:",
