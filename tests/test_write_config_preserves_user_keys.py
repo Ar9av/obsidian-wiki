@@ -120,7 +120,7 @@ def test_setup_creates_global_writing_profile(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stderr
 
     profile = _config_dir(home) / "WRITING.md"
-    template = REPO_ROOT / ".skills" / "llm-wiki" / "references" / "WRITING.md"
+    template = REPO_ROOT / "skills" / "llm-wiki" / "references" / "WRITING.md"
     assert profile.read_text() == template.read_text()
 
 

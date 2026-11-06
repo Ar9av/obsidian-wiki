@@ -128,7 +128,7 @@ Staged pages aren't visible in Obsidian's graph until promoted. `wiki-status` li
 
 ## Vault Skill Factory
 
-`vault-skill-factory` turns mature curated pages into portable Agent Skills. Generated skills land in a **review directory** — never auto-installed, never written into `.skills/`.
+`vault-skill-factory` turns mature curated pages into portable Agent Skills. Generated skills land in a **review directory** — never auto-installed, never written into `skills/`.
 
 | Variable | What it does | Default |
 |---|---|---|
@@ -139,7 +139,7 @@ Staged pages aren't visible in Obsidian's graph until promoted. `wiki-status` li
 
 For long PDFs — books, reports — PageIndex builds a table-of-contents tree (section titles, summaries, page ranges) before ingest, so the agent reads only the relevant sections. Without it, `wiki-ingest` reads PDFs directly.
 
-Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a venv, and put an LLM key in its `.env` (LiteLLM). See `.skills/wiki-ingest/references/pageindex.md`.
+Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a venv, and put an LLM key in its `.env` (LiteLLM). See `skills/wiki-ingest/references/pageindex.md`.
 
 | Variable | What it does | Default |
 |---|---|---|
@@ -150,7 +150,7 @@ Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a ven
 
 ## URL ingest (optional)
 
-When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Reader](https://jina.ai/reader) for PDFs and JavaScript-rendered pages. It works without a key at a low rate limit. See `.skills/wiki-ingest/references/url-sources.md`.
+When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Reader](https://jina.ai/reader) for PDFs and JavaScript-rendered pages. It works without a key at a low rate limit. See `skills/wiki-ingest/references/url-sources.md`.
 
 | Variable | What it does | Default |
 |---|---|---|

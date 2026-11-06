@@ -136,7 +136,7 @@ def build_index(vault: Path) -> dict[str, dict]:
 
         summary = _extract_scalar(front, "summary")
 
-        category = str(page.relative_to(vault).parent)
+        category = page.relative_to(vault).parent.as_posix()
         m = _CATEGORY_RE.search(front)
         if m:
             category = m.group(1).strip()
@@ -152,7 +152,7 @@ def build_index(vault: Path) -> dict[str, dict]:
             "summary": summary,
             "category": category,
             "tier": tier,
-            "path": str(page.relative_to(vault)),
+            "path": page.relative_to(vault).as_posix(),
             # Event-time validity (see obsidian_wiki.temporal). Absent on every
             # page that doesn't opt in, which `is_current` reads as "current".
             "valid_from": _extract_scalar(front, "valid_from"),

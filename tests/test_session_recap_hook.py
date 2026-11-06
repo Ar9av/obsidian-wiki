@@ -19,7 +19,10 @@ from obsidian_wiki import memory as mem
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / ".claude" / "hooks" / "wiki-session-recap.sh"
 
-pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="bash not available")
+pytestmark = pytest.mark.skipif(
+    os.name == "nt" or shutil.which("bash") is None,
+    reason="bash hooks are tested on POSIX; bash on Windows CI is the WSL stub, not Git Bash",
+)
 
 
 def _run(cwd: Path, *, home: Path, env: dict | None = None) -> subprocess.CompletedProcess:

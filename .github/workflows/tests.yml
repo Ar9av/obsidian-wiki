@@ -35,7 +35,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install pytest
-        run: python -m pip install --upgrade pip pytest
+        # tzdata: Windows ships no IANA zone database, which zoneinfo needs.
+        run: python -m pip install --upgrade pip pytest tzdata
 
       - name: Configure git identity
         # Some tests build throwaway git repos and commit to them.

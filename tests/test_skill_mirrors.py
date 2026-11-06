@@ -1,4 +1,4 @@
-"""The committed agent-skill mirrors must track every skill in .skills/ (#233).
+"""The committed agent-skill mirrors must track every skill in skills/ (#233).
 
 setup.sh regenerates them, but a fresh clone opened without running setup
 only gets what is committed, so check the git index, not the working tree.
@@ -26,7 +26,7 @@ def _tracked(path: str) -> set[str]:
 @unittest.skipUnless((ROOT / ".git").exists(), "needs a git checkout")
 class SkillMirrorsTest(unittest.TestCase):
     def test_every_mirror_links_every_skill(self) -> None:
-        skills = {p.parent.name for p in (ROOT / ".skills").glob("*/SKILL.md")}
+        skills = {p.parent.name for p in (ROOT / "skills").glob("*/SKILL.md")}
         for mirror in MIRRORS:
             with self.subTest(mirror=mirror):
                 tracked = _tracked(f"{mirror}/skills/")
@@ -40,7 +40,9 @@ class SkillMirrorsTest(unittest.TestCase):
         for mirror in MIRRORS:
             for link in (ROOT / mirror / "skills").iterdir():
                 if link.is_symlink():
-                    self.assertEqual(os.readlink(link), f"../../.skills/{link.name}", str(link))
+                    # Windows reports the link target with its own separator.
+                    target = os.readlink(link).replace(os.sep, "/")
+                    self.assertEqual(target, f"../../skills/{link.name}", str(link))
 
 
 if __name__ == "__main__":

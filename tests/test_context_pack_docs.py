@@ -9,7 +9,7 @@ def read(relative: str) -> str:
 
 
 def test_context_skill_uses_cli_and_is_read_only() -> None:
-    skill = read(".skills/wiki-context-pack/SKILL.md")
+    skill = read("skills/wiki-context-pack/SKILL.md")
     assert 'obsidian-wiki context-pack --vault "$OBSIDIAN_VAULT_PATH"' in skill
     assert "read-only" in skill.lower()
     assert "must not modify" in skill
@@ -18,7 +18,7 @@ def test_context_skill_uses_cli_and_is_read_only() -> None:
 
 
 def test_context_skill_canonicalizes_vault_and_has_clone_fallback() -> None:
-    skill = read(".skills/wiki-context-pack/SKILL.md")
+    skill = read("skills/wiki-context-pack/SKILL.md")
     assert 'cd "$OBSIDIAN_VAULT_PATH" && pwd -P' in skill
     assert "command -v obsidian-wiki" in skill
     assert '"$OBSIDIAN_WIKI_REPO/obsidian_wiki/cli.py"' in skill
@@ -28,7 +28,7 @@ def test_context_skill_canonicalizes_vault_and_has_clone_fallback() -> None:
 
 
 def test_context_skill_preserves_cli_output_and_recent_default_budget() -> None:
-    skill = read(".skills/wiki-context-pack/SKILL.md")
+    skill = read("skills/wiki-context-pack/SKILL.md")
     assert "CLI stdout unchanged as the final payload in every mode" in skill
     assert "CLI stdout only" in skill
     assert "no prose or markdown" in skill

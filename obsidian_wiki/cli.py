@@ -67,7 +67,7 @@ def _pkg_dir() -> Path:
 
 def skills_dir() -> Path:
     """Return the directory holding the bundled skill folders."""
-    for cand in (_pkg_dir() / "_data" / "skills", _pkg_dir().parent / ".skills"):
+    for cand in (_pkg_dir() / "_data" / "skills", _pkg_dir().parent / "skills"):
         if cand.is_dir():
             return cand
     raise FileNotFoundError(
@@ -681,7 +681,7 @@ def _required_vault_paths(vault: Path) -> list[Path]:
 
 def _doctor_project_check(project_dir: Path) -> dict[str, str]:
     required = [project_dir / "AGENTS.md", *[project_dir / dest for _src, dest in BOOTSTRAP_FILES[1:]]]
-    missing = [str(path.relative_to(project_dir)) for path in required if not path.exists()]
+    missing = [path.relative_to(project_dir).as_posix() for path in required if not path.exists()]
     if missing:
         return {
             "status": "warn",
@@ -896,7 +896,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
     if vault is not None:
         if vault.is_dir():
             _doctor_add(checks, name="vault-path", status="pass", detail="vault directory exists", hint="")
-            missing_core = [str(path.relative_to(vault)) for path in _required_vault_paths(vault) if not path.exists()]
+            missing_core = [path.relative_to(vault).as_posix() for path in _required_vault_paths(vault) if not path.exists()]
             if missing_core:
                 _doctor_add(
                     checks,
@@ -2819,6 +2819,27 @@ def cmd_memory(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the vault's memory tools over stdio, for agents that launch MCP servers."""
+    from obsidian_wiki.client import MemoryError_, resolve_vault
+
+    try:
+        vault = resolve_vault(args.vault)
+    except MemoryError_ as exc:
+        print(f"obsidian-wiki mcp: {exc}", file=sys.stderr)
+        return 1
+    os.environ["OBSIDIAN_VAULT_PATH"] = str(vault)
+    # stdio opens no network listener, so the HTTP server's API key guards nothing here.
+    os.environ["WIKI_ALLOW_ANONYMOUS"] = "1"
+    try:
+        from obsidian_wiki import server
+    except ImportError:
+        print("obsidian-wiki mcp needs the server extra: pip install 'obsidian-wiki[server]'", file=sys.stderr)
+        return 1
+    server.mcp.run("stdio")
+    return 0
+
+
 def cmd_hooks(args: argparse.Namespace) -> int:
     """Register, remove, or inspect the Claude Code session hooks.
 
@@ -3417,6 +3438,10 @@ def build_parser() -> argparse.ArgumentParser:
     hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     hk.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     hk.set_defaults(func=cmd_hooks)
+
+    mc = sub.add_parser("mcp", help="serve the vault's memory tools over stdio (needs the [server] extra)")
+    mc.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
+    mc.set_defaults(func=cmd_mcp)
 
     mm = sub.add_parser(
         "memory",

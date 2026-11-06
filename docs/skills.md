@@ -1,6 +1,6 @@
 # Skills Reference
 
-Everything lives in [`.skills/`](../.skills/). Each skill is a markdown file the agent reads when your request matches its description — there's no runtime, no plugin system, no registration step.
+Everything lives in [`skills/`](../skills/). Each skill is a markdown file the agent reads when your request matches its description — there's no runtime, no plugin system, no registration step.
 
 Slash commands (`/skill-name`) work in Claude Code, Cursor, Windsurf, and most CLI agents. Everywhere else, just describe what you want.
 
@@ -108,7 +108,7 @@ This framework handles the knowledge-management workflow — ingest, query, lint
 npx skills add kepano/obsidian-skills
 ```
 
-Both projects follow the same [Agent Skills spec](https://agentskills.io/specification), so they coexist in the same `.skills/` directory with no conflicts.
+Both projects follow the same [Agent Skills spec](https://agentskills.io/specification), so they coexist in the same `skills/` directory with no conflicts.
 
 ## Writing your own
 
@@ -116,4 +116,4 @@ See [Contributing → Adding a new skill](contributing.md#adding-a-new-skill), o
 
 > "Create a skill that generates weekly summaries from my journal entries"
 
-`skill-creator` walks you through drafting, testing, and refining it in `.skills/`.
+`skill-creator` walks you through drafting, testing, and refining it in `skills/`.

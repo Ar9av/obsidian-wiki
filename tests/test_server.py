@@ -320,3 +320,32 @@ def test_mcp_answers_a_lan_host_when_bound_to_every_interface(tmp_path, monkeypa
             **MCP_HEADERS, "authorization": f"Bearer {KEY}", "host": "192.168.1.5:8080",
         })
     assert r.status_code == 200
+
+
+def test_mcp_subcommand_serves_the_vault_over_stdio(tmp_path, monkeypatch):
+    """`obsidian-wiki mcp` is what an agent launches; it needs no key and finds the vault."""
+    import anyio
+    from mcp import ClientSession
+    from mcp.client.stdio import StdioServerParameters, stdio_client
+
+    (tmp_path / "concepts").mkdir()
+    (tmp_path / "concepts" / "tides.md").write_text(
+        "---\ntitle: Tides\nsummary: How the moon moves water.\n---\nThe moon pulls the sea.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("WIKI_API_KEY", raising=False)
+    monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
+    params = StdioServerParameters(
+        command=sys.executable, args=["-m", "obsidian_wiki", "mcp", "--vault", str(tmp_path)],
+    )
+
+    async def run():
+        async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
+            await session.initialize()
+            names = {t.name for t in (await session.list_tools()).tools}
+            page = await session.call_tool("memory_read", {"path": "concepts/tides.md"})
+            return names, page
+
+    names, page = anyio.run(run)
+    assert {"memory_search", "memory_read", "memory_write"} <= names
+    assert "The moon pulls the sea." in page.content[0].text

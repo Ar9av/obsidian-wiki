@@ -270,7 +270,7 @@ def reachability() -> dict:
     # Look where the registered command will look: the installing
     # interpreter's bin directory first, then the ambient PATH.
     bin_dir = _bin_dir()
-    search = f"{bin_dir}:{os.environ.get('PATH', '')}" if bin_dir else os.environ.get("PATH", "")
+    search = f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}" if bin_dir else os.environ.get("PATH", "")
     on_path = shutil.which("obsidian-wiki", path=search)
     python3 = shutil.which("python3", path=search)
     importable = False

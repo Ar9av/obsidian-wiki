@@ -292,4 +292,4 @@ def test_eval_cli_explains_a_missing_gold_set(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "no gold set at" in result.stderr
-    assert "_meta/eval.jsonl" in result.stderr
+    assert str(Path("_meta/eval.jsonl")) in result.stderr  # a native path

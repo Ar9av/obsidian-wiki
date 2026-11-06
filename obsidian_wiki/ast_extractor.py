@@ -296,7 +296,7 @@ def _split_base_clause(clause: str) -> list[str]:
 
 def extract_file(path: Path, root: Path | None = None) -> Graph:
     """Extract nodes and edges from a single code file."""
-    rel = str(path.relative_to(root)) if root else path.name
+    rel = path.relative_to(root).as_posix() if root else path.name
     ext = path.suffix.lower()
     spec = _EXT_TO_LANG.get(ext)
     if spec is None:

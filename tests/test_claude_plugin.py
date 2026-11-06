@@ -9,6 +9,7 @@ break the install silently.
 from __future__ import annotations
 
 import json
+import os
 import unittest
 from pathlib import Path
 
@@ -43,10 +44,14 @@ class ClaudePluginTest(unittest.TestCase):
 
     def test_skills_path_loads_every_skill(self) -> None:
         skills_dir = (ROOT / self.plugin["skills"]).resolve()
-        self.assertEqual(skills_dir, ROOT / ".skills")
+        self.assertEqual(skills_dir, ROOT / "skills")
         found = {p.parent.name for p in skills_dir.glob("*/SKILL.md")}
         self.assertIn("wiki-setup", found)
         self.assertIn("wiki-query", found)
+
+    def test_old_skills_path_still_resolves(self) -> None:
+        # Global installs made before the rename hold absolute links into .skills/.
+        self.assertEqual(os.readlink(ROOT / ".skills"), "skills")
 
     def test_no_pinned_version(self) -> None:
         # Without a version Claude Code keys the install on the git commit, so

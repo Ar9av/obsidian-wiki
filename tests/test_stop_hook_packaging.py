@@ -26,7 +26,7 @@ PACKAGED_HOOK_DEST = "obsidian_wiki/_data/hooks/wiki-stop-capture.sh"
 @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
 class StopHookPackagingTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+        self.pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     def test_hook_source_exists(self) -> None:
         self.assertTrue(HOOK_SRC.is_file(), f"{HOOK_SRC} must exist to be bundled")
@@ -52,7 +52,7 @@ class StopHookPackagingTest(unittest.TestCase):
 
 class WikiSetupSkillTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.skill = (ROOT / ".skills" / "wiki-setup" / "SKILL.md").read_text()
+        self.skill = (ROOT / "skills" / "wiki-setup" / "SKILL.md").read_text(encoding="utf-8")
 
     def test_skill_points_at_packaged_hook_path(self) -> None:
         # Must reference the packaged layout, not only the source-checkout path.

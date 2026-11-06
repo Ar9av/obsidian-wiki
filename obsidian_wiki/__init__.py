@@ -2,7 +2,7 @@
 
 Three faces onto the same vault:
 
-* the agent skills under ``.skills/`` (the original product, bundled as data)
+* the agent skills under ``skills/`` (the original product, bundled as data)
 * the ``obsidian-wiki`` CLI — see ``cli.py``
 * :class:`~obsidian_wiki.client.Memory`, for using a vault from Python::
 
