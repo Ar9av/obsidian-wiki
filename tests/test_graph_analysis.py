@@ -79,6 +79,20 @@ class TestParseVaultGraph:
         _, tags = parse_vault_graph(simple_vault)
         assert "concepts" in tags.get("a", [])
 
+    def test_tags_line_in_body_is_not_read_as_page_tags(self, vault):
+        (vault / "note.md").write_text(
+            "---\ntitle: note\n---\n# Note\n\nExample frontmatter:\n\ntags: [leaked]\n"
+        )
+        _, tags = parse_vault_graph(vault)
+        assert "note" not in tags
+
+    def test_reads_block_list_tags_as_last_frontmatter_key(self, vault):
+        (vault / "block.md").write_text(
+            "---\ntitle: block\ntags:\n  - alpha\n  - beta\n---\n# Block\n"
+        )
+        _, tags = parse_vault_graph(vault)
+        assert tags["block"] == ["alpha", "beta"]
+
     def test_empty_vault(self, vault):
         outgoing, tags = parse_vault_graph(vault)
         assert outgoing == {}
