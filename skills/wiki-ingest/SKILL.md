@@ -117,7 +117,8 @@ This outputs a JSON plan with `batches` (each a list of files + total_bytes + ki
 1. **Check `stats.skipped_unchanged`** — report to the user how many files are being skipped (already ingested, hash unchanged).
 2. **If `batch_count == 0`** — all files are unchanged. Tell the user and stop.
 3. **If `batch_count == 1`** — proceed with the single batch as a normal Step 1 ingest.
-4. **If `batch_count > 1`** — dispatch each batch as a **parallel subagent** (multiple Agent tool calls in a single message). Each subagent receives a message like:
+4. **Before dispatching anything**, run `obsidian-wiki ingest-guard` on the source directory (see Step 4). Resolve every `blocked` source first. Move any `siblings` into one batch, because subagents running in parallel can't see each other's writes.
+5. **If `batch_count > 1`** — dispatch each batch as a **parallel subagent** (multiple Agent tool calls in a single message). Each subagent receives a message like:
    ```
    Ingest these files into the wiki at $OBSIDIAN_VAULT_PATH using wiki-ingest Step 1 onward:
    <list of file paths from this batch>
@@ -360,6 +361,21 @@ Before writing anything, plan which pages to update or create. Cap the plan at `
 - If it's new, which category does it belong in?
 - What `[[wikilinks]]` should connect it to existing pages?
 
+**One source file, one primary page.** A source's primary page is the `references/` (or equivalent) page that stands for the document itself. Derived concept and entity pages don't count. The same document often arrives twice: once as a conversion (`_raw/import/report.md`), later as the original (`report.pdf`). Stems, titles and hashes all differ between the two, so nothing else notices. Run the guard before writing:
+
+```bash
+obsidian-wiki ingest-guard "$OBSIDIAN_VAULT_PATH" <source1> [source2 ...]
+```
+
+It reduces each source name to an identity: document extensions (`.pdf`, `.docx`, `.pptx`, `.md`, …) are stripped and the rest slugged, so `Report.pdf.md` becomes `report`. It then reports which pages already claim that identity, by stem or by `title:`:
+
+- `create` — no page claims it. Name the new page after the identity: `references/report.md`, never `report.pdf.md`.
+- `update` — exactly one page claims it. That page is the primary page; update it instead of creating a new one. `prior_sources` shows the earlier ingest, for example the `_raw/` conversion.
+- `siblings` — other sources in this run with the same identity, such as `report.pdf` beside `report.docx`. They're one document, so write one page from them, not one page per file.
+- `blocked` (exit code 2) — two or more pages already claim it. Don't write a page for that source. List the candidates for the user and suggest `wiki-dedup` to merge them first.
+
+Run it again after the batch: a clean run reports no `blocked` sources.
+
 **Apply tier-aware filtering to existing pages** (see `llm-wiki/SKILL.md`, Importance Tiering section):
 
 | Tier | Update decision |
@@ -490,6 +506,8 @@ Also update `stats.total_sources_ingested` and `stats.total_pages`.
 
 **In parallel runs** (batch fan-out, or while the Docker server is writing the same vault), record sources with `obsidian-wiki cache-update` rather than hand-editing `.manifest.json`. That command takes an advisory lock, writes atomically, and normalises the key to the portable form; concurrent hand edits are a plain read-modify-write and silently drop whichever entry lands second. For a source with no portable path form, pass its pseudo-key explicitly: `obsidian-wiki cache-update <vault> <path> --key repo:github.com/owner/name`.
 
+When you ingest an original whose conversion was ingested earlier (`prior_sources` from `ingest-guard`), record the original too: `cache-update` it with `--pages` naming the same primary page. Then the next ingest of either file finds the other.
+
 If the manifest doesn't exist yet, create it with `version: 1`.
 
 **`index.md`, `log.md`, `hot.md`** — one command, not three hand edits:
@@ -567,6 +585,7 @@ After ingesting, verify:
 - [ ] Every new/updated page has a bottom **Sources** section with Obsidian wikilinks to `_raw/_archived/…` snapshots (or a live URL only if ingest was `/ingest-url` with no local file)
 - [ ] YAML `sources:` is origin keys (`url:`, `agent:`, …), not archive paths; after a `_raw/_archived/` move, `snapshots set` then `cache-update` ran on the archived path (YAML `snapshots:` is `"[[_raw/_archived/stem|stem]]"`, not Markdown links); clipping `source:`/`url` frontmatter is not copied in as the clickable source
 - [ ] Inferred and ambiguous claims are marked with `^[inferred]` / `^[ambiguous]`; `provenance:` frontmatter block is present on new and updated pages
+- [ ] `obsidian-wiki ingest-guard` reports no `blocked` source, and each source has a single primary page, named without its file extension
 - [ ] No page you wrote is anywhere near 1 MB (`oversized_pages` in `obsidian-wiki lint` is empty); large sources were split into focused pages
 - [ ] Every new/updated page has a `summary:` frontmatter field (1–2 sentences, ≤200 chars)
 - [ ] `relationships:` block is present on pages where source text made typed connections clear; all entries use an allowed type from `llm-wiki/SKILL.md`
