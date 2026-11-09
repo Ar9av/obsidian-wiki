@@ -412,6 +412,18 @@ Identify high-value synthesis opportunities the wiki is missing — concept pair
 **How to fix:**
 - Run `/wiki-synthesize` to automatically discover and fill the top gaps
 
+### 15. Oversized Pages
+
+Obsidian's renderer runs out of memory opening a Markdown file of roughly 1–2 MB, and the window goes blank. It loads every non-hidden `.md` in the vault, so one oversized file can break the whole vault, not just its own page.
+
+**How to check:**
+- `obsidian-wiki lint` reports `oversized_pages`: every `.md` over 1,000,000 bytes, with its size. `_raw/` drafts and `_raw/_archived/` snapshots are included, because Obsidian loads them too. Dot-folders are skipped, because Obsidian ignores them. This is a warning, not a failure.
+
+**How to fix (ask first, as for every write):**
+- **Knowledge page:** split it by subtopic, usually along its `##` sections. Each part becomes its own page in the right category (`concepts/`, `entities/`, `skills/`, `references/`), with its own `title`, `summary`, and `tags`. Each part should answer one question on its own. Copy the original `sources:` and `snapshots:` onto every part. Keep the original path as a short hub page that links to the parts, so existing links still resolve. Then run `memory sync` so `index.md` lists the new pages. A page this large is usually a raw conversion pasted in whole. Distil it; don't just cut the text into pieces.
+- **`_raw/` draft:** split it into several drafts before the next ingest.
+- **`_raw/_archived/` snapshot:** don't edit it, because pages cite it as provenance. Tell the owner, and let them decide whether to keep it outside the vault.
+
 ## Output Format
 
 Report findings as a structured list:
@@ -468,6 +480,10 @@ Pages in misc/ that have ≥ 3 connections to a single project and are ready to 
 - `concepts/foo.md` — relationships[1]: type "contradication" is not an allowed type
 - `concepts/bar.md` — relationships[0]: target "[[skills/nonexistent]]" resolves to no page
 
+### Oversized Pages (N found)
+- `references/report.md` — 2.1 MB; Obsidian can't open it. Split into focused pages
+- `_raw/_archived/report.md` — 1.4 MB snapshot; ask the owner before moving it
+
 ### Synthesis Gaps (N found)
 Concept pairs that co-occur frequently but have no synthesis page:
 
@@ -481,7 +497,7 @@ Concept pairs that co-occur frequently but have no synthesis page:
 
 Append to `log.md`:
 ```
-- [TIMESTAMP] LINT issues_found=N orphans=X broken_links=Y stale=Z contradictions=W prov_issues=P missing_summary=S fragmented_clusters=F visibility_issues=V promotion_candidates=C synthesis_gaps=G relationship_issues=R
+- [TIMESTAMP] LINT issues_found=N orphans=X broken_links=Y stale=Z contradictions=W prov_issues=P missing_summary=S fragmented_clusters=F visibility_issues=V promotion_candidates=C synthesis_gaps=G relationship_issues=R oversized=O
 ```
 
 Offer to fix issues automatically or let the user decide which to address.
