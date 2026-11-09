@@ -1585,6 +1585,23 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ingest_guard(args: argparse.Namespace) -> int:
+    from obsidian_wiki.batch import discover_sources
+    from obsidian_wiki.ingest_guard import guard_sources
+    vault = Path(args.vault).expanduser().resolve()
+    sources: list[Path] = []
+    for raw in args.sources:
+        source = _resolve_source_arg(vault, raw)
+        if source.is_dir():
+            sources.extend(Path(item["path"]) for item in discover_sources(source, vault=vault))
+        else:
+            sources.append(source)
+    result = guard_sources(vault, sources)
+    print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    # Exit 2 when any source is blocked, so the ingest skill can stop on it.
+    return 2 if result["blocked"] else 0
+
+
 def cmd_projects_check(args: argparse.Namespace) -> int:
     from obsidian_wiki.cache import check_projects
     vault = Path(args.vault).expanduser().resolve()
@@ -3160,6 +3177,15 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("sources", nargs="+", help="source file or directory paths to check")
     cc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     cc.set_defaults(func=cmd_cache_check)
+
+    ig = sub.add_parser(
+        "ingest-guard",
+        help="before an ingest write: the one page each source should create or update",
+    )
+    ig.add_argument("vault", help="path to the Obsidian vault")
+    ig.add_argument("sources", nargs="+", help="source file or directory paths about to be ingested")
+    ig.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ig.set_defaults(func=cmd_ingest_guard)
 
     pc = sub.add_parser(
         "projects-check",
