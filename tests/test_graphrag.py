@@ -87,6 +87,13 @@ class TestBuildIndex:
         idx = build_index(simple_vault)
         assert "deep-learning" in idx["transformer"]["tags"]
 
+    def test_reads_block_list_tags_as_last_frontmatter_key(self, vault):
+        (vault / "block.md").write_text(
+            "---\ntitle: block\ntags:\n  - alpha\n  - beta\n---\n# Block\n"
+        )
+        idx = build_index(vault)
+        assert idx["block"]["tags"] == ["alpha", "beta"]
+
     def test_reads_tier(self, simple_vault):
         idx = build_index(simple_vault)
         assert idx["transformer"]["tier"] == "core"
