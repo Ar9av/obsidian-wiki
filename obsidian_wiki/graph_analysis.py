@@ -63,7 +63,7 @@ _MD_LINK_RE = re.compile(
     r"\[.*?\]\((?![A-Za-z][A-Za-z0-9+.-]*:)([^)#\s]+\.md)(?:[#\s][^)]*)?\)"
 )
 _TAGS_RE = re.compile(r"^tags:\s*\[([^\]]+)\]", re.MULTILINE)
-_TAGS_LIST_RE = re.compile(r"^tags:\s*\n((?:\s+-\s+\S+\n)+)", re.MULTILINE)
+_TAGS_LIST_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]+\S+[ \t]*\n)+)", re.MULTILINE)
 
 
 def frontmatter_tags(frontmatter: str) -> list[str]:

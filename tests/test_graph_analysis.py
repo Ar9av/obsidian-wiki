@@ -93,6 +93,13 @@ class TestParseVaultGraph:
         _, tags = parse_vault_graph(vault)
         assert tags["block"] == ["alpha", "beta"]
 
+    def test_reads_unindented_block_list_tags(self, vault):
+        (vault / "flush.md").write_text(
+            "---\ntitle: flush\ntags:\n- alpha\n- beta\n---\n# Flush\n"
+        )
+        _, tags = parse_vault_graph(vault)
+        assert tags["flush"] == ["alpha", "beta"]
+
     def test_empty_vault(self, vault):
         outgoing, tags = parse_vault_graph(vault)
         assert outgoing == {}
