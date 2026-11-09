@@ -53,6 +53,10 @@ TRUST_REQUIRED_FRONTMATTER = (
     "lifecycle",
 )
 RESERVED_PAGE_STEMS = frozenset({"index", "log", "hot", "_insights"})
+# Obsidian's renderer runs out of heap opening a Markdown file of roughly 1-2 MB
+# and the window goes blank (#311: ~900 KB opened, ~2 MB crashed). No wiki page
+# should come near this; it catches raw conversions written as one page.
+OVERSIZED_PAGE_BYTES = 1_000_000
 ALLOWED_RELATIONSHIP_TYPES = frozenset(
     {"extends", "implements", "contradicts", "derived_from", "uses", "replaces", "related_to"}
 )
@@ -485,6 +489,14 @@ def lint_vault(
         if page["slug"] not in RESERVED_PAGE_STEMS and page["absolute_sources"]
     ]
 
+    # Every Markdown file Obsidian loads, so `_raw/` drafts and archived
+    # snapshots count too: they crash the app the same way a page does.
+    oversized_pages = []
+    for path in iter_md(vault, ()):
+        size = path.stat().st_size
+        if size > OVERSIZED_PAGE_BYTES:
+            oversized_pages.append({"page": path.relative_to(vault).as_posix(), "bytes": size})
+
     undated_claims = [
         {"page": page["path"], **claim}
         for page in pages
@@ -712,6 +724,7 @@ def lint_vault(
         "snapshot_mismatch": snapshot_mismatch,
         "uncovered_sources": uncovered_sources,
         "orphan_pages": sorted(orphan_pages),
+        "oversized_pages": oversized_pages,
         "undated_claims": undated_claims,
         "typed_relationship_issues": typed_relationship_issues,
         # Sorted by page: these findings get diffed between CI runs.
@@ -772,6 +785,7 @@ def lint_vault(
                 "snapshot_mismatch",
                 "uncovered_sources",
                 "orphan_pages",
+                "oversized_pages",
                 "undated_claims",
                 "typed_relationship_issues",
                 "superseded_dangling",

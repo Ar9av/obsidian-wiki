@@ -1366,3 +1366,31 @@ def test_lint_two_real_pages_with_same_title_still_duplicate(tmp_path: Path) -> 
     assert report["findings"]["duplicate_stems"] == [
         {"stem": "example", "pages": ["concepts/example.md", "entities/example.md"]}
     ]
+
+
+def test_oversized_pages_reports_markdown_obsidian_cannot_open(tmp_path: Path) -> None:
+    from obsidian_wiki.lint import OVERSIZED_PAGE_BYTES
+
+    vault = tmp_path / "vault"
+    big = _page(vault, "references/report.md", links=["concepts/alpha"])
+    big.write_text(
+        big.read_text(encoding="utf-8") + "x" * OVERSIZED_PAGE_BYTES, encoding="utf-8"
+    )
+    _clean_pair(vault)
+    # Obsidian loads `_raw/` too; hidden folders it ignores.
+    (vault / "_raw" / "_archived").mkdir(parents=True)
+    (vault / "_raw" / "_archived" / "dump.md").write_text("y" * (OVERSIZED_PAGE_BYTES + 1))
+    (vault / ".trash").mkdir()
+    (vault / ".trash" / "old.md").write_text("z" * (OVERSIZED_PAGE_BYTES + 1))
+    (vault / "_raw" / "at-limit.md").write_text("w" * OVERSIZED_PAGE_BYTES)
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["oversized_pages"] == [
+        {"page": "_raw/_archived/dump.md", "bytes": OVERSIZED_PAGE_BYTES + 1},
+        {"page": "references/report.md", "bytes": big.stat().st_size},
+    ]
+    assert [name for name, count in report["stats"]["findings"].items() if count] == [
+        "oversized_pages"
+    ]
+    assert report["status"] == "warn"

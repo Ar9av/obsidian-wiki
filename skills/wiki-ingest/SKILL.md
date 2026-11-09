@@ -417,6 +417,8 @@ For each page in your plan:
 - Resolve any contradictions between old and new information (note them if unresolvable)
 - If the page already has `valid_from:` and this source's own date is earlier, lower it to that date. Never add `valid_from:` to a page that has none, and never raise one.
 
+**Keep every page well under 1 MB.** Obsidian can't open a Markdown file of roughly 1–2 MB: the window goes blank, and since Obsidian loads every file in the vault, the whole vault becomes unusable. A wiki page is distilled knowledge, so one that grows past ~100 KB has usually swallowed its source whole. Plan large sources as several pages in Step 4: one per subtopic, each in its own category, each answering one question, with a parent page that links to them. Never paste a whole converted document (PDF, export, transcript) into a page. When a page you're updating would cross that size, split it the same way rather than appending. `obsidian-wiki lint` reports anything over 1,000,000 bytes as `oversized_pages`.
+
 **Event time from the source.** `created`/`updated` are ingestion time and always come from `obsidian-wiki memory now`. The date the knowledge itself dates from goes in `valid_from:` (event time, read by `query --as-of`; see `docs/cli.md`). Take it from the source, in this order, and stop at the first hit:
 1. The source's frontmatter `created:` or `date:` (a `_raw/` note keeps its capture date here)
 2. A leading ISO date in the filename (`2026-03-14-slug.md`, as `wiki-capture` writes)
@@ -565,6 +567,7 @@ After ingesting, verify:
 - [ ] Every new/updated page has a bottom **Sources** section with Obsidian wikilinks to `_raw/_archived/…` snapshots (or a live URL only if ingest was `/ingest-url` with no local file)
 - [ ] YAML `sources:` is origin keys (`url:`, `agent:`, …), not archive paths; after a `_raw/_archived/` move, `snapshots set` then `cache-update` ran on the archived path (YAML `snapshots:` is `"[[_raw/_archived/stem|stem]]"`, not Markdown links); clipping `source:`/`url` frontmatter is not copied in as the clickable source
 - [ ] Inferred and ambiguous claims are marked with `^[inferred]` / `^[ambiguous]`; `provenance:` frontmatter block is present on new and updated pages
+- [ ] No page you wrote is anywhere near 1 MB (`oversized_pages` in `obsidian-wiki lint` is empty); large sources were split into focused pages
 - [ ] Every new/updated page has a `summary:` frontmatter field (1–2 sentences, ≤200 chars)
 - [ ] `relationships:` block is present on pages where source text made typed connections clear; all entries use an allowed type from `llm-wiki/SKILL.md`
 - [ ] If `QMD_WIKI_COLLECTION` is set and the QMD CLI is available, `qmd update` has run after writing pages
