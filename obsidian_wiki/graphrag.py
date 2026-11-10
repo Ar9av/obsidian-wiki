@@ -44,6 +44,7 @@ _MD_LINK_RE = re.compile(
     r"\[.*?\]\((?![A-Za-z][A-Za-z0-9+.-]*:)([^)#\s]+\.md)(?:[#\s][^)]*)?\)"
 )
 
+from obsidian_wiki import clock  # noqa: E402
 from obsidian_wiki.graph_analysis import (  # noqa: E402
     SKIP_DIRS,
     SKIP_ROOT_FILES,
@@ -619,8 +620,13 @@ def query(
     # retrieval but stay in the graph, so nothing is lost and `--as-of` can
     # bring them back. `parse_date` raises on a malformed `as_of`, which is
     # the caller's typo and should not be swallowed.
+    # Default "today" follows the vault calendar, while the reported `as_of`
+    # stays null unless the caller supplied a date.
     as_of_date = parse_date(as_of) if isinstance(as_of, str) else as_of
-    retrievable = index if include_historical else current_pages(index, as_of_date)
+    when = as_of_date
+    if when is None and not include_historical:
+        when = parse_date(clock.today(clock.wiki_timezone(vault)))
+    retrievable = index if include_historical else current_pages(index, when)
     temporal = {
         "as_of": as_of_date.isoformat() if as_of_date else None,
         "include_historical": include_historical,

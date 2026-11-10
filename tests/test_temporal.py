@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from obsidian_wiki import clock
 from obsidian_wiki.graphrag import build_index, current_pages, query
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki.temporal import (
@@ -251,6 +252,37 @@ def test_graph_query_cli_accepts_as_of(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert [c["page"] for c in payload["candidates"]] == ["references/old-gateway.md"]
+
+
+def test_default_today_is_the_utc_day_not_the_machine_day(monkeypatch) -> None:
+    class _LocalToday(date):
+        @classmethod
+        def today(cls):
+            return date(2026, 11, 10)
+
+    monkeypatch.setattr("obsidian_wiki.temporal.date", _LocalToday)
+    monkeypatch.setattr(clock, "today", lambda: "2026-11-09")
+
+    assert is_current({"valid_until": "2026-11-09"}) is True
+    assert is_current({"valid_from": "2026-11-10"}) is False
+
+
+def test_query_today_follows_the_vault_calendar(tmp_path: Path, monkeypatch) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "references/gateway.md", summary="The gateway is nginx.",
+          extra="valid_until: 2026-11-09")
+    (vault / "index.md").write_text(
+        "---\ntitle: Wiki Index\ntimezone: America/Detroit\n---\n# Wiki Index\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(clock, "wiki_timezone", lambda _vault: object())
+    monkeypatch.setattr(clock, "today", lambda _tz: "2026-11-09")
+
+    result = query(vault, "gateway")
+
+    assert [c["page"] for c in result["candidates"]] == ["references/gateway.md"]
+    assert result["temporal"]["as_of"] is None
 
 
 def test_cli_rejects_a_malformed_as_of(tmp_path: Path) -> None:

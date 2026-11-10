@@ -18,6 +18,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Mapping
 
+from obsidian_wiki import clock
+
 TEMPORAL_FIELDS = ("valid_from", "valid_until")
 SUPERSEDED_FIELD = "superseded_by"
 
@@ -64,7 +66,7 @@ def validity_window(values: Mapping[str, str]) -> "tuple[date | None, date | Non
 
 
 def is_current(values: Mapping[str, str], as_of: "date | None" = None) -> bool:
-    """Was this page's claim true at `as_of` (default today)?
+    """Was this page's claim true at `as_of` (default: the UTC calendar day)?
 
     `valid_until` is inclusive — the last day the claim held, the way a person
     writing the date means it. A page with malformed dates counts as current:
@@ -75,7 +77,7 @@ def is_current(values: Mapping[str, str], as_of: "date | None" = None) -> bool:
         start, end = validity_window(values)
     except ValueError:
         return True
-    when = as_of or date.today()
+    when = as_of or date.fromisoformat(clock.today())
     if start and when < start:
         return False
     if end and when > end:
