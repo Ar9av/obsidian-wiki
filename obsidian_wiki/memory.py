@@ -1203,6 +1203,7 @@ def build_hot(
     existing = hot.read_text(encoding="utf-8") if hot.is_file() else ""
 
     carried = _section_body(existing, "Key Takeaways")
+    expected_takeaways_sha256 = expected_takeaways_sha256 or None  # "$TAKEAWAYS_REVISION" unset = no revision
     if expected_takeaways_sha256 is not None:
         if takeaways is None:
             raise MemoryError_("takeaways_revision_without_replacement", "omit revision for carry-forward sync")
@@ -1714,6 +1715,7 @@ def sync_memory(vault: Path, verb: Optional[str] = None, fields: Optional[dict] 
     """Validate under memory_lock; commit log/index/hot with rollback/recovery."""
     from .memory_transaction import commit
     vault = _require_vault(vault)
+    expected_takeaways_sha256 = expected_takeaways_sha256 or None
     lock = advisory_lock(vault / MEMORY_LOCK_NAME) if check else memory_lock(vault)
     with lock:
         if check and (vault / ".memory-transaction.json").exists():

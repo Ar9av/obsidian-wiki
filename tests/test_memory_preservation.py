@@ -238,3 +238,13 @@ def test_memory_commit_preserves_existing_output_permissions(vault):
         (vault / name).chmod(0o640)
     mem.sync_memory(vault, "INGEST", {"source": "mode"})
     assert all((vault / name).stat().st_mode & 0o777 == 0o640 for name in tx.TARGETS)
+
+
+def test_empty_revision_means_none_so_skill_examples_work_on_a_fresh_vault(tmp_path):
+    # Skills pass --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"; unset must seed, not error.
+    mem.sync_memory(tmp_path, "INIT")
+    mem.sync_memory(tmp_path, "CAPTURE", takeaways="first", expected_takeaways_sha256="")
+    assert "first" in (tmp_path / "hot.md").read_text()
+    with pytest.raises(mem.MemoryError_) as exc:
+        mem.sync_memory(tmp_path, "CAPTURE", takeaways="second", expected_takeaways_sha256="")
+    assert exc.value.code == "takeaways_revision_required"
