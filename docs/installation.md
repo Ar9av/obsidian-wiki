@@ -47,6 +47,86 @@ obsidian-wiki setup --copy        # copy skill files instead of symlinking
 
 Run `obsidian-wiki info` to see the resolved paths and `obsidian-wiki doctor` to health-check the result. See the [CLI reference](cli.md) for everything else the package ships.
 
+## Hermes: profile-scoped installation and native updates
+
+Install the Python CLI using pip, uv tool, or pipx as above, but **do not run the
+broad setup command** when you only want one Hermes profile. The CLI is still
+needed: skill bundles do not contain repository-level scripts and assets.
+
+```bash
+# Existing profile directory; HERMES_HOME also works instead of this flag.
+obsidian-wiki install-hermes --hermes-home /absolute/path/to/profile --dry-run
+obsidian-wiki install-hermes --hermes-home /absolute/path/to/profile
+
+# Initialize vault + shared wiki configuration without installing other agents.
+obsidian-wiki setup --vault-only --vault /absolute/path/to/brain
+```
+
+On Windows, quote native absolute paths, for example
+`--hermes-home "C:/Users/you/AppData/Local/hermes/profiles/research"`.
+`install-hermes` requires an existing absolute profile home; it never guesses a
+Windows installation root or scans sibling profiles. It invokes
+`hermes skills install https://raw.githubusercontent.com/<owner>/<repo>/HEAD/skills/<name>/SKILL.md --name <name>`
+for each bundled skill, retaining native security scans, confirmation, provenance
+and update handling. Direct URLs avoid a Hermes resolver collision where a
+fully qualified GitHub identifier can select an unrelated same-named official
+skill. Hermes re-fetches these URLs for native check/update operations. Referenced
+support files follow the native URL adapter; repository-level assets and other
+shared references remain available via the Python package's configured
+`OBSIDIAN_WIKI_REPO`. Add `--yes` to skip confirmations without bypassing scans.
+Use repeatable `--skill wiki-query --skill llm-wiki` to select a subset, or
+`--source owner/repo` to track a fork's default branch. Local unpushed skill
+changes are **not** installed through this path. No dependencies are auto-installed.
+
+A skill that Hermes blocks, cannot fetch, or that you decline does not stop the
+batch: the rest are still attempted, and the command ends with a summary and a
+`--skill ...` line to retry the failures (exit code 1 if any failed). Existing
+destination names are refused before any installation starts, including copied
+or symlinked skills.
+
+Not every skill installs cleanly through Hermes today. Its scanner blocks some
+community-source skills (for example a `CAUTION`/`DANGEROUS` verdict on skills
+that edit agent config), and its URL adapter refuses a skill whose SKILL.md
+mentions a `references/`, `scripts/` or `assets/` path that doesn't exist next
+to it. Read the Hermes verdict before deciding whether `--force` is warranted
+for a specific skill; `install-hermes` never passes it.
+
+For a manual-copy migration, back up your edits and remove only the intended
+old copies before installing. Never use `--force`
+just to make a collision disappear.
+
+Use Hermes with the **same profile** for maintenance:
+
+```bash
+hermes -p research skills check
+hermes -p research skills update
+hermes -p research skills update wiki-query
+```
+
+Alternatively set `HERMES_HOME` to that same absolute directory. Hermes skips
+locally modified hub skills by default; review changes before considering its
+`--force` option. Do not rerun broad `obsidian-wiki setup` to update hub skills.
+The Python CLI/assets have a separate lifecycle: upgrade using your Python
+installer. Skills track the selected repository's default branch, not a pinned
+Python release, so use compatible versions of both.
+
+`--vault-only` writes the existing **user-wide** wiki config and writing profile,
+not a Hermes-private vault configuration. Review your current vault selection
+before changing it. It skips agent skills, Claude hooks and sync configuration;
+`--project`, `--project-only` and `--remote` cannot be combined with it. No Hermes
+lifecycle hooks or automatic memory integration are installed.
+
+### Developing from a checkout
+
+For unpushed edits, add the checkout's absolute `skills` directory to this
+profile's Hermes `skills.external_dirs` using Hermes configuration tooling.
+This is Git-managed discovery, **not** Skills Hub update tracking. Writable
+external skills can be edited in place by Hermes. Local copies take precedence
+and must not shadow the external skills. Keep the Python CLI/assets installed
+and initialize the vault with `setup --vault-only` as above.
+
+See [Hermes skill sources and update lifecycle](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills).
+
 ## Let your agent set it up
 
 The fastest path — no commands required. Give your agent this repo and say:

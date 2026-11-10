@@ -1190,6 +1190,10 @@ def _maybe_set_timezone(vault_dir: Path, timezone_arg: str | None, vault_created
 
 
 def cmd_setup(args: argparse.Namespace) -> int:
+    vault_only = getattr(args, "vault_only", False)
+    if vault_only and (args.project is not None or args.project_only or args.remote):
+        print("error: --vault-only cannot be combined with --project, --project-only or --remote", file=sys.stderr)
+        return 1
     mode = "copy" if args.copy else "symlink"
     if getattr(args, "timezone", None):
         from obsidian_wiki import clock
@@ -1218,7 +1222,7 @@ def cmd_setup(args: argparse.Namespace) -> int:
             print(f"✅  Vault verified at {vault_dir}")
         _maybe_set_timezone(vault_dir, getattr(args, "timezone", None), vault_created)
 
-    if not args.project_only:
+    if not args.project_only and not vault_only:
         print()
         install_global_skills(mode)
 
@@ -1227,15 +1231,15 @@ def cmd_setup(args: argparse.Namespace) -> int:
         install_project(project_dir, mode)
 
     sync_configured = False
-    if vault_path and Path(vault_path).expanduser().is_dir():
+    if not vault_only and vault_path and Path(vault_path).expanduser().is_dir():
         sync_configured = _maybe_configure_sync(Path(vault_path).expanduser(), args.remote)
 
     # Register the session hooks here rather than as a separate step someone
     # has to know about. Without them the vault, the CLI and the MCP tools all
     # work, but no memory is injected at session start — which is the whole
     # point. Opt out with --no-hooks.
-    hooks_line = "skipped (--no-hooks)"
-    if not args.no_hooks:
+    hooks_line = "skipped (--vault-only)" if vault_only else "skipped (--no-hooks)"
+    if not args.no_hooks and not vault_only:
         try:
             from obsidian_wiki import hooks as _hooks
 
@@ -1249,10 +1253,12 @@ def cmd_setup(args: argparse.Namespace) -> int:
         except Exception as exc:  # never fail setup over an optional extra
             hooks_line = f"could not register ({exc}) — run `obsidian-wiki hooks install`"
 
-    n = len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
-    print(f" Skills installed: {n}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
+    if vault_only:
+        print(" Skills installed: skipped (--vault-only)")
+    else:
+        print(f" Skills installed: {len(list_skills())}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")
@@ -3017,6 +3023,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-V", "--version", action="version", version=f"obsidian-wiki {__version__}")
     sub = p.add_subparsers(dest="command")
 
+    hi = sub.add_parser("install-hermes", help="install skills using the profile-scoped Hermes Skills Hub")
+    hi.add_argument("--hermes-home", metavar="PATH", help="existing profile home (default: HERMES_HOME)")
+    hi.add_argument("--source", default="Ar9av/obsidian-wiki", help="GitHub owner/repo to track for updates")
+    hi.add_argument("--skill", action="append", metavar="NAME", help="install only this skill; repeatable")
+    hi.add_argument("--dry-run", action="store_true", help="print target and commands without writes")
+    hi.add_argument("--yes", action="store_true", help="skip native confirmation, never security scans")
+    from obsidian_wiki.hermes_install import install as install_hermes
+    hi.set_defaults(func=lambda args: install_hermes(args, list_skills()))
+
     sp = sub.add_parser("setup", help="install skills into your agents and write config (default)")
     _add_setup_args(sp)
     sp.set_defaults(func=cmd_setup)
@@ -3586,6 +3601,8 @@ need quoting: query="how do transformers work".""",
 
 
 def _add_setup_args(sp: argparse.ArgumentParser) -> None:
+    sp.add_argument("--vault-only", action="store_true",
+                    help="initialize vault and shared wiki config only; no agent installs, hooks or sync")
     sp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
     sp.add_argument(
         "--project",
@@ -3652,7 +3669,7 @@ def main(argv: list[str] | None = None) -> int:
     # and `info` (which calls _check_stale itself with richer output).
     # `memory` runs from the SessionStart hook and from every write skill, and
     # `hooks` is what fixes the thing the nag is about; nagging there is noise.
-    if getattr(args, "command", None) not in ("setup", "info", "doctor", "memory", "hooks", None):
+    if getattr(args, "command", None) not in ("setup", "install-hermes", "info", "doctor", "memory", "hooks", None):
         _check_stale()
     try:
         return args.func(args)
