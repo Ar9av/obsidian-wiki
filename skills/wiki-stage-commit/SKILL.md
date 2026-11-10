@@ -157,7 +157,7 @@ Exit code **9** with `conflict: ...` on stderr means the staged or live file cha
 The CLI appends the `STAGE_COMMIT` line to `log.md` itself. After processing all staged files, reconcile the index and hot cache so the promoted pages appear:
 
 ```bash
-obsidian-wiki memory sync --takeaways "Committed N staged pages; rejected M."
+obsidian-wiki memory sync --takeaways "Committed N staged pages; rejected M." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 (No `--verb`: the log line was already written by `staging promote`.) Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
@@ -188,3 +188,5 @@ Staging queue: K files remaining
 - `index.md` and `log.md` are always updated immediately on ingest (they are low-risk tracking files) — only category pages go through staging
 - The moves live in `obsidian_wiki/staging.py`; this skill supplies the judgment, not the file handling
 - The `_staging/` directory is not tracked by Obsidian's graph view — pages only appear in the wiki after promotion
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

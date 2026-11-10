@@ -205,7 +205,7 @@ obsidian-wiki memory sync OPENCLAW_HISTORY_INGEST \
   memory=<memory> daily_notes=<daily_notes> sessions=<sessions> \
   pages_updated=<pages_updated> pages_created=<pages_created> \
   mode=<mode> \
-  --takeaways "Ingested OpenClaw MEMORY.md and 14 daily notes; surfaced automation patterns and multi-agent coordination knowledge."
+  --takeaways "Ingested OpenClaw MEMORY.md and 14 daily notes; surfaced automation patterns and multi-agent coordination knowledge." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update. `--takeaways` is the one-line conceptual summary that used to go in Recent Activity;
@@ -258,3 +258,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

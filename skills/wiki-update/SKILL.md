@@ -219,7 +219,7 @@ One locked call, not three hand edits:
 obsidian-wiki memory sync WIKI_UPDATE project=<project-name> \
   pages_created=X pages_updated=Y \
   source_repo=github.com/owner/<project-name> \
-  --takeaways "Synced obsidian-wiki — wiki-capture and wiki-research added; the new capabilities are autonomous web research and conversation capture."
+  --takeaways "Synced obsidian-wiki — wiki-capture and wiki-research added; the new capabilities are autonomous web research and conversation capture." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 `--takeaways` should carry the most important architectural insight or decision
@@ -279,3 +279,5 @@ Record QMD refresh in the final report as one of:
 - **Consult the tag taxonomy.** Read `$VAULT/_meta/taxonomy.md` if it exists, and use canonical tags.
 - **Don't copy code.** Distill the *knowledge*, not the implementation. "This project uses a debounced search pattern with 300ms delay" is useful. Pasting the actual debounce function is not.
 - **Project overview is the anchor.** The `<project-name>.md` file is what you'd read to get oriented. Make it good.
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

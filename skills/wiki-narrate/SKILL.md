@@ -124,3 +124,5 @@ This is the **only** write a narration without `--save` may perform. Do not touc
   merely because QMD is unavailable.
 - **Write failure:** never leave a partial readout presented as saved, never update
   `hot.md`, and never update `index.md` or `.manifest.json`.
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.

@@ -262,7 +262,7 @@ obsidian-wiki memory sync DEDUP \
   mode=<audit|merge|auto-merge> pages_scanned=<N> pairs_found=<M> \
   merged=<X> kept_separate=<Y> needs_review=<Z> \
   wikilinks_rewritten=<W> \
-  --takeaways "Merged N duplicate pairs; canonical pages updated."
+  --takeaways "Merged N duplicate pairs; canonical pages updated." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 In audit mode (nothing merged) use `obsidian-wiki memory log DEDUP ...` instead — a read-only run must not rewrite the index or hot cache.
@@ -322,3 +322,5 @@ Record one of:
 - `QMD skipped: QMD_WIKI_COLLECTION unset`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <short error summary>`
+
+Before explicit takeaway replacement, read/reconcile the full current Key Takeaways and obtain TAKEAWAYS_REVISION from hot.takeaways_sha256 in memory status --json (llm-wiki/references/MEMORY.md). Preserve still-valid owner conclusions. Omit --takeaways for mechanical bookkeeping; stale revisions require review, not blind retry.
