@@ -1,7 +1,7 @@
 """OKF v0.2 conformance for the wiki-export / wiki-import bridge.
 
 tests/fixtures/okf_v02_bundle/ is a real bundle: an agent ran
-.skills/wiki-export/SKILL.md Step 3.5 over a five-page vault that exercises
+skills/wiki-export/SKILL.md Step 3.5 over a five-page vault that exercises
 every mapping row (date-only and offset `updated`, URL and opaque sources,
 draft/verified/archived lifecycles, a trust-ledger entry, a folder note, a
 forward reference). Importing it back with wiki-import reproduced the source
@@ -21,8 +21,8 @@ from obsidian_wiki.vault import split_frontmatter
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / "tests" / "fixtures" / "okf_v02_bundle"
-EXPORT = ROOT / ".skills" / "wiki-export" / "SKILL.md"
-IMPORT = ROOT / ".skills" / "wiki-import" / "SKILL.md"
+EXPORT = ROOT / "skills" / "wiki-export" / "SKILL.md"
+IMPORT = ROOT / "skills" / "wiki-import" / "SKILL.md"
 DATETIME_WITH_OFFSET = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)")
 
 

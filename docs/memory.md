@@ -212,7 +212,7 @@ obsidian-wiki memory log QUERY query="how do transformers work" result_pages=4
 
 Do not touch `index.md`, `hot.md`, `_insights.md`, or `.manifest.json` from a read-only skill.
 
-The full procedure, including the verb list and the profile/todo rules, is in [`.skills/llm-wiki/references/MEMORY.md`](../.skills/llm-wiki/references/MEMORY.md).
+The full procedure, including the verb list and the profile/todo rules, is in [`skills/llm-wiki/references/MEMORY.md`](../skills/llm-wiki/references/MEMORY.md).
 
 ## Related
 

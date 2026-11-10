@@ -56,6 +56,14 @@ Eight tools. Four for knowledge — `memory_search`, `memory_read`, `memory_writ
 
 `memory_recap`, `memory_profile` and `memory_todo` all take a **`user_id`**, which namespaces that person's profile and todo list so one deployment can serve several people. Pages stay shared. A `user_id` becomes a filename, so it is validated as untrusted input — 1–64 characters of letters, digits, `.`, `_` or `-` — and anything else is a **400** rather than a filesystem touch.
 
+For an agent on the same machine, skip the HTTP server and let the agent launch the tools over stdio. It needs the same `[server]` extra, no key (stdio opens no port), and finds the vault the way every other command does:
+
+```bash
+claude mcp add wiki-memory -- obsidian-wiki mcp
+```
+
+Any agent that takes a stdio MCP server can use the same command; pass `--vault <path>` to pin one vault.
+
 For in-process use, `from obsidian_wiki import Memory` skips the server entirely — see [Python API](python-api.md).
 
 ## REST

@@ -9,5 +9,5 @@
   "repository": "https://github.com/Ar9av/obsidian-wiki",
   "license": "MIT",
   "keywords": ["obsidian", "llm-wiki", "karpathy", "second-brain", "knowledge-base", "agent-memory", "pkm"],
-  "skills": "./.skills/"
+  "skills": "./skills/"
 }

@@ -60,7 +60,7 @@ Every wiki page has required frontmatter: `title`, `category`, `tags`, `sources`
 
 ## Skill Routing
 
-Skills live in `.skills/<name>/SKILL.md`. Match the user's intent to the right skill:
+Skills live in `skills/<name>/SKILL.md`. Match the user's intent to the right skill:
 
 | User says something like… | Skill |
 |---|---|
@@ -175,7 +175,7 @@ See `wiki-query` and `wiki-export` skills for how the filter is applied.
 
 ## Architecture Reference
 
-For the full pattern (three-layer architecture, page templates, project org), read `.skills/llm-wiki/SKILL.md`.
+For the full pattern (three-layer architecture, page templates, project org), read `skills/llm-wiki/SKILL.md`.
 
 Human-facing documentation lives in `docs/` — `installation.md`, `agents.md`, `skills.md`, `cli.md`, `configuration.md`, `architecture.md`, `session-brain.md`, `contributing.md`. `README.md` is a landing page only; when you add a skill, CLI command, or config variable, update the matching `docs/` page rather than the README.
 

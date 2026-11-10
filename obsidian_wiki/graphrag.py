@@ -35,8 +35,6 @@ from typing import Any
 # ---------------------------------------------------------------------------
 
 _FRONT_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-_TAGS_RE = re.compile(r"^tags:\s*\[([^\]]+)\]", re.MULTILINE)
-_TAGS_LIST_RE = re.compile(r"^tags:\s*\n((?:\s+-\s+\S+\n)+)", re.MULTILINE)
 _CATEGORY_RE = re.compile(r"^category:\s*(\w+)", re.MULTILINE)
 _TIER_RE = re.compile(r"^tier:\s*(\w+)", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
@@ -51,6 +49,7 @@ from obsidian_wiki.graph_analysis import (  # noqa: E402
     SKIP_ROOT_FILES,
     _node_for,
     _slug,
+    frontmatter_tags,
     iter_pages,
     shortest_path,
 )
@@ -125,18 +124,11 @@ def build_index(vault: Path) -> dict[str, dict]:
 
         title = _extract_scalar(front, "title")
 
-        tags: list[str] = []
-        m = _TAGS_RE.search(front)
-        if m:
-            tags = [t.strip().strip("'\"") for t in m.group(1).split(",")]
-        else:
-            m2 = _TAGS_LIST_RE.search(front)
-            if m2:
-                tags = [ln.strip().lstrip("- ") for ln in m2.group(1).splitlines() if ln.strip()]
+        tags = frontmatter_tags(front)
 
         summary = _extract_scalar(front, "summary")
 
-        category = str(page.relative_to(vault).parent)
+        category = page.relative_to(vault).parent.as_posix()
         m = _CATEGORY_RE.search(front)
         if m:
             category = m.group(1).strip()
@@ -152,7 +144,7 @@ def build_index(vault: Path) -> dict[str, dict]:
             "summary": summary,
             "category": category,
             "tier": tier,
-            "path": str(page.relative_to(vault)),
+            "path": page.relative_to(vault).as_posix(),
             # Event-time validity (see obsidian_wiki.temporal). Absent on every
             # page that doesn't opt in, which `is_current` reads as "current".
             "valid_from": _extract_scalar(front, "valid_from"),

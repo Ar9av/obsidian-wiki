@@ -67,7 +67,7 @@ def _pkg_dir() -> Path:
 
 def skills_dir() -> Path:
     """Return the directory holding the bundled skill folders."""
-    for cand in (_pkg_dir() / "_data" / "skills", _pkg_dir().parent / ".skills"):
+    for cand in (_pkg_dir() / "_data" / "skills", _pkg_dir().parent / "skills"):
         if cand.is_dir():
             return cand
     raise FileNotFoundError(
@@ -681,7 +681,7 @@ def _required_vault_paths(vault: Path) -> list[Path]:
 
 def _doctor_project_check(project_dir: Path) -> dict[str, str]:
     required = [project_dir / "AGENTS.md", *[project_dir / dest for _src, dest in BOOTSTRAP_FILES[1:]]]
-    missing = [str(path.relative_to(project_dir)) for path in required if not path.exists()]
+    missing = [path.relative_to(project_dir).as_posix() for path in required if not path.exists()]
     if missing:
         return {
             "status": "warn",
@@ -896,7 +896,7 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
     if vault is not None:
         if vault.is_dir():
             _doctor_add(checks, name="vault-path", status="pass", detail="vault directory exists", hint="")
-            missing_core = [str(path.relative_to(vault)) for path in _required_vault_paths(vault) if not path.exists()]
+            missing_core = [path.relative_to(vault).as_posix() for path in _required_vault_paths(vault) if not path.exists()]
             if missing_core:
                 _doctor_add(
                     checks,
@@ -1583,6 +1583,23 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
     else:
         print(json.dumps(result))
     return 0
+
+
+def cmd_ingest_guard(args: argparse.Namespace) -> int:
+    from obsidian_wiki.batch import discover_sources
+    from obsidian_wiki.ingest_guard import guard_sources
+    vault = Path(args.vault).expanduser().resolve()
+    sources: list[Path] = []
+    for raw in args.sources:
+        source = _resolve_source_arg(vault, raw)
+        if source.is_dir():
+            sources.extend(Path(item["path"]) for item in discover_sources(source, vault=vault))
+        else:
+            sources.append(source)
+    result = guard_sources(vault, sources)
+    print(json.dumps(result, indent=2) if args.pretty else json.dumps(result))
+    # Exit 2 when any source is blocked, so the ingest skill can stop on it.
+    return 2 if result["blocked"] else 0
 
 
 def cmd_projects_check(args: argparse.Namespace) -> int:
@@ -2815,6 +2832,27 @@ def cmd_memory(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_mcp(args: argparse.Namespace) -> int:
+    """Serve the vault's memory tools over stdio, for agents that launch MCP servers."""
+    from obsidian_wiki.client import MemoryError_, resolve_vault
+
+    try:
+        vault = resolve_vault(args.vault)
+    except MemoryError_ as exc:
+        print(f"obsidian-wiki mcp: {exc}", file=sys.stderr)
+        return 1
+    os.environ["OBSIDIAN_VAULT_PATH"] = str(vault)
+    # stdio opens no network listener, so the HTTP server's API key guards nothing here.
+    os.environ["WIKI_ALLOW_ANONYMOUS"] = "1"
+    try:
+        from obsidian_wiki import server
+    except ImportError:
+        print("obsidian-wiki mcp needs the server extra: pip install 'obsidian-wiki[server]'", file=sys.stderr)
+        return 1
+    server.mcp.run("stdio")
+    return 0
+
+
 def cmd_hooks(args: argparse.Namespace) -> int:
     """Register, remove, or inspect the Claude Code session hooks.
 
@@ -3136,6 +3174,15 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     cc.set_defaults(func=cmd_cache_check)
 
+    ig = sub.add_parser(
+        "ingest-guard",
+        help="before an ingest write: the one page each source should create or update",
+    )
+    ig.add_argument("vault", help="path to the Obsidian vault")
+    ig.add_argument("sources", nargs="+", help="source file or directory paths about to be ingested")
+    ig.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ig.set_defaults(func=cmd_ingest_guard)
+
     pc = sub.add_parser(
         "projects-check",
         help="check how far each project's checkout has moved past last_commit_synced",
@@ -3413,6 +3460,10 @@ def build_parser() -> argparse.ArgumentParser:
     hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     hk.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     hk.set_defaults(func=cmd_hooks)
+
+    mc = sub.add_parser("mcp", help="serve the vault's memory tools over stdio (needs the [server] extra)")
+    mc.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
+    mc.set_defaults(func=cmd_mcp)
 
     mm = sub.add_parser(
         "memory",

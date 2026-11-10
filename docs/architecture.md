@@ -219,8 +219,9 @@ The OKF round-trip is lossless. The `graph.json` round-trip is not — it carrie
 
 ```
 obsidian-wiki/
-├── .skills/                             # ← Canonical skill definitions (source of truth)
-│   └── <skill-name>/SKILL.md            #   39 skills — see docs/skills.md
+├── skills/                              # ← Canonical skill definitions (source of truth)
+│   └── <skill-name>/SKILL.md            #   see docs/skills.md
+├── .skills → skills                     # Compat link for installs made before the rename
 │
 ├── obsidian_wiki/                       # Python package — CLI, setup, sync, session brain
 ├── extensions/brain/                    # Zero-build Chrome extension: capture + form fill
@@ -237,12 +238,12 @@ obsidian-wiki/
 ├── .agent/workflows/obsidian-wiki.md    # Slash-command registry → Antigravity
 ├── .github/copilot-instructions.md      # Always-on → GitHub Copilot (VS Code Chat)
 │
-├── .claude/skills/   → symlinks to .skills/*   (created by setup)
-├── .cursor/skills/   → symlinks to .skills/*
-├── .windsurf/skills/ → symlinks to .skills/*
-├── .agents/skills/   → symlinks to .skills/*
-├── .pi/skills/       → symlinks to .skills/*
-├── .kiro/skills/     → symlinks to .skills/*
+├── .claude/skills/   → symlinks to skills/*   (created by setup)
+├── .cursor/skills/   → symlinks to skills/*
+├── .windsurf/skills/ → symlinks to skills/*
+├── .agents/skills/   → symlinks to skills/*
+├── .pi/skills/       → symlinks to skills/*
+├── .kiro/skills/     → symlinks to skills/*
 │
 ├── setup.sh                             # One-command agent setup
 ├── .env.example                         # Configuration template
@@ -251,4 +252,4 @@ obsidian-wiki/
 
 Global symlink targets created by setup are listed in [Installation](installation.md#what-setupsh-wires-up).
 
-For the full pattern — three-layer architecture, page templates, project organization — read [`.skills/llm-wiki/SKILL.md`](../.skills/llm-wiki/SKILL.md).
+For the full pattern — three-layer architecture, page templates, project organization — read [`skills/llm-wiki/SKILL.md`](../skills/llm-wiki/SKILL.md).

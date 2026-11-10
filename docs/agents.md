@@ -2,7 +2,7 @@
 
 Works with **any AI coding agent that can read files**. `setup.sh` and `obsidian-wiki setup` handle skill discovery for each one automatically.
 
-Each agent has its own convention for discovering skills. Setup symlinks the canonical `.skills/` directory into each agent's expected location — you write skills once, every agent can use them.
+Each agent has its own convention for discovering skills. Setup symlinks the canonical `skills/` directory into each agent's expected location — you write skills once, every agent can use them.
 
 ## Matrix
 
@@ -37,7 +37,7 @@ Only needed if you're not running `setup.sh` or `obsidian-wiki setup`.
 <details>
 <summary><b>Claude Code</b></summary>
 
-Skills are auto-discovered from `.claude/skills/`. Either run `setup.sh` or copy `.skills/*` to `.claude/skills/`. The `CLAUDE.md` file at the repo root is automatically loaded as project context.
+Skills are auto-discovered from `.claude/skills/`. Either run `setup.sh` or copy `skills/*` to `.claude/skills/`. The `CLAUDE.md` file at the repo root is automatically loaded as project context.
 
 ```bash
 cd /path/to/obsidian-wiki && claude "set up my wiki"
@@ -47,19 +47,19 @@ cd /path/to/obsidian-wiki && claude "set up my wiki"
 <details>
 <summary><b>Cursor</b></summary>
 
-Skills are auto-discovered from `.cursor/skills/`. The `.cursor/rules/obsidian-wiki.mdc` file provides always-on context. Either run `setup.sh` or copy `.skills/*` to `.cursor/skills/`. Then type `/wiki-setup` in the chat.
+Skills are auto-discovered from `.cursor/skills/`. The `.cursor/rules/obsidian-wiki.mdc` file provides always-on context. Either run `setup.sh` or copy `skills/*` to `.cursor/skills/`. Then type `/wiki-setup` in the chat.
 </details>
 
 <details>
 <summary><b>Windsurf</b></summary>
 
-Cascade reads rules from `.windsurf/rules/` and skills from `.windsurf/skills/`. Either run `setup.sh` or copy `.skills/*` to `.windsurf/skills/`. Then tell Cascade: "set up my wiki".
+Cascade reads rules from `.windsurf/rules/` and skills from `.windsurf/skills/`. Either run `setup.sh` or copy `skills/*` to `.windsurf/skills/`. Then tell Cascade: "set up my wiki".
 </details>
 
 <details>
 <summary><b>Codex</b></summary>
 
-Reads `AGENTS.md` for project context. `setup.sh` installs skills globally to `~/.codex/skills/`. Either run `setup.sh` or manually symlink `.skills/*` to `~/.codex/skills/`.
+Reads `AGENTS.md` for project context. `setup.sh` installs skills globally to `~/.codex/skills/`. Either run `setup.sh` or manually symlink `skills/*` to `~/.codex/skills/`.
 
 ```bash
 cd /path/to/obsidian-wiki && codex "set up my wiki"
@@ -69,7 +69,7 @@ cd /path/to/obsidian-wiki && codex "set up my wiki"
 <details>
 <summary><b>Gemini CLI</b></summary>
 
-Reads `GEMINI.md` and discovers global skills from `~/.gemini/skills/`. Either run `setup.sh` or manually symlink `.skills/*` to `~/.gemini/skills/`.
+Reads `GEMINI.md` and discovers global skills from `~/.gemini/skills/`. Either run `setup.sh` or manually symlink `skills/*` to `~/.gemini/skills/`.
 
 ```bash
 cd /path/to/obsidian-wiki && gemini "set up my wiki"
@@ -85,7 +85,7 @@ Always-on via `.agent/rules/` + `.agent/workflows/`. `setup.sh` ships both files
 <details>
 <summary><b>Kiro IDE/CLI</b></summary>
 
-Always-on via `.kiro/steering/*.md` with `inclusion: always`. `setup.sh` symlinks `.skills/*` into both `.kiro/skills/` and `~/.kiro/skills/`. Invoke with `/wiki-ingest`, `/wiki-query`, etc.
+Always-on via `.kiro/steering/*.md` with `inclusion: always`. `setup.sh` symlinks `skills/*` into both `.kiro/skills/` and `~/.kiro/skills/`. Invoke with `/wiki-ingest`, `/wiki-query`, etc.
 </details>
 
 <details>
@@ -97,7 +97,7 @@ All read `AGENTS.md` at the repo root. `setup.sh` symlinks skills into `~/.agent
 <details>
 <summary><b>Hermes</b></summary>
 
-Reads `.hermes.md` first, then falls back to `AGENTS.md`. Skills discovered from `~/.hermes/skills/`. Run `setup.sh` or manually symlink `.skills/*` there.
+Reads `.hermes.md` first, then falls back to `AGENTS.md`. Skills discovered from `~/.hermes/skills/`. Run `setup.sh` or manually symlink `skills/*` there.
 
 ```bash
 cd /path/to/obsidian-wiki && hermes "set up my wiki"
@@ -123,13 +123,13 @@ cd /path/to/obsidian-wiki && openclaw "set up my wiki"
 
 **VS Code Chat:** reads `.github/copilot-instructions.md`. Say "set up my wiki" in Copilot Chat.
 
-**CLI:** discovers skills from `~/.copilot/skills/`. Run `setup.sh` or manually symlink `.skills/*` there.
+**CLI:** discovers skills from `~/.copilot/skills/`. Run `setup.sh` or manually symlink `skills/*` there.
 </details>
 
 <details>
 <summary><b>Pi</b></summary>
 
-Reads `AGENTS.md` (walking up from cwd). Discovers skills from `.pi/skills/`, `.agents/skills/`, and `~/.pi/agent/skills/`. Run `setup.sh` or manually symlink `.skills/*` to `~/.pi/agent/skills/`.
+Reads `AGENTS.md` (walking up from cwd). Discovers skills from `.pi/skills/`, `.agents/skills/`, and `~/.pi/agent/skills/`. Run `setup.sh` or manually symlink `skills/*` to `~/.pi/agent/skills/`.
 
 ```bash
 cd /path/to/obsidian-wiki && pi "set up my wiki"

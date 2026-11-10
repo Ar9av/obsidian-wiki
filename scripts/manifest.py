@@ -6,7 +6,7 @@ markdown instructions still work without it, but this makes the manifest steps
 deterministic and testable.
 
 Source keys in `.manifest.json` follow the portable key contract (see
-`.skills/llm-wiki/SKILL.md`): vault-relative for in-vault sources
+`skills/llm-wiki/SKILL.md`): vault-relative for in-vault sources
 (`Raw/x.pdf`), home-relative for sources under `$HOME` (`~/.claude/...`), or a
 pseudo-key (`repo:`/`url:`/`agent:`) for sources with no filesystem
 representation in either form. Bare machine absolute paths are legacy and still

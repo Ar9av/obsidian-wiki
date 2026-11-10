@@ -49,6 +49,7 @@ from obsidian_wiki.links import PageIndex, strip_code
 from obsidian_wiki.provenance import archive_wikilink_relpath
 from obsidian_wiki.vault import SKIP_DIRS as VAULT_SKIP_DIRS
 from obsidian_wiki.vault import iter_md, okignore_patterns, okignored, skipped_dir  # noqa: F401 (re-exported)
+from obsidian_wiki.vault import split_frontmatter
 
 
 # ---------------------------------------------------------------------------
@@ -62,7 +63,25 @@ _MD_LINK_RE = re.compile(
     r"\[.*?\]\((?![A-Za-z][A-Za-z0-9+.-]*:)([^)#\s]+\.md)(?:[#\s][^)]*)?\)"
 )
 _TAGS_RE = re.compile(r"^tags:\s*\[([^\]]+)\]", re.MULTILINE)
-_TAGS_LIST_RE = re.compile(r"^tags:\s*\n((?:\s+-\s+\S+\n)+)", re.MULTILINE)
+_TAGS_LIST_RE = re.compile(r"^tags:[ \t]*\n((?:[ \t]*-[ \t]+\S+[ \t]*\n)+)", re.MULTILINE)
+
+
+def frontmatter_tags(frontmatter: str) -> list[str]:
+    """Tags declared in a frontmatter block, inline (`[a, b]`) or as a block list.
+
+    Pass the frontmatter only, never the whole page: a `tags:` line quoted in
+    the body would otherwise be read as the page's tags.
+    """
+    # The frontmatter splitters drop the newline before the closing `---`, and
+    # the block-list pattern needs one after every item, the last one included.
+    front = frontmatter + "\n"
+    m = _TAGS_RE.search(front)
+    if m:
+        return [t.strip().strip("'\"") for t in m.group(1).split(",")]
+    m = _TAGS_LIST_RE.search(front)
+    if m:
+        return [ln.strip().lstrip("- ") for ln in m.group(1).splitlines() if ln.strip()]
+    return []
 
 
 def _slug(page_name: str) -> str:
@@ -131,13 +150,9 @@ def parse_vault_graph(vault: Path) -> tuple[dict[str, list[str]], dict[str, list
         links_text = strip_code(text)
 
         # Tags
-        m = _TAGS_RE.search(text)
-        if m:
-            tags_map[src] = [t.strip().strip("'\"") for t in m.group(1).split(",")]
-        else:
-            m2 = _TAGS_LIST_RE.search(text)
-            if m2:
-                tags_map[src] = [ln.strip().lstrip("- ") for ln in m2.group(1).splitlines() if ln.strip()]
+        tags = frontmatter_tags(split_frontmatter(text)[0])
+        if tags:
+            tags_map[src] = tags
 
         # Wikilinks
         for link in _WIKILINK_RE.findall(links_text):
