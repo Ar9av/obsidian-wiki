@@ -1253,10 +1253,12 @@ def cmd_setup(args: argparse.Namespace) -> int:
         except Exception as exc:  # never fail setup over an optional extra
             hooks_line = f"could not register ({exc}) — run `obsidian-wiki hooks install`"
 
-    n = 0 if vault_only else len(list_skills())
     print("\n───────────────────────────────────────────────────")
     print(" Setup complete!\n")
-    print(f" Skills installed: {n}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
+    if vault_only:
+        print(" Skills installed: skipped (--vault-only)")
+    else:
+        print(f" Skills installed: {len(list_skills())}  (mode: {'copy' if _SYMLINK_FALLBACK else mode})")
     if vault_path:
         print(f" Vault:            {vault_path}")
     print(f" Writing profile:  {writing_profile.resolve()}")

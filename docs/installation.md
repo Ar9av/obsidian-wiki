@@ -78,11 +78,21 @@ Use repeatable `--skill wiki-query --skill llm-wiki` to select a subset, or
 `--source owner/repo` to track a fork's default branch. Local unpushed skill
 changes are **not** installed through this path. No dependencies are auto-installed.
 
-The batch stops on the first failed or cancelled install; successful earlier
-installs remain. Existing destination names are refused before any installation
-starts, including copied or symlinked skills. For a partial batch, rerun with
-`--skill` for the missing names. For a manual-copy migration, back up your edits
-and remove only the intended old copies before installing. Never use `--force`
+A skill that Hermes blocks, cannot fetch, or that you decline does not stop the
+batch: the rest are still attempted, and the command ends with a summary and a
+`--skill ...` line to retry the failures (exit code 1 if any failed). Existing
+destination names are refused before any installation starts, including copied
+or symlinked skills.
+
+Not every skill installs cleanly through Hermes today. Its scanner blocks some
+community-source skills (for example a `CAUTION`/`DANGEROUS` verdict on skills
+that edit agent config), and its URL adapter refuses a skill whose SKILL.md
+mentions a `references/`, `scripts/` or `assets/` path that doesn't exist next
+to it. Read the Hermes verdict before deciding whether `--force` is warranted
+for a specific skill; `install-hermes` never passes it.
+
+For a manual-copy migration, back up your edits and remove only the intended
+old copies before installing. Never use `--force`
 just to make a collision disappear.
 
 Use Hermes with the **same profile** for maintenance:

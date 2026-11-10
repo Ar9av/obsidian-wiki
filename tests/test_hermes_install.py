@@ -69,19 +69,27 @@ def test_missing_cli_is_actionable(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(hermes_install.shutil, "which", lambda name: None)
     assert cli.main(["install-hermes", "--skill", "wiki-query"]) == 1
-    assert "PATH" in capsys.readouterr().out
+    assert "PATH" in capsys.readouterr().err
 
 
-def test_failed_cli_stops_batch(tmp_path, monkeypatch):
+def test_failed_skill_does_not_stop_batch(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(hermes_install.shutil, "which", lambda name: "hermes")
     calls = []
     def run(command, **kwargs):
         calls.append(command)
-        return subprocess.CompletedProcess(command, 7)
+        name = command[5]
+        if name == "wiki-update":  # Hermes blocks a scan verdict but exits 0
+            target = tmp_path / "skills" / name
+            target.mkdir(parents=True)
+            (target / "SKILL.md").write_text("installed", encoding="utf-8")
+        return subprocess.CompletedProcess(command, 0 if name == "wiki-update" else 7)
     monkeypatch.setattr(hermes_install.subprocess, "run", run)
-    assert cli.main(["install-hermes", "--skill", "wiki-query", "--skill", "wiki-update"]) == 7
-    assert len(calls) == 1
+    assert cli.main(["install-hermes", "--skill", "wiki-query", "--skill", "wiki-update", "--skill", "wiki-lint"]) == 1
+    assert [c[5] for c in calls] == ["wiki-query", "wiki-update", "wiki-lint"]
+    captured = capsys.readouterr()
+    assert "Installed 1/3" in captured.out
+    assert "--skill wiki-query --skill wiki-lint" in captured.err
 
 
 def test_launch_error_is_reported(tmp_path, monkeypatch):
