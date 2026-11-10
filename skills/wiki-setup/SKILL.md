@@ -8,6 +8,20 @@ description: >
 
 You are setting up a new Obsidian wiki vault (or repairing an existing one).
 
+## Hermes Skills Hub installs
+
+When running in Hermes, first resolve the vault path with the user and run
+`obsidian-wiki setup --vault-only --vault <absolute-path>` (optional
+`--timezone <IANA-name>`). Review the existing shared wiki config before changing
+its vault selection. This initializes the packaged asset root and writing profile
+without touching other agents. If the CLI is unavailable, ask the user to install
+it; do not substitute broad setup or automatic dependency installation.
+Use the resulting `OBSIDIAN_WIKI_REPO` for shared templates and scripts: a
+hub-installed skill's location is not the framework repository root. Do not
+create a project `.env` unless the user explicitly wants a project override.
+Skip the optional Claude Stop-hook section entirely in Hermes. Sync and history
+imports remain separate opt-ins, not part of installing these skills.
+
 ## Step 1: Create .env
 
 If `.env` doesn't exist, create it from `.env.example`. Ask the user for:
@@ -125,7 +139,7 @@ mkdir -p "$OBSIDIAN_VAULT_PATH"/{concepts,entities,skills,references,synthesis,j
 
 ## Step 3: Create Special Files
 
-`obsidian-wiki setup --vault <path> [--timezone <IANA name>]` creates all of these in one go. The templates below are what it writes, for setups done by hand.
+`obsidian-wiki setup --vault <path> [--timezone <IANA name>]` creates all of these in one go. **In Hermes, use `obsidian-wiki setup --vault-only --vault <path> [--timezone <IANA name>]` instead**: skills installed through Hermes Skills Hub are already managed there; broad setup would also install into other agents and profiles. The templates below are what it writes, for setups done by hand.
 
 ### index.md
 

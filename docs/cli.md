@@ -15,6 +15,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | Command | What it does |
 |---|---|
 | `setup` | Install skills into your agents and write the global config |
+| `install-hermes` | Install skills through Hermes Skills Hub into one explicit profile; native check/update provenance |
 | `info` | Show install paths, version, and resolved config |
 | `list` | List the bundled skills |
 | `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
@@ -22,6 +23,9 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 
 ```bash
 obsidian-wiki setup --vault ~/brain
+obsidian-wiki setup --vault-only --vault ~/brain  # vault/config only; no agent skills, hooks or sync
+obsidian-wiki install-hermes --hermes-home /absolute/profile --dry-run
+obsidian-wiki install-hermes --hermes-home /absolute/profile --skill wiki-query
 obsidian-wiki setup --project .        # also install project-local skills + bootstrap files
 obsidian-wiki setup --project-only     # skip the global install (use with --project)
 obsidian-wiki setup --copy             # copy skill files instead of symlinking
@@ -34,6 +38,15 @@ obsidian-wiki doctor --strict          # exit non-zero on warnings too
 ```
 
 Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
+
+### Hermes profile installation
+`install-hermes` accepts `--hermes-home` (or requires `HERMES_HOME`), repeatable
+`--skill`, `--source owner/repo`, `--yes` (confirmation only; scans still apply), and `--dry-run`. It never installs dependencies,
+adds hooks, writes wiki config, or edits Hermes hub metadata itself. Existing
+destination names are refused; use native `hermes skills check/update` for
+maintenance. `setup --vault-only` initializes the vault and existing shared wiki
+config separately, and rejects `--project`, `--project-only`, and `--remote`.
+
 
 ### Session hooks
 

@@ -97,6 +97,12 @@ All read `AGENTS.md` at the repo root. `setup.sh` symlinks skills into `~/.agent
 <details>
 <summary><b>Hermes</b></summary>
 
+For one profile with native `hermes skills check/update` support, prefer
+[`obsidian-wiki install-hermes`](installation.md#hermes-profile-scoped-installation-and-native-updates)
+followed by `obsidian-wiki setup --vault-only --vault <absolute-path>`.
+The broad setup described below intentionally installs into multiple agents and
+profiles; copied/symlinked skills are not registered with Hermes Skills Hub.
+
 Reads `.hermes.md` first, then falls back to `AGENTS.md`. Skills discovered from `~/.hermes/skills/`. Run `setup.sh` or manually symlink `skills/*` there.
 
 ```bash
