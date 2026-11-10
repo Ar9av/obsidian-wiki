@@ -625,7 +625,11 @@ def query(
     as_of_date = parse_date(as_of) if isinstance(as_of, str) else as_of
     when = as_of_date
     if when is None and not include_historical:
-        when = parse_date(clock.today(clock.wiki_timezone(vault)))
+        try:
+            tz = clock.wiki_timezone(vault)
+        except clock.TimezoneError:
+            tz = None  # a typo'd `timezone:` is lint's to report; retrieval keeps answering on UTC
+        when = parse_date(clock.today(tz))
     retrievable = index if include_historical else current_pages(index, when)
     temporal = {
         "as_of": as_of_date.isoformat() if as_of_date else None,

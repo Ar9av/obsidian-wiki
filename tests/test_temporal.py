@@ -285,6 +285,19 @@ def test_query_today_follows_the_vault_calendar(tmp_path: Path, monkeypatch) -> 
     assert result["temporal"]["as_of"] is None
 
 
+def test_query_survives_an_unknown_vault_timezone(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "references/gateway.md", summary="The gateway is nginx.")
+    (vault / "index.md").write_text(
+        "---\ntitle: Wiki Index\ntimezone: Mars/Olympus\n---\n# Wiki Index\n",
+        encoding="utf-8",
+    )
+
+    result = query(vault, "gateway")
+
+    assert [c["page"] for c in result["candidates"]] == ["references/gateway.md"]
+
+
 def test_cli_rejects_a_malformed_as_of(tmp_path: Path) -> None:
     vault = tmp_path / "vault"
     _page(vault, "concepts/alpha.md")
