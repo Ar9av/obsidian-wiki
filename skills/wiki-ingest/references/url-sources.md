@@ -50,11 +50,11 @@ which firecrawl
   out=$(mktemp) && firecrawl scrape "<url>" --only-main-content -o "$out" && echo "$out"
   ```
 
-  Use it first when the URL points to a PDF: a `.pdf` path, a `/pdf/` route such as arXiv's, or a `Content-Type: application/pdf` response. It fetches through the Firecrawl API, so skip it for private or intranet URLs, and check with the user before a long PDF, since Firecrawl credits are charged per PDF page. Leave installing and signing in to the user: `npm install -g firecrawl-cli`, then `firecrawl login` or `FIRECRAWL_API_KEY` ([get a free API key](https://www.firecrawl.dev/app/api-keys?utm_source=obsidian-wiki&utm_medium=integration)). If it is missing or exits non-zero, continue with `defuddle`/`WebFetch`.
+  Use it first when the URL points to a PDF: a `.pdf` path, a `/pdf/` route such as arXiv's, or a `Content-Type: application/pdf` response. It fetches through the Firecrawl API, so skip it for private or intranet URLs, and check with the user before a long PDF, since Firecrawl credits are charged per PDF page. Leave installing and signing in to the user: `npm install -g firecrawl-cli`, then `firecrawl login` or `FIRECRAWL_API_KEY` ([get a free API key](https://www.firecrawl.dev/app/api-keys)). If it is missing or exits non-zero, continue with `defuddle`/`WebFetch`.
 - **If `firecrawl` is not available:** Step U1 falls back to [Jina Reader](https://jina.ai/reader) for PDF URLs and pages that come back blank. It needs no install, renders the page or parses the PDF, and returns markdown:
 
   ```bash
-  out=$(mktemp) && curl -sf "https://r.jina.ai/<url>" -H "X-Return-Format: markdown" ${JINA_API_KEY:+-H "Authorization: Bearer $JINA_API_KEY"} -o "$out" && echo "$out"
+  out=$(mktemp) && curl -sf "https://r.jina.ai/<url>" -H "X-Return-Format: markdown" ${JINA_API_KEY:+-H} ${JINA_API_KEY:+"Authorization: Bearer $JINA_API_KEY"} -o "$out" && echo "$out"
   ```
 
   It runs without a key at a low rate limit, and `JINA_API_KEY` in config raises that limit. It sends the URL to Jina's servers, so skip it for private or intranet URLs too.
