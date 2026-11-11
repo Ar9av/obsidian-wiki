@@ -53,11 +53,12 @@ class ClaudePluginTest(unittest.TestCase):
         # Global installs made before the rename hold absolute links into .skills/.
         self.assertEqual(os.readlink(ROOT / ".skills"), "skills")
 
-    def test_no_pinned_version(self) -> None:
-        # Without a version Claude Code keys the install on the git commit, so
-        # `marketplace update` delivers every change on main. A pinned version
-        # would freeze users until someone remembers to bump it.
-        self.assertNotIn("version", self.plugin)
+    def test_version_is_pinned_to_releases(self) -> None:
+        # The version ties plugin updates to tagged releases instead of every
+        # commit on main. publish.yml refuses a tag that doesn't match it, so a
+        # forgotten bump fails the release rather than freezing plugin users.
+        self.assertRegex(self.plugin["version"], r"^\d+\.\d+\.\d+$")
+        # One source of truth: a second copy in marketplace.json would drift.
         self.assertNotIn("version", self.marketplace["plugins"][0])
 
 

@@ -28,11 +28,11 @@ uv tool install obsidian-wiki     # or: uv pip install obsidian-wiki
 pipx install obsidian-wiki
 ```
 
-Upgrades are `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`; re-run `obsidian-wiki setup` afterwards to pick up new skills.
+Upgrades are `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`. The next `obsidian-wiki` command refreshes the skills in every agent that setup already installed into, so new skills appear without re-running setup. The CLI and the SessionStart hook print a one-line notice when a newer release is on PyPI (checked at most once a day; set `OBSIDIAN_WIKI_NO_UPDATE_CHECK=1` to turn it off).
 
 > **Don't use `uvx obsidian-wiki setup`.** `uvx` runs from a throwaway environment, and setup symlinks skills *into the installed package*. When the environment is discarded, every skill link in `~/.claude/skills/`, `~/.codex/skills/`, and the rest points at a path that no longer exists. If you must run it that way, use `uvx obsidian-wiki setup --copy`, which copies the skill files instead.
 
-`obsidian-wiki setup` writes the config to `~/.config/obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere — just re-run `obsidian-wiki setup` to pick up new skills.
+`obsidian-wiki setup` writes the config to `~/.config/obsidian-wiki/config` and installs every wiki skill into all your AI agents (Claude Code, Cursor, Codex, Gemini, Hermes, Pi, and more). Skills are symlinked to the installed package, so `pip install -U obsidian-wiki` upgrades them everywhere, and the next `obsidian-wiki` command links in any new skills.
 
 Then open a project in your agent and say **"set up my wiki"**.
 
@@ -197,7 +197,7 @@ What's different:
 
 - **Skills are namespaced.** Slash commands become `/obsidian-wiki:wiki-ingest`, `/obsidian-wiki:wiki-query`, and so on. Plain-language requests ("ingest this folder") route the same way they always do.
 - **Skills only.** The plugin doesn't register the session hooks or put the `obsidian-wiki` CLI on your `PATH`. For those, install with pip as well and run `obsidian-wiki setup`.
-- **Updates follow the repo.** The plugin has no pinned version, so it tracks the latest commit on `main`: run `claude plugin marketplace update obsidian-wiki`, then `claude plugin update obsidian-wiki@obsidian-wiki`, and restart Claude Code.
+- **Updates arrive with each release.** The plugin's `version` is bumped with every tagged release, so Claude Code offers an update only when one ships. To get releases without doing anything, turn on auto-update for this marketplace: run `/plugin`, open **Marketplaces**, select `obsidian-wiki`, and choose **Enable auto-update** (it is off by default for third-party marketplaces). Claude Code then updates the plugin at startup. To update by hand: `claude plugin marketplace update obsidian-wiki`, then `claude plugin update obsidian-wiki@obsidian-wiki`, and restart Claude Code.
 ## Install as a plugin in other agents
 
 The same manifest works as a plugin for agents that read Claude Code marketplaces. Each gets all the skills from `skills/`:

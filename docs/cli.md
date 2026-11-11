@@ -17,6 +17,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | `setup` | Install skills into your agents and write the global config |
 | `install-hermes` | Install skills through Hermes Skills Hub into one explicit profile; native check/update provenance |
 | `info` | Show install paths, version, and resolved config |
+| `update-check` | Print one line if a newer release is on PyPI (cached; checks at most once a day) |
 | `list` | List the bundled skills |
 | `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
 | `mcp` | Serve the vault's memory tools over stdio for an agent to launch; needs the `[server]` extra (see [Deployment](deployment.md#connect-an-agent-mcp)) |
@@ -37,7 +38,7 @@ obsidian-wiki doctor --vault /other/vault --project .
 obsidian-wiki doctor --strict          # exit non-zero on warnings too
 ```
 
-Commands other than `setup`, `info`, and `doctor` warn you when the install has gone stale (the package upgraded but skills weren't re-linked). Re-run `obsidian-wiki setup` to fix.
+After an upgrade, the next command other than `setup`, `info`, `doctor`, `memory`, and `hooks` refreshes the skills in every agent directory setup already installed into, in the same symlink or copy mode, and records the new version. It never adds skills to an agent you didn't set up. Those commands also print a one-line notice when a newer release is on PyPI. The check runs at most once a day, fails silently offline, and is off in CI or with `OBSIDIAN_WIKI_NO_UPDATE_CHECK=1`.
 
 ### Hermes profile installation
 `install-hermes` accepts `--hermes-home` (or requires `HERMES_HOME`), repeatable
@@ -74,9 +75,11 @@ A malformed `settings.json` is refused rather than overwritten.
 
 ### Upgrading the framework
 
-`doctor` never checks for new releases. To upgrade, use your installer
-(`pip install -U obsidian-wiki` / `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`)
-then re-run `obsidian-wiki setup`.
+`doctor` never checks for new releases; `obsidian-wiki update-check` does, and
+regular commands print its notice. To upgrade, use your installer
+(`pip install -U obsidian-wiki` / `uv tool upgrade obsidian-wiki` / `pipx upgrade obsidian-wiki`).
+The next command refreshes the skills already installed in your agents; run
+`obsidian-wiki setup` to add skills to an agent for the first time.
 
 ## Querying & linting
 
