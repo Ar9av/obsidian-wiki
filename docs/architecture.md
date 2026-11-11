@@ -20,7 +20,7 @@ The agent reads your source material directly — markdown, PDFs (with page rang
 | PDF | Read in page ranges. Scanned pages are read as images. Long PDFs can be pre-indexed with PageIndex (optional) |
 | Images and screenshots | Read with your agent's vision, so a vision-capable model is required. Most of what comes out is marked `^[inferred]` |
 | JSON, CSV, chat exports | Parsed first (ChatGPT, Slack, Discord, transcripts), then distilled |
-| URLs | Fetched with `defuddle` or your agent's web fetch, or the `firecrawl` CLI (else Jina Reader) for PDFs and JavaScript-rendered pages; the snapshot is kept in `_raw/` |
+| URLs | Fetched through approved keyless retrieval: optional existing Jina MCP, approved native/CLI tools, or explicit keyless HTTP fallback; capability-dependent PDF/JS support. URL ingestion cites the live source URL; existing local snapshots use the raw-file path instead. |
 | Code | Distilled into architecture and decisions, not code listings. `/wiki-update` uses the code graph when one is available |
 | Agent histories | Claude Code, Codex, Copilot, Hermes, OpenClaw, and Pi via `/wiki-history-ingest` |
 | Office files (`.docx`, `.xlsx`, `.pptx`) | Planned for ingest, but only as good as your agent's ability to read them. Export to PDF or markdown for reliable results |
