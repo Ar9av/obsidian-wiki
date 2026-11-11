@@ -19,7 +19,14 @@ from typing import Iterable, Optional
 
 #: Obsidian does not treat a `[[link]]` inside inline code or a fenced block as
 #: a link, so neither does anything that walks the link graph.
-_FENCE_RE = re.compile(r"^(```|~~~).*?^\1[^\n]*$", re.MULTILINE | re.DOTALL)
+# Fences follow CommonMark: up to 3 spaces of indent, no backtick in the info
+# string of a backtick fence, closed by a bare fence of the same character at
+# least as long, or by the end of the page.
+_FENCE_RE = re.compile(
+    r"^ {0,3}(?P<fence>(?P<ch>[`~])(?P=ch){2,})(?!(?P=ch))(?:(?<=~)[^\n]*|[^`\n]*)$"
+    r"(?:\n(?:.*?\n)?? {0,3}(?P=fence)(?P=ch)*[ \t\r]*$|.*\Z)",
+    re.MULTILINE | re.DOTALL,
+)
 # Single-line on purpose: a stray backtick must not swallow the rest of a page.
 _INLINE_CODE_RE = re.compile(r"(`+)(?!`).+?(?<!`)\1(?!`)")
 
