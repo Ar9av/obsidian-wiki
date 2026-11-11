@@ -38,7 +38,7 @@ Each entry carries:
 | `staged_path` | vault-relative path of the staged file |
 | `live_path` | where it will land (a `.patch.md` targets the page it is named after) |
 | `kind` | `new`, `update`, or `patch` |
-| `staged_revision` | content hash of the staged file, as you are seeing it now |
+| `staged_revision` | content hash of the staged file, as listed in the current inventory |
 | `live_revision` | content hash of the live page, or `null` if there is none yet |
 | `staged_mtime` | when it was staged |
 
