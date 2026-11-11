@@ -97,14 +97,27 @@ run_recap() {
   fi
 }
 
-RECAP=$(run_recap) || quiet_exit "memory recap failed or timed out (no obsidian-wiki on PATH, or python3 cannot import obsidian_wiki?)"
-[[ -n "${RECAP//[[:space:]]/}" ]] || quiet_exit "memory recap printed nothing"
+# One line when a newer obsidian-wiki is on PyPI (cached; checks at most
+# daily). Printed even when there is no recap, so users hear about upgrades.
+UPDATE=""
+if command -v obsidian-wiki >/dev/null 2>&1; then
+  if command -v timeout >/dev/null 2>&1; then
+    UPDATE=$(timeout 5 obsidian-wiki update-check 2>/dev/null) || UPDATE=""
+  else
+    UPDATE=$(obsidian-wiki update-check 2>/dev/null) || UPDATE=""
+  fi
+fi
+print_update() { [[ -n "$UPDATE" ]] && printf '%s\n\n' "$UPDATE"; return 0; }
+
+RECAP=$(run_recap) || { print_update; quiet_exit "memory recap failed or timed out (no obsidian-wiki on PATH, or python3 cannot import obsidian_wiki?)"; }
+[[ -n "${RECAP//[[:space:]]/}" ]] || { print_update; quiet_exit "memory recap printed nothing"; }
 
 # An empty vault produces this line; injecting it is pure noise.
 case "$RECAP" in
-  *"No vault memory recorded yet"*) quiet_exit "vault has no memory recorded yet" ;;
+  *"No vault memory recorded yet"*) print_update; quiet_exit "vault has no memory recorded yet" ;;
 esac
 
+print_update
 cat <<EOF
 $RECAP
 

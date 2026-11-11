@@ -6,8 +6,10 @@ name: publish
 # workflow `publish.yml` and environment `pypi`. No API token needed — the
 # `id-token: write` permission below mints a short-lived OIDC credential.
 #
-# Release: bump `version` in pyproject.toml, commit, then
+# Release: set `version` in .claude-plugin/plugin.json to the new version
+# (the build fails if it doesn't match the tag), commit, then
 #   git tag v0.1.0 && git push origin v0.1.0
+# The package version itself comes from the tag (hatch-vcs).
 
 on:
   push:
@@ -27,6 +29,15 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.x"
+      - name: Check plugin.json version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          plugin=$(python -c "import json; print(json.load(open('.claude-plugin/plugin.json'))['version'])")
+          if [ "$tag" != "$plugin" ]; then
+            echo "::error::.claude-plugin/plugin.json version is $plugin but the tag is $tag. Bump it to $tag before tagging, or plugin users won't see this release."
+            exit 1
+          fi
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade build

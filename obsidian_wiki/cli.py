@@ -11,6 +11,7 @@ from any project.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -369,7 +370,7 @@ def resolve_vault_path(cli_vault: str | None) -> str:
     return existing
 
 
-def write_config(vault_path: str) -> None:
+def write_config(vault_path: str, *, quiet: bool = False) -> None:
     """Write the setup-managed keys, preserving everything else in the file.
 
     Only ``OBSIDIAN_VAULT_PATH``, ``OBSIDIAN_WIKI_REPO`` and
@@ -409,7 +410,8 @@ def write_config(vault_path: str) -> None:
             out.append(f'{key}="{value}"')
 
     GLOBAL_CONFIG.write_text("\n".join(out) + "\n", encoding="utf-8")
-    print(f"✅  Global config written to {GLOBAL_CONFIG}")
+    if not quiet:
+        print(f"✅  Global config written to {GLOBAL_CONFIG}")
 
 
 def ensure_global_writing_profile() -> Path:
@@ -611,6 +613,45 @@ def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
     return created
 
 
+UPDATE_CHECK_CACHE = GLOBAL_CONFIG_DIR / "update-check.json"
+
+
+def _update_notice() -> str:
+    from obsidian_wiki import update_check
+
+    return update_check.notice(__version__, UPDATE_CHECK_CACHE)
+
+
+def cmd_update_check(args: argparse.Namespace) -> int:
+    line = _update_notice()
+    if line:
+        print(line)
+    return 0
+
+
+def _refresh_installed_skills() -> int:
+    """Re-install skills into every agent dir that setup already populated.
+
+    Only directories that already hold at least one of our managed skills are
+    touched, in the mode (symlink or copy) they were installed with, so an
+    upgrade picks up new skills without spreading into agents the user never
+    set up. Returns the number of agent dirs refreshed.
+    """
+    bundled = set(list_skills())
+    refreshed = 0
+    for rel, label, subset in GLOBAL_AGENT_DIRS:
+        target = HOME / rel
+        if not target.is_dir():
+            continue
+        ours = [p for p in target.iterdir() if p.name in bundled and (p / "SKILL.md").exists()]
+        if not ours:
+            continue
+        mode = "symlink" if any(_is_link_or_junction(p) for p in ours) else "copy"
+        install_skills(target, label, subset=subset, mode=mode, quiet=True)
+        refreshed += 1
+    return refreshed
+
+
 def _check_stale() -> None:
     """Warn if the installed version doesn't match when setup last ran, or if skills are missing."""
     if not GLOBAL_CONFIG.is_file():
@@ -623,11 +664,25 @@ def _check_stale() -> None:
 
     setup_version = _read_config_value("OBSIDIAN_WIKI_VERSION")
     if setup_version and setup_version != __version__:
-        print(
-            f"⚠️  obsidian-wiki upgraded {setup_version} → {__version__} but setup hasn't been re-run.\n"
-            f"   New skills won't be available until you run: obsidian-wiki setup",
-            file=sys.stderr,
-        )
+        try:
+            # Everything here goes to stderr: the command that triggered the
+            # check may be printing JSON on stdout.
+            with contextlib.redirect_stdout(sys.stderr):
+                refreshed = _refresh_installed_skills()
+                write_config(_read_config_value("OBSIDIAN_VAULT_PATH"), quiet=True)
+        except Exception as exc:  # never fail the user's command over this
+            print(
+                f"⚠️  obsidian-wiki upgraded {setup_version} → {__version__} but the skills "
+                f"could not be refreshed ({exc}).\n   Run: obsidian-wiki setup",
+                file=sys.stderr,
+            )
+            return
+        if refreshed:
+            print(
+                f"✅  obsidian-wiki upgraded {setup_version} → {__version__}: "
+                f"refreshed skills in {refreshed} agent dir(s).",
+                file=sys.stderr,
+            )
         return
 
     # Even if the version matches, check that ~/.claude/skills has the full set.
@@ -3054,6 +3109,12 @@ def build_parser() -> argparse.ArgumentParser:
     ip = sub.add_parser("info", help="show install paths, version, and config")
     ip.set_defaults(func=cmd_info)
 
+    uc = sub.add_parser(
+        "update-check",
+        help="print one line if a newer obsidian-wiki is on PyPI (checked at most daily)",
+    )
+    uc.set_defaults(func=cmd_update_check)
+
     gq = sub.add_parser(
         "graph-query",
         help="answer a question from the vault's wikilink index without reading page bodies",
@@ -3669,8 +3730,11 @@ def main(argv: list[str] | None = None) -> int:
     # and `info` (which calls _check_stale itself with richer output).
     # `memory` runs from the SessionStart hook and from every write skill, and
     # `hooks` is what fixes the thing the nag is about; nagging there is noise.
-    if getattr(args, "command", None) not in ("setup", "install-hermes", "info", "doctor", "memory", "hooks", None):
+    if getattr(args, "command", None) not in ("setup", "install-hermes", "info", "doctor", "memory", "hooks", "update-check", None):
         _check_stale()
+        line = _update_notice()
+        if line:
+            print(line, file=sys.stderr)
     try:
         return args.func(args)
     except (FileNotFoundError, RuntimeError) as exc:

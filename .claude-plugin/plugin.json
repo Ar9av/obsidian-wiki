@@ -1,5 +1,6 @@
 {
   "name": "obsidian-wiki",
+  "version": "2026.11.4",
   "description": "Grow an Obsidian second brain with your AI agent: ingest docs, chat history and URLs into interlinked markdown, then query it with citations. Karpathy's LLM Wiki pattern as Claude Code skills.",
   "author": {
     "name": "Ar9av",
