@@ -150,20 +150,11 @@ Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a ven
 
 ## URL ingest (optional)
 
-URL ingestion prefers an already configured, operator-approved keyless Jina MCP
-`read_url`, then an approved existing retrieval capability (including native tools
-or CLI extractors), then an explicitly approved keyless Jina Reader HTTP fallback.
-MCP is optional: no server setup, proxy install or custom response normalization is
-required by the skill. Use the host's presented content and error status directly.
-PDF/JavaScript extraction depends on the selected tool's actual capabilities.
+When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Reader](https://jina.ai/reader) for PDFs and JavaScript-rendered pages. It works without a key at a low rate limit. See `skills/wiki-ingest/references/url-sources.md`.
 
-The URL-ingest workflow no longer reads `JINA_API_KEY`. Existing user configuration
-is not rewritten; a stored key does not authorize this workflow to use it.
-Authentication is deferred. Configure any optional MCP connection separately in
-the agent host, never in a skill or model-visible tool arguments. Rate limits or
-missing controls produce an explicit limitation rather than credential escalation.
-See `skills/wiki-ingest/references/retrieval.md` and `url-sources.md` for disclosure,
-read_url-only/argument restrictions, host bounds and untrusted-content handling.
+| Variable | What it does | Default |
+|---|---|---|
+| `JINA_API_KEY` | Optional Jina Reader authentication for higher provider rate limits. The bundled stdlib helper reads it only from the process environment and constructs the header internally, never through shell/argv. It does not load vault config files; config-only users must supply the value through their approved environment mechanism rather than silently falling back to keyless. Hosted URL disclosure still requires approval. | *(empty, keyless)* |
 
 ## QMD semantic search (optional)
 
