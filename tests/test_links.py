@@ -66,6 +66,22 @@ def test_strip_code_drops_fences_and_inline_spans_only() -> None:
     assert "[[b]]" not in kept and "[[c]]" not in kept
 
 
+def test_strip_code_fences_follow_commonmark() -> None:
+    cases = [
+        "````md\n```js\n[[a]]\n```\n````\n[[b]]",  # longer fence wraps a shorter one
+        "```\nx\n```python\n[[a]]\n```\n[[b]]",  # an info string does not close
+        "~~~\n```\n[[a]]\n~~~\n[[b]]",  # only the same character closes
+        "```\n[[a]]\n``` x\n```\n[[b]]",  # trailing text does not close
+        "```\r\n[[a]]\r\n```\r\n[[b]]",
+        "   ```\n[[a]]\n```\n[[b]]",  # up to 3 spaces of indent
+        "```\n```\n[[b]]\n```\n[[a]]",  # empty block, then one to the end
+        "``` a`b\n[[b]]",  # a backtick in the info string: not a fence
+    ]
+    for text in cases:
+        kept = strip_code(text)
+        assert "[[a]]" not in kept and "[[b]]" in kept, text
+
+
 # -- every consumer ---------------------------------------------------------
 
 
