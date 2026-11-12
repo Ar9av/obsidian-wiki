@@ -154,7 +154,7 @@ When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Read
 
 | Variable | What it does | Default |
 |---|---|---|
-| `JINA_API_KEY` | Raises the Jina Reader rate limit | *(empty, keyless)* |
+| `JINA_API_KEY` | Optional Jina Reader authentication for higher provider rate limits. The bundled stdlib helper reads it only from the process environment and constructs the header internally, never through shell/argv. It does not load vault config files; config-only users must supply the value through their approved environment mechanism rather than silently falling back to keyless. Hosted URL disclosure still requires approval. | *(empty, keyless)* |
 
 ## QMD semantic search (optional)
 
