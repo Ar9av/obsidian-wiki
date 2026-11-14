@@ -447,3 +447,22 @@ def test_final_counters_are_included_in_budget(tmp_path: Path) -> None:
     assert pack["pages_dropped"] == pack["candidate_pages"] - pack["pages_included"]
     assert pack["estimated_tokens"] == estimate_tokens(render_markdown(pack))
     assert pack["estimated_tokens"] <= pack["budget_tokens"]
+
+
+def test_pack_shows_validity_window_and_successor(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    write_note(
+        vault,
+        "concepts/auth.md",
+        "---\ntitle: Auth\nsummary: Authentication overview.\n"
+        "valid_from: 2025-01-01\nvalid_until: 2025-06-30\n"
+        "superseded_by: \"[[auth-v2]]\"\n---\n# Auth\n\nOld flow.\n",
+    )
+    write_note(vault, "concepts/login.md", "---\ntitle: Login\nsummary: Login authentication.\n---\nBody.\n")
+
+    markdown = render_markdown(build_context_pack(vault, "authentication", budget=1200))
+
+    assert "Valid: 2025-01-01 – 2025-06-30" in markdown
+    assert "Superseded by: [[auth-v2]]" in markdown
+    login_block = markdown.split("## Login", 1)[1]
+    assert "Valid:" not in login_block.split("---", 1)[0]

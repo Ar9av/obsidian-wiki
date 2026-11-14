@@ -45,6 +45,9 @@ class PageRecord:
     lifecycle: str
     base_confidence: str
     body: str
+    valid_from: str = ""
+    valid_until: str = ""
+    superseded_by: str = ""
 
 
 def estimate_tokens(text: str) -> int:
@@ -191,7 +194,7 @@ def _page_from_path(path: Path, vault: Path) -> PageRecord:
     summary = str(values.get("summary", "")).strip() or _first_paragraph(_without_sources(body))
     updated = str(values.get("updated", "")).strip() or datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
     tier = str(values.get("tier", "supporting")).strip().lower()
-    return PageRecord(path.relative_to(vault).as_posix(), title, _as_tuple(values.get("aliases", ())), _as_tuple(values.get("tags", ())), summary, tier if tier in TIER_ORDER else "supporting", updated, str(values.get("lifecycle", "")).strip(), str(values.get("base_confidence", "")).strip(), body.strip())
+    return PageRecord(path.relative_to(vault).as_posix(), title, _as_tuple(values.get("aliases", ())), _as_tuple(values.get("tags", ())), summary, tier if tier in TIER_ORDER else "supporting", updated, str(values.get("lifecycle", "")).strip(), str(values.get("base_confidence", "")).strip(), body.strip(), *(str(values.get(key, "")).strip() for key in ("valid_from", "valid_until", "superseded_by")))
 
 
 def load_pages(vault: Path, *, public_only: bool = False) -> list[PageRecord]:
@@ -306,6 +309,11 @@ def _page_block(page: PageRecord, content: str) -> str:
         metadata.append("Tags: " + ", ".join(page.tags))
     if page.updated:
         metadata.append(f"Updated: {page.updated}")
+    if page.valid_from or page.valid_until:
+        # Event time, so a reader can tell a historical claim from a current one.
+        metadata.append(f"Valid: {page.valid_from or '?'} – {page.valid_until or 'present'}")
+    if page.superseded_by:
+        metadata.append(f"Superseded by: {page.superseded_by}")
     if page.lifecycle:
         metadata.append(f"Lifecycle: {page.lifecycle}")
     if page.base_confidence:
