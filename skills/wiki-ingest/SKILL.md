@@ -431,6 +431,11 @@ For each page in your plan:
 - Update the `updated` timestamp in frontmatter
 - Add the new origin to the `sources` list and to the bottom **Sources** section (same snapshot-vs-URL rules as create)
 - Resolve any contradictions between old and new information (note them if unresolvable)
+- **Invalidate superseded claims, don't delete them.** For each claim the new source contradicts, compare event dates (see *Event time from the source*). If the new source is dated later, it supersedes the old claim:
+  - Only part of the page is stale → rewrite the claim to the new value and move the old one under a `## History` section as `- <old claim> (valid <from> – <day before new source date>)`.
+  - The whole page is stale → set `valid_until:` to the day before the new source's date and `superseded_by: "[[new-page]]"` on the old page, and link the new page back to it. The old page stays in the vault as history.
+  - The new source is older, or either date is unknown → keep the current claim, and flag the conflict with `^[ambiguous]` instead of picking a winner.
+  - Log each invalidation: `obsidian-wiki memory log INVALIDATE page=<path> by=<source>`.
 - If the page already has `valid_from:` and this source's own date is earlier, lower it to that date. Never add `valid_from:` to a page that has none, and never raise one.
 
 **Keep every page well under 1 MB.** Obsidian can't open a Markdown file of roughly 1–2 MB: the window goes blank, and since Obsidian loads every file in the vault, the whole vault becomes unusable. A wiki page is distilled knowledge, so one that grows past ~100 KB has usually swallowed its source whole. Plan large sources as several pages in Step 4: one per subtopic, each in its own category, each answering one question, with a parent page that links to them. Never paste a whole converted document (PDF, export, transcript) into a page. When a page you're updating would cross that size, split it the same way rather than appending. `obsidian-wiki lint` reports anything over 1,000,000 bytes as `oversized_pages`.
@@ -440,7 +445,9 @@ For each page in your plan:
 2. A leading ISO date in the filename (`2026-03-14-slug.md`, as `wiki-capture` writes)
 3. A dated origin such as `conversation:2026-03-14` or `"<project> session (2026-03-14)"`
 
-Never use file mtime — it changes on copy and sync. Never write a date later than today (`obsidian-wiki memory now --date`): a future `valid_from` hides the page from current queries. If no date is found, omit `valid_from:`; the page is then current, as before. Don't set `valid_until:` from ingest — only a later source that supersedes the claim can say when it stopped being true.
+Never use file mtime — it changes on copy and sync. Never write a date later than today (`obsidian-wiki memory now --date`): a future `valid_from` hides the page from current queries. If no date is found, omit `valid_from:`; the page is then current, as before. Set `valid_until:` only through the supersession step above: a later source that contradicts the claim is the only thing that can say when it stopped being true.
+
+**Relative dates resolve against the source's date, not today.** In conversations, transcripts, and session logs, "yesterday", "last week", or "two weeks ago" is relative to when that message was written. Convert it to an absolute `YYYY-MM-DD` using the message or session timestamp before writing it into a page or `valid_from:`. If the source has no timestamp, keep the relative phrase as quoted text and don't invent a date.
 
 **Populate `relationships:` when context is clear** — if Step 2 identified typed relationships between this page and another, add a `relationships:` block to the frontmatter (defined in `llm-wiki/SKILL.md`, Typed Relationships section). Only add entries where the source text makes the direction and type unambiguous. When in doubt, use `related_to` or omit the block. Example:
 

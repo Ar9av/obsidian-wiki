@@ -241,6 +241,8 @@ Don't create one wiki page per session. Instead:
 
 ## Step 5: Distill into Wiki Pages
 
+**Dates:** follow `wiki-ingest`'s event-time rules. Resolve relative dates ("yesterday", "last week") against the session/message timestamp, never today, and when a newer session contradicts an existing page, invalidate the old claim (`## History` or `valid_until` + `superseded_by`) rather than overwriting it.
+
 Each Copilot project maps to a project directory in the vault. Derive the project name from `cwd` or `repository`:
 
 ```
