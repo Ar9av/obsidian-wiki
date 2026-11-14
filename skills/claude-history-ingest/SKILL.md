@@ -335,6 +335,8 @@ Don't create one wiki page per conversation. Instead:
 
 ## Step 5: Distill into Wiki Pages
 
+**Dates:** follow `wiki-ingest`'s event-time rules. Resolve relative dates ("yesterday", "last week") against the session/message timestamp, never today, and when a newer session contradicts an existing page, invalidate the old claim (`## History` or `valid_until` + `superseded_by`) rather than overwriting it.
+
 Each Claude project maps to a project directory in the vault. The project directory name from `~/.claude/projects/` encodes the original path — decode it to get a clean project name:
 
 ```

@@ -124,6 +124,8 @@ Do not create one wiki page per memory or session.
 
 ## Step 5: Distill into Wiki Pages
 
+**Dates:** follow `wiki-ingest`'s event-time rules. Resolve relative dates ("yesterday", "last week") against the session/message timestamp, never today, and when a newer session contradicts an existing page, invalidate the old claim (`## History` or `valid_until` + `superseded_by`) rather than overwriting it.
+
 Route extracted knowledge using existing wiki conventions:
 
 - Project-specific architecture/process → `projects/<name>/...`
