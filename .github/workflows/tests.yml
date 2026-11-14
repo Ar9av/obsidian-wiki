@@ -17,10 +17,14 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.9", "3.12"]
+        python-version: ["3.12"]
         # Hooks, paths, and encodings break differently off Linux (#213, #219,
         # #265), so run the suite on the other two desktop OSes as well.
         include:
+          # ubuntu-latest is 26.04, which has no Python 3.9 build. Keep the
+          # 3.9 floor on 24.04 until 3.9 support is dropped.
+          - os: ubuntu-24.04
+            python-version: "3.9"
           - os: windows-latest
             python-version: "3.12"
           - os: macos-latest
