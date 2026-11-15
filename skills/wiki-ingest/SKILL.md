@@ -1,7 +1,7 @@
 ---
 name: wiki-ingest
 description: >
-  Ingest new documents, raw text, folders, or URLs into the Obsidian wiki as distilled, linked knowledge. Use for general wiki ingestion when no more specific ingest skill applies, including processing _raw/ staged content.
+  Ingest new documents, raw text, folders, URLs, meeting transcripts, or voice notes into the Obsidian wiki as distilled, linked knowledge. Use for general wiki ingestion when no more specific ingest skill applies, including processing _raw/ staged content and "ingest my meetings" / "pull my Granola or Wispr notes".
 ---
 
 # Obsidian Ingest — Document Distillation
@@ -167,7 +167,8 @@ Read the source(s) the user wants to ingest. In append mode, skip files the mani
 - PDF (`.pdf`) — use the Read tool with page ranges. For **academic papers** (arXiv/conference), see *Academic papers* below — re-read figure- and equation-dense pages with vision so the architecture diagram, key equations, and results tables aren't lost.
 - Web clippings — markdown files from Obsidian Web Clipper
 - **Structured data** (`.json`, `.jsonl`, `.csv`, `.tsv`, `.html`) — parse the structure first, then distill the knowledge it carries. See *Unstructured & conversational sources* below.
-- **Chat / conversation exports** — ChatGPT `conversations.json`, Slack/Discord channel JSON, timestamped chat logs, meeting transcripts. See *Unstructured & conversational sources* below.
+- **Chat / conversation exports** — ChatGPT `conversations.json`, Slack/Discord channel JSON, timestamped chat logs. See *Unstructured & conversational sources* below.
+- **Meeting transcripts and voice notes** — `.vtt`, `.srt`, recorder exports (Granola, Wispr Flow, Otter, Zoom), anything in `_raw/meetings/`. See *Meeting and voice-note sources* below.
 - **Images** (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`) — *requires a vision-capable model*. Use the Read tool, which renders the image into your context. Treat screenshots, whiteboard photos, diagrams, and slide captures as first-class sources. If your model doesn't support vision, skip image sources and tell the user which files were skipped so they can re-run with a vision-capable model.
 
 Note the source path — you'll need it for provenance tracking.
@@ -191,6 +192,10 @@ Common chat export shapes:
 **Distill substance, not dialogue.** A 50-message debugging session might yield one `skills/` page about the fix; a long brainstorm might yield three `concepts/` pages. Skip greetings, pleasantries, meta-conversation, repetitive back-and-forth, and raw code dumps (unless they show a reusable pattern). Cluster extracted knowledge by **topic**, not by source file or conversation — a long thread or twenty screenshots of the same bug should produce pages organized by subject, not one page per message. Conversation/log data is high-inference: be liberal with `^[inferred]` for synthesized patterns and `^[ambiguous]` when speakers contradict each other.
 
 **Large files:** read in chunks with offset/limit — don't load a 10 MB JSON at once. **Encoding issues:** if text is garbled, mention it to the user and move on. **Binary files:** skip them (except images, which are first-class via the Read tool).
+
+### Meeting and voice-note sources
+
+When the source is a **call or meeting transcript** or a **dictated voice note**, or the user asks to pull meetings from a connected tool ("ingest my meetings", "pull my Granola / Wispr notes"), **read `references/meeting-sources.md` and follow it.** It covers fetching only what was asked for into `_raw/meetings/`, dedup by `meeting:<provider>/<id>`, normalising with `obsidian-wiki transcript` (read the condensed output, not the raw file), the five things to extract, one meeting page plus updates to entity, project and playbook pages, owner commitments into `memory todo`, visibility defaults for customer calls, and candidate facts that are never auto-approved. The rest of this skill (trust boundary, Raw Mode archiving, supersession, QMD refresh) still applies.
 
 ### Web URL sources
 
