@@ -38,6 +38,7 @@ This is the distinction that matters most in daily use.
 | `hot.md` | `memory hot` / `memory sync` | `## Key Takeaways` |
 | `_meta/profile.md` | `memory profile set` | Hand edits round-trip |
 | `_meta/todos.md` | `memory todo add` | Hand edits round-trip |
+| `_meta/facts.md` | `facts add` / `facts retire` | Hand edits round-trip; rows without an ID get one on the next write |
 
 **`index.md` is reconciled, not overwritten.** One section per category is regenerated from disk. The preamble and any section whose heading is not a category are preserved verbatim — a hand-written "Reading queue" survives, a stale entry for a deleted page does not.
 

@@ -490,6 +490,29 @@ A fact that is only true for a while takes `--until YYYY-MM-DD` — `memory prof
 
 Staleness is **reported, never enforced**. An open item untouched for 30 days is flagged by `memory todo list` and in `memory recap`; nothing closes it on your behalf.
 
+### Approved facts
+
+`_meta/facts.md` is the list of things that are true about you and your company and that an agent may say in public writing: a readout, a digest, a post, a reply to a customer. The owner profile tells an agent who you are; the facts file tells it what it may claim. `setup` creates it empty.
+
+```bash
+obsidian-wiki facts add "40 paying customers" --source stripe-dashboard --as-of 2026-11-01
+obsidian-wiki facts add "First SOC 2 certified agent firewall" --source "audit report 2026-10"
+obsidian-wiki facts list --stale-days 90          # flag claims last confirmed over 90 days ago
+obsidian-wiki facts retire f2 --reason "ARR passed $2M"
+obsidian-wiki facts check _readouts/launch.md      # exit 2 on an unbacked claim
+cat draft.md | obsidian-wiki facts check - --json
+```
+
+Every claim needs `--source`, somewhere a human can check it. `--as-of` defaults to today. Re-adding the same text refreshes its source and date instead of duplicating it. `retire` keeps the row, so a draft that still uses an old number is caught.
+
+`facts check` reads a draft and reports each *claim-shaped* sentence (one with a number or an absolute such as *first*, *only*, *leading*, *fastest*, *certified*) that no approved fact backs:
+
+- A number is backed when the same value appears in an approved fact. Spelling doesn't matter: `$2M`, `2 million` and `2,000,000` are one value. Percentages and multipliers (`40%`, `3x`) match only themselves.
+- An absolute is backed when an approved fact contains it **and** shares a content word with the sentence, so "the first SOC 2 tool" needs a fact about SOC 2, not just any fact with "first" in it.
+- A sentence whose numbers match only a retired fact is reported as `retired`, naming the fact.
+
+Frontmatter, headings, fenced code, tables, blockquotes, inline code, wikilinks and URLs are skipped. The check is a deliberately loud heuristic: it never edits the draft, and a flagged sentence can still be fine (a vault citation backs it, or it isn't about you). It exits 2 when anything is flagged and 0 otherwise. `wiki-narrate` runs it before returning a readout.
+
 ### Session injection
 
 `memory recap` is what the SessionStart hook (`wiki-session-recap.sh`) feeds into a fresh session, so the model starts with the owner profile and the open threads instead of having to remember to read `hot.md`.
