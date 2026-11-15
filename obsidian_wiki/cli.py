@@ -566,6 +566,14 @@ def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(render([]), encoding="utf-8")
+    # The voice file is the owner's to write: seed the template once, never touch it again.
+    from obsidian_wiki.voice import TEMPLATE as VOICE_TEMPLATE, VOICE_REL
+
+    voice_file = vault_path / VOICE_REL
+    if not voice_file.exists():
+        voice_file.parent.mkdir(parents=True, exist_ok=True)
+        voice_file.write_text(VOICE_TEMPLATE.format(created=timestamp[:10]), encoding="utf-8")
+
     from obsidian_wiki.memory import is_adopted, mark_adopted
 
     if not is_adopted(vault_path):
@@ -2614,6 +2622,59 @@ def _timezone_report(plan: dict, *, verbose: bool, applied: bool) -> list:
     return lines
 
 
+def cmd_voice(args: argparse.Namespace) -> int:
+    """Show the owner's voice file, or check a draft against its "Never use" list.
+
+    `check` exits 2 when a banned word or phrase appears, so a drafting skill
+    can stop and rewrite before the owner sees it.
+    """
+    from obsidian_wiki import voice as vc
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+
+    if args.voice_action == "show":
+        voice = vc.load_voice(vault)
+        if args.json:
+            print(json.dumps(voice.as_dict(), indent=2 if args.pretty else None))
+            return 0
+        if not vc.voice_path(vault).is_file():
+            print(f"no voice file at {vc.VOICE_REL}; `obsidian-wiki setup` seeds one")
+            return 0
+        print(f"never use ({len(voice.banned)}): " + (", ".join(
+            b.phrase + (f" -> {b.replacement}" if b.replacement else "") for b in voice.banned
+        ) or "-"))
+        print(f"posts I love: {len(voice.love)}")
+        print(f"posts I hate: {len(voice.hate)}")
+        return 0
+
+    if args.target is None:
+        print("error: voice check FILE (or - for stdin)", file=sys.stderr)
+        return 1
+    if args.target == "-":
+        text = sys.stdin.read()
+    else:
+        path = Path(args.target).expanduser()
+        if not path.is_file():
+            print(f"error: file not found: {args.target}", file=sys.stderr)
+            return 1
+        text = path.read_text(encoding="utf-8")
+    result = vc.check_file(vault, text)
+    if args.json:
+        print(json.dumps(result, indent=2 if args.pretty else None))
+    else:
+        for finding in result["findings"]:
+            hint = f" (try: {finding['replacement']})" if finding.get("replacement") else ""
+            print(f"line {finding['line']}:{finding['column']}: {finding['match']!r} is on the never-use list{hint}")
+        if not result["banned"]:
+            print(f"note: no never-use entries in {vc.VOICE_REL}")
+        elif not result["findings"]:
+            print("no banned words or phrases")
+    return 2 if result["findings"] else 0
+
+
 def cmd_memory(args: argparse.Namespace) -> int:
     """Maintain the vault memory surface: log, index, hot cache, profile, todos.
 
@@ -3540,6 +3601,23 @@ def build_parser() -> argparse.ArgumentParser:
     mc = sub.add_parser("mcp", help="serve the vault's memory tools over stdio (needs the [server] extra)")
     mc.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
     mc.set_defaults(func=cmd_mcp)
+
+    vp = sub.add_parser(
+        "voice",
+        help="the owner's voice file (_meta/voice.md) and a banned-words check for drafts",
+        description="Read _meta/voice.md, or check a draft for words and phrases on its \"Never use\" list.",
+        epilog="""examples:
+  voice show --json                    banned list and examples, for an agent
+  voice check _readouts/post.md        exit 2 when a banned word appears
+  cat draft.md | voice check -""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    vp.add_argument("voice_action", choices=["show", "check"], help="what to do")
+    vp.add_argument("target", nargs="?", help="check: FILE or - for stdin")
+    vp.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    vp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    vp.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    vp.set_defaults(func=cmd_voice)
 
     mm = sub.add_parser(
         "memory",

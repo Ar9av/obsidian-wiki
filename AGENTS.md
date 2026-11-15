@@ -39,6 +39,7 @@ $OBSIDIAN_VAULT_PATH/
 ├── hot.md                  # Session hot cache — ~500-word semantic snapshot (generated)
 ├── .manifest.json          # Tracks every ingested source: path, timestamps, pages produced
 ├── _meta/
+│   ├── voice.md            # The owner's public voice: posts to imitate, posts to avoid, never-use words
 │   ├── taxonomy.md         # Controlled tag vocabulary
 │   ├── profile.md          # Durable facts about the vault owner (memory skill)
 │   ├── todos.md            # Open threads carried between sessions (memory skill)

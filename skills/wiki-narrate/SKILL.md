@@ -74,6 +74,19 @@ If evidence is weak or contradictory, produce only the supported portion. Mark e
 unresolved conflict `^[ambiguous]` with citations to all conflicting pages, and list
 the remaining gaps in `## Coverage`.
 
+## Owner Voice
+
+If `$OBSIDIAN_VAULT_PATH/_meta/voice.md` exists, read it with
+`obsidian-wiki voice show --json --vault "$OBSIDIAN_VAULT_PATH"` before drafting.
+Open a few of the `love` pages for rhythm and word choice, and skim the `hate` pages
+for what to avoid. The voice file shapes prose only. It never adds a claim the
+ledger lacks, and it never changes the selected voice's section skeleton.
+
+Before returning, pipe the draft through `obsidian-wiki voice check -`. Rewrite every
+flagged word or phrase, using the suggested replacement when one is given, and check
+again. Quoted source text keeps its original words. If the file is missing or the
+command is unavailable, skip this step silently.
+
 ## Persistence
 
 Present the result by default. For `--save`, create `_readouts/` if necessary and write
