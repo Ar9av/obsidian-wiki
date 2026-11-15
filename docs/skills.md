@@ -90,7 +90,7 @@ These two build a retrieval index over your raw agent sessions. They write a sid
 |---|---|---|
 | `llm-wiki` | The core pattern and architecture reference every other skill defers to | `/llm-wiki` |
 | `skill-creator` | Create, edit, and eval new skills | `/skill-creator` |
-| `vault-skill-factory` | Turn a cluster of mature vault pages into a portable "digital expert" skill | `/vault-skill-factory` |
+| `vault-skill-factory` | Turn a cluster of mature vault pages into a portable "digital expert" skill, or turn one narrated recording of a job (screen recording, call, voice note) into a small skill with *when to use*, *steps*, *checks* and *mistakes to avoid*. Secrets and example customer data are redacted; output goes to a review dir and is never installed for you | `/vault-skill-factory` |
 | `impl-validator` | Validate an implementation against its stated goal | `/impl-validator` |
 
 ## Recommended companion: Obsidian Skills by Kepano
