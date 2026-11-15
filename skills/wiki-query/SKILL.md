@@ -299,6 +299,11 @@ Report the **`Source code:`** line using `source_repo`. When a local checkout re
 
 Lead the answer with the strongest counter-evidence, each point quoted or closely paraphrased with its `[[page]]` and date, e.g. *"[[synthesis/rust-rewrite]] (2025-11-02) says the rewrite was abandoned over build times. What is different now?"* Then list what the vault says in favour, if anything. End with one or two questions the user should answer before going ahead. If the vault holds nothing against the idea, say so plainly. Never invent an objection the notes don't support: an empty challenge is a useful answer.
 
+**Public claims about the owner.** When the question is what may be *said* about the
+owner or their company ("what can I claim in the deck", "user-facing answer"), and
+`_meta/facts.md` exists, answer from its approved rows first, quoting each claim's
+source and as-of date. Never present a retired row as current.
+
 ### Step 6: Log the Query
 
 This is the *only* write this skill performs — do not edit anything else, and do not append to `log.md` by hand:

@@ -552,8 +552,9 @@ def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
             encoding="utf-8",
         )
 
-    # The owner profile and todo index are part of the memory surface: seed
-    # them empty so they are discoverable in Obsidian before the first write.
+    # The owner profile, todo index and approved facts are part of the memory
+    # surface: seed them empty so they are discoverable in Obsidian before the first write.
+    from obsidian_wiki.facts import FACTS_REL, render_facts
     from obsidian_wiki.memory import (
         PROFILE_REL,
         TODOS_REL,
@@ -561,7 +562,9 @@ def scaffold_vault(vault_path: Path, *, timezone_name: str = "") -> bool:
         render_todos,
     )
 
-    for relative, render in ((PROFILE_REL, render_profile), (TODOS_REL, render_todos)):
+    for relative, render in (
+        (PROFILE_REL, render_profile), (TODOS_REL, render_todos), (FACTS_REL, render_facts),
+    ):
         target = vault_path / relative
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -2893,6 +2896,91 @@ def cmd_memory(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_facts(args: argparse.Namespace) -> int:
+    """Maintain `_meta/facts.md` and check drafts against it.
+
+    `check` exits 2 when a draft has a claim-shaped sentence no approved fact
+    backs, so a writing skill (or CI) can stop on it.
+    """
+    from obsidian_wiki import facts as fx
+    from obsidian_wiki.memory import MemoryError_
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+
+    def emit(payload: dict, lines: list) -> None:
+        if args.json:
+            print(json.dumps(payload, indent=2 if args.pretty else None))
+        else:
+            for line in lines:
+                print(line)
+
+    try:
+        action = args.facts_action
+        if action == "list":
+            claims = fx.load_facts(vault)
+            shown = [c for c in claims if args.all or c.approved]
+            emit(
+                {"facts": [dict(c.__dict__, stale=c.is_stale(days=args.stale_days)) for c in shown]},
+                [
+                    f"[{c.status:8}] {c.id:4} {c.text}  ({c.source}, as of {c.as_of or '?'})"
+                    + ("  STALE" if c.is_stale(days=args.stale_days) else "")
+                    for c in shown
+                ] or ["no approved facts recorded"],
+            )
+            return 0
+        if action == "add":
+            if not args.args:
+                print("error: facts add CLAIM --source WHERE", file=sys.stderr)
+                return 1
+            claim = fx.add_fact(
+                vault, " ".join(args.args), source=args.source or "", as_of=args.as_of or "", note=args.note or ""
+            )
+            emit({"fact": claim.__dict__}, [f"{claim.id}: {claim.text}"])
+            return 0
+        if action == "retire":
+            if len(args.args) != 1:
+                print("error: facts retire ID [--reason WHY]", file=sys.stderr)
+                return 1
+            claim = fx.retire_fact(vault, args.args[0], reason=args.reason or "")
+            emit({"fact": claim.__dict__}, [f"{claim.id} -> retired"])
+            return 0
+        # check
+        if len(args.args) != 1:
+            print("error: facts check FILE (or - for stdin)", file=sys.stderr)
+            return 1
+        target = args.args[0]
+        if target == "-":
+            text = sys.stdin.read()
+        else:
+            path = Path(target).expanduser()
+            if not path.is_file():
+                print(f"error: file not found: {target}", file=sys.stderr)
+                return 1
+            text = path.read_text(encoding="utf-8")
+        result = fx.check_file(vault, text)
+        lines = []
+        for finding in result["findings"]:
+            if finding["status"] == "retired":
+                why = f"uses retired fact {finding['fact']} ({finding['fact_text']})"
+            else:
+                why = "no approved fact backs: " + ", ".join(finding["missing"])
+            lines.append(f"line {finding['line']}: {finding['text']}\n    {why}")
+        if not result["approved"]:
+            lines.append(f"note: no approved facts in {fx.FACTS_REL}; add some with `obsidian-wiki facts add`")
+        lines.append(
+            f"{result['unsupported']} unsupported, {result['retired']} retired claim(s)"
+            if result["findings"] else "every claim-shaped sentence is backed by an approved fact"
+        )
+        emit(result, lines)
+        return 2 if result["findings"] else 0
+    except MemoryError_ as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_mcp(args: argparse.Namespace) -> int:
     """Serve the vault's memory tools over stdio, for agents that launch MCP servers."""
     from obsidian_wiki.client import MemoryError_, resolve_vault
@@ -3618,6 +3706,36 @@ need quoting: query="how do transformers work".""",
         help="older form of a positional key=value; repeatable",
     )
     mm.set_defaults(func=cmd_memory)
+
+    fp = sub.add_parser(
+        "facts",
+        help="the approved claims in _meta/facts.md, and a check that drafts stick to them",
+        usage="obsidian-wiki facts {list,add,retire,check} [ARGS ...] [options]",
+        description="Maintain _meta/facts.md, the claims agents may make in public writing, "
+                    "and check a draft for numbers and absolutes no approved fact backs.",
+        epilog="""examples:
+  facts add "40 paying customers" --source stripe-dashboard --as-of 2026-11-01
+  facts list --stale-days 90                     flag claims older than 90 days
+  facts retire f3 --reason "ARR passed $2M"
+  facts check _readouts/launch-post.md           exit 2 on an unbacked claim
+  cat draft.md | facts check -""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    fp.add_argument("facts_action", choices=["list", "add", "retire", "check"], help="what to do")
+    fp.add_argument("args", nargs="*", metavar="ARGS", help="add: CLAIM. retire: ID. check: FILE or -")
+    fp.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    fp.add_argument("--source", help="add: where the claim can be checked (required)")
+    fp.add_argument("--as-of", metavar="YYYY-MM-DD", help="add: the date the claim was true (default: today)")
+    fp.add_argument("--note", help="add: free-text note")
+    fp.add_argument("--reason", help="retire: why the claim stopped being true")
+    fp.add_argument("--all", action="store_true", help="list: include retired claims")
+    fp.add_argument(
+        "--stale-days", type=int, default=180,
+        help="list: flag approved claims whose as-of date is older than this (default: 180)",
+    )
+    fp.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    fp.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    fp.set_defaults(func=cmd_facts)
 
     cp = sub.add_parser(
         "context-pack",
