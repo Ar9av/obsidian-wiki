@@ -322,6 +322,43 @@ the target page ("why am I getting throttled?" for `debugging-429s`). Term match
 returns nothing at all for those — that gap is the headroom a semantic index would
 close, and it is now measured rather than asserted.
 
+### Answer evals
+
+`eval` scores retrieval, which doesn't change when a new model comes out; the answer does. `eval-answers` scores answers. Keep a set of real questions in `_meta/answers.jsonl`, each with what a correct answer must contain, must never contain, and must cite. When a new model drops, put the same questions to it, score the run next to the current model's, and switch to the winner.
+
+```jsonl
+{"q": "which api gateway do we run today?", "must_include": ["envoy"], "must_not_include": ["re:\\bwe (?:run|use) nginx\\b"], "cite": ["gateway-envoy"]}
+{"q": "when did we stop using nginx?", "must_include": [["2026-03-31", "march 2026"]], "cite": ["gateway-nginx"]}
+```
+
+- `must_include` items are phrases. A nested list is a set of alternatives where any one counts. A `re:` prefix makes it a case-insensitive regular expression.
+- `must_not_include` is what a wrong or stale answer says. Any hit fails the case.
+- `cite` names pages, by stem or path, that the answer must link to with a `[[wikilink]]` or a Markdown link. A bare word in the prose is not a citation; a full path like `concepts/x.md` is.
+- Matching ignores case, Markdown emphasis and runs of whitespace. Questions are matched to answers ignoring case and punctuation. Duplicate questions are rejected.
+
+Running the models is up to you; scoring is offline. Each run is a JSONL file of `{"q", "answer", "model"}` rows:
+
+```bash
+obsidian-wiki eval-answers --questions | while IFS= read -r q; do
+  a=$(claude -p --model claude-sonnet-5-5 "/wiki-query $q" < /dev/null)
+  jq -nc --arg q "$q" --arg a "$a" '{q: $q, answer: $a, model: "sonnet-5.5"}'
+done > runs/sonnet.jsonl
+
+obsidian-wiki eval-answers --answers runs/sonnet.jsonl --answers runs/fable.jsonl --verbose
+obsidian-wiki eval-answers --answers runs/fable.jsonl --min-pass 0.9 --json   # CI gate; exit 1 below it
+```
+
+(`< /dev/null` keeps the agent from reading the remaining questions off stdin.) The model name comes from the rows, from a `MODEL=FILE` prefix on `--answers`, or from the file name. A question with no answer in a run counts as a failure.
+
+| Metric | What it measures |
+|---|---|
+| `pass_rate` | Cases with every `must_include`, no `must_not_include`, and every `cite` |
+| `include_recall` | Fraction of `must_include` items present, over answered cases |
+| `violation_rate` | Answered cases that said something on the `must_not_include` list |
+| `citation_recall` | Fraction of required citations present, over answered cases |
+
+Runs are ranked by pass rate, then include recall, then fewest violations. `--min-pass` gates on the best run. `tests/fixtures/bench/answers.jsonl` is a six-case example against the bundled bench vault.
+
 ## Context packs
 
 `wiki-context-pack` compiles a task-scoped snapshot from existing Markdown.

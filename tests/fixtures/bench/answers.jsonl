@@ -1,0 +1,9 @@
+# Answer-level gold set for the bench vault: what a correct answer must say,
+# must never say, and must cite. Score model runs with:
+#   obsidian-wiki eval-answers --gold tests/fixtures/bench/answers.jsonl --answers run.jsonl
+{"q": "which api gateway do we run today?", "must_include": ["envoy"], "must_not_include": ["re:\\bwe (?:run|use) nginx\\b"], "cite": ["gateway-envoy"]}
+{"q": "when did we stop using nginx as the gateway?", "must_include": [["2026-03-31", "march 2026", "end of march"]], "cite": ["gateway-nginx"]}
+{"q": "where are rate limit counters stored?", "must_include": ["redis"], "cite": ["redis"]}
+{"q": "how does a token bucket allow bursts?", "must_include": [["refill", "refilling"], "token"], "cite": ["token-bucket"]}
+{"q": "how do I trace a 429 back to the caller?", "must_include": ["bucket", "caller"], "cite": ["debugging-429s"]}
+{"q": "what makes a retried write safe?", "must_include": [["idempotency key", "idempotent"]], "must_not_include": ["exactly-once delivery"], "cite": ["idempotency"]}

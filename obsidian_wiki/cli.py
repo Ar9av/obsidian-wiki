@@ -2603,6 +2603,50 @@ def cmd_eval(args: argparse.Namespace) -> int:
     return 1 if report["status"] == "fail" else 0
 
 
+def cmd_eval_answers(args: argparse.Namespace) -> int:
+    """Score model answers against _meta/answers.jsonl and rank the runs."""
+    from obsidian_wiki import answer_eval as ae
+
+    if args.gold:
+        gold = Path(args.gold).expanduser()
+    else:
+        context = _resolve_schema_command_context(args.vault)
+        if context is None:
+            return 1
+        gold = ae.default_gold_path(context[0])
+    if not gold.is_file():
+        print(
+            f"error: no answer gold set at {gold}\n"
+            "       write one (JSONL: {\"q\": ..., \"must_include\": [...], \"cite\": [...]}) or pass --gold",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        cases = ae.load_gold(gold)
+        if args.questions:
+            for question in ae.questions(cases):
+                print(json.dumps({"q": question}) if args.json else question)
+            return 0
+        if not args.answers:
+            print("error: pass --answers RUN.jsonl (repeatable), or --questions to list the questions", file=sys.stderr)
+            return 1
+        runs = []
+        for spec in args.answers:
+            name, _, raw_path = spec.rpartition("=") if "=" in spec else ("", "", spec)
+            path = Path(raw_path).expanduser()
+            runs.append(ae.load_answers(path, model=name.strip()))
+        report = ae.compare(cases, runs, min_pass=args.min_pass)
+    except ae.AnswerEvalError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    report["gold"] = str(gold)
+    if args.json:
+        print(json.dumps(report, indent=2 if args.pretty else None))
+    else:
+        print(ae.render_text(report, verbose=args.verbose), end="")
+    return 1 if report["status"] == "fail" else 0
+
+
 def _memory_fields(pairs: list) -> dict:
     fields: dict[str, str] = {}
     for pair in pairs or []:
@@ -3758,6 +3802,31 @@ def build_parser() -> argparse.ArgumentParser:
     ev.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     ev.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     ev.set_defaults(func=cmd_eval)
+
+    ea = sub.add_parser(
+        "eval-answers",
+        help="score model answers against a gold set of real questions, and rank the models",
+        description="Score one or more answer runs (JSONL: q, answer, model) against _meta/answers.jsonl: "
+                    "what each answer must include, must not include, and must cite. Offline; "
+                    "run the models yourself and pass each run with --answers.",
+        epilog="""examples:
+  eval-answers --questions > questions.txt          the questions to put to each model
+  eval-answers --answers runs/fable.jsonl --answers runs/sonnet.jsonl
+  eval-answers --answers opus=runs/opus.jsonl --min-pass 0.9 --json   CI gate""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ea.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    ea.add_argument("--gold", help="gold set (default: <vault>/_meta/answers.jsonl)")
+    ea.add_argument(
+        "--answers", action="append", metavar="[MODEL=]FILE",
+        help="an answers run, JSONL rows of {q, answer[, model]}; repeat to compare runs",
+    )
+    ea.add_argument("--questions", action="store_true", help="print the gold questions and exit")
+    ea.add_argument("--min-pass", type=float, help="exit 1 when the best run's pass rate is below this")
+    ea.add_argument("--verbose", action="store_true", help="list every failed case and why")
+    ea.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    ea.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    ea.set_defaults(func=cmd_eval_answers)
 
     hk = sub.add_parser(
         "hooks",
