@@ -46,6 +46,7 @@ You need three skills to get value from the vault. Everything else on this page 
 | `wiki-query` | Answer questions from the vault with citations. Tiered — reads summaries before page bodies. Say "challenge this" to have it argue against a plan using your own past decisions and failures | `/wiki-query` |
 | `wiki-narrate` | Render a cited briefing, plain-language explanation, or progressive lecture from a topic | `/wiki-narrate <topic>` |
 | `wiki-digest` | Newsletter-style summary of what you learned over a day, week, or month | `/wiki-digest [period]` |
+| `wiki-playbook-review` | The weekly loop: finds the `skills/` playbooks this week's meetings, journals and new pages touched, rewrites each one from that evidence (what worked, what failed, new cases, a dated *Stop doing* list and changelog), and stages the revisions for you to approve with `/wiki-stage-commit`. Never writes a live page | `/wiki-playbook-review [--since 7d]` |
 | `wiki-context-pack` | Produce a token-bounded context slice for a downstream agent or skill | `/wiki-context-pack` |
 | `memory-bridge` | Browse and diff knowledge by which AI tool wrote it | `/memory-bridge` |
 

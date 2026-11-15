@@ -105,6 +105,7 @@ Skills live in `skills/<name>/SKILL.md`. Match the user's intent to the right sk
 | "/daily-update" / "morning sync" / "refresh the wiki index" / "set up the daily cron" / "install terminal notification" | `daily-update` |
 | "/impl-validator" / "check this implementation" / "validate what you did" / "is this correct?" | `impl-validator` |
 | "/wiki-switch NAME" / "switch to my work wiki" / "switch vault" / "change wiki" / "list my wikis" / "show my vaults" / "create a new vault config" | `wiki-switch` |
+| "/wiki-playbook-review" / "review my playbooks" / "update the playbooks from this week" / "friday playbook rewrite" / "what should we stop doing" | `wiki-playbook-review` |
 | "/wiki-digest" / "what did I learn this week" / "weekly digest" / "knowledge summary" / "what's new in my wiki" / "summarize my recent learning" / "monthly review" | `wiki-digest` |
 | "/wiki-context-pack" / "make a context pack" / "context slice for X" / "pack the wiki for my agent" / "bounded context for Y" | `wiki-context-pack` |
 | "/wiki-stage-commit" / "review staged pages" / "commit staged writes" / "promote staged pages" / "what's waiting in staging" | `wiki-stage-commit` |
