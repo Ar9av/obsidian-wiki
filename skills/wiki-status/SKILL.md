@@ -1,7 +1,7 @@
 ---
 name: wiki-status
 description: >
-  Report wiki ingestion/completeness state, pending source delta, structural insights, or maintenance equilibrium. Use for remaining-work/status questions, hubs and bridges, or whether maintenance skills still have pending changes. wiki-digest summarizes learned knowledge instead.
+  Report wiki ingestion/completeness state, pending source delta, structural insights, maintenance equilibrium, or what each recurring job costs. Use for remaining-work/status questions, hubs and bridges, whether maintenance skills still have pending changes, or "what is the wiki costing me" / "cost per job". wiki-digest summarizes learned knowledge instead.
 ---
 
 # Wiki Status — Audit & Delta
@@ -505,6 +505,33 @@ This is the repeated-game view: a source that keeps producing pages needing repa
 
 - Vaults with fewer than 20 pages — the audits are noise at that size.
 - If any player's audit can't be run cleanly in report-only form, omit that row and say which player is missing rather than guessing a count.
+
+## Costs Mode
+
+Triggered by "what is the wiki costing me", "cost per job", "which jobs are worth it", or
+"/wiki-status costs". Read-only.
+
+```bash
+obsidian-wiki costs report --since 30d --json --vault "$OBSIDIAN_VAULT_PATH"
+```
+
+Each job (a log verb: `INGEST`, `PLAYBOOK_REVIEW`, ...) comes back with runs, spend,
+tokens, time, **output** (pages created, updated or staged, as the job logged them) and
+**cost per output**. Spend comes from `COST job=<VERB>` lines that scheduled runs record
+with `obsidian-wiki costs record`, or from cost fields on the job's own log line.
+
+Render a table sorted by spend, then a verdict per flagged job:
+
+- `no_output`: it spent money and produced nothing. Ask whether it should run less often,
+  or not at all.
+- `over_budget` (only with `--max-cost-per-output`): each page cost more than the owner's
+  bar. Suggest a cheaper model for the volume work, a narrower window, or fewer runs.
+- `errors`: runs that failed and still cost money.
+
+A job with no cost recorded shows `-`. Say so plainly ("INGEST runs aren't priced yet;
+wrap the scheduled run with `costs record`") rather than guessing a figure. The rule the
+report serves: **if a job costs more than it earns, fix it or kill it.** Recommend, don't
+change any schedule yourself.
 
 ## Notes
 
