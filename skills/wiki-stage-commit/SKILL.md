@@ -11,7 +11,7 @@ You are reviewing LLM-written pages that are waiting in `_staging/` for human ap
 ## Before You Start
 
 1. **Resolve config** — follow the Config Resolution Protocol in `llm-wiki/SKILL.md`. This gives `OBSIDIAN_VAULT_PATH` and `WIKI_STAGED_WRITES`.
-2. If `WIKI_STAGED_WRITES` is not set or is `false`, tell the user: "Staged writes mode is not enabled. Set `WIKI_STAGED_WRITES=true` in your `.env` to use this feature." Then stop.
+2. If `WIKI_STAGED_WRITES` is not set or is `false`, check `obsidian-wiki staging list --json` anyway: `wiki-playbook-review` always stages its revisions, whatever the setting. If anything is staged, carry on with the review. If nothing is, tell the user: "Staged writes mode is not enabled. Set `WIKI_STAGED_WRITES=true` in your `.env` to use this feature." Then stop.
 3. Read the `_staging/` directory inventory.
 
 ## Invocation Forms

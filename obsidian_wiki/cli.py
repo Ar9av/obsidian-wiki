@@ -2482,6 +2482,41 @@ def cmd_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_playbooks(args: argparse.Namespace) -> int:
+    """Rank playbooks by the evidence written since --since. Read-only."""
+    from obsidian_wiki.context_pack import ContextError
+    from obsidian_wiki.playbooks import parse_since, playbook_evidence, today_in
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+    try:
+        since = parse_since(args.since, today=today_in(vault))
+        result = playbook_evidence(vault, since=since, limit=args.limit, playbook=args.playbook or "")
+    except (ValueError, ContextError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(result, indent=2 if args.pretty else None))
+        return 0
+    print(f"since {result['since']}: {result['recent_pages']} page(s) changed, "
+          f"{result['playbooks_total']} playbook(s) in the vault")
+    if not result["playbooks"]:
+        print("no playbook has new evidence in this window")
+    for book in result["playbooks"]:
+        flag = "  (playbook itself updated)" if book["updated_in_window"] else ""
+        print(f"\n{book['playbook']}  score {book['score']}{flag}")
+        for item in book["evidence"]:
+            print(f"  + {item['path']}  [{'; '.join(item['reasons'])}]")
+        more = book["evidence_total"] - len(book["evidence"])
+        if more > 0:
+            print(f"  ... {more} more")
+        for line in book["log"]:
+            print(f"  log: {line.lstrip('- ')}")
+    return 0
+
+
 def cmd_eval(args: argparse.Namespace) -> int:
     from obsidian_wiki.evaluate import (
         GoldError,
@@ -3502,6 +3537,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     qq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     qq.set_defaults(func=cmd_query)
+
+    pb = sub.add_parser(
+        "playbooks",
+        help="which playbooks (skills/ pages) have new evidence since a date, for the weekly review",
+        description="Rank playbook pages (anything under a skills/ folder, or tagged playbook) by the "
+                    "pages written since --since that link to them, are linked from them, share a "
+                    "domain tag, or are named in a log line. Read-only; wiki-playbook-review drafts "
+                    "the revisions into _staging/.",
+    )
+    pb.add_argument("--since", default="7d", help="7d, 2w or YYYY-MM-DD (default: 7d)")
+    pb.add_argument("--playbook", help="only this playbook (path, stem or title)")
+    pb.add_argument("--limit", type=int, default=10, help="evidence pages listed per playbook (default: 10)")
+    pb.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    pb.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    pb.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    pb.set_defaults(func=cmd_playbooks)
 
     ev = sub.add_parser(
         "eval",

@@ -507,6 +507,27 @@ The hook never breaks session startup: a missing vault, a missing install, an em
 | `WIKI_PROMPT_RECALL` | *(on once registered)* | `false` silences the opt-in per-prompt recall hook |
 | `WIKI_RECALL_TIMEOUT` | `5` | Seconds before a per-prompt recall is abandoned |
 
+## Playbook evidence
+
+`obsidian-wiki playbooks` is the read-only half of the weekly playbook review (`/wiki-playbook-review`). A playbook is any page under a `skills/` folder, top level or inside a project, or any page tagged `playbook` or `runbook`. For each one, the command lists the pages written or updated since `--since` that are connected to it, ranked by how strongly:
+
+| Connection | Score |
+|---|---|
+| The evidence page links to the playbook | 3 |
+| The playbook links to the evidence page (something it depends on changed) | 2 |
+| A log line in the window names the playbook | 2 |
+| Each shared domain tag | 1 |
+
+A page needs a score of 2 to count, so a single shared tag is not evidence. `visibility/`, `meta/`, `type/` and generic tags like `meeting` don't count as shared. Links inside code are ignored; wikilinks and Markdown `.md` links both count. Ties sort by path.
+
+```bash
+obsidian-wiki playbooks                        # last 7 days, in the vault's timezone
+obsidian-wiki playbooks --since 2w --json
+obsidian-wiki playbooks --since 2026-11-01 --playbook sales-discovery-call
+```
+
+`updated_in_window` marks a playbook that was itself edited in the window. Playbooks with no evidence are left out, unless you name one with `--playbook`. The skill drafts each revision into `_staging/` and `/wiki-stage-commit` promotes the ones you approve, even when `WIKI_STAGED_WRITES` is off.
+
 ## Staged writes
 
 With `WIKI_STAGED_WRITES=true`, skills write pages into `_staging/` for review instead of straight into the vault. These commands are the mechanical half of that workflow — `/wiki-stage-commit` calls them.
