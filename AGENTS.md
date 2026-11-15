@@ -66,7 +66,7 @@ Skills live in `skills/<name>/SKILL.md`. Match the user's intent to the right sk
 |---|---|
 | "set up my wiki" / "initialize" | `wiki-setup` |
 | "/wiki-history-ingest claude" / "/wiki-history-ingest copilot" / "/wiki-history-ingest codex" / "/wiki-history-ingest hermes" / "/wiki-history-ingest openclaw" / "/wiki-history-ingest pi" | `wiki-history-ingest` |
-| "ingest" / "add this to the wiki" / "process these docs" / "process this export" / "ingest this data" / logs, transcripts / "/ingest-url <url>" / "add this URL" / "ingest this link" / "save this page" | `wiki-ingest` |
+| "ingest" / "add this to the wiki" / "process these docs" / "process this export" / "ingest this data" / logs, transcripts / "ingest my meetings" / "pull my Granola / Wispr notes" / voice notes / "/ingest-url <url>" / "add this URL" / "ingest this link" / "save this page" | `wiki-ingest` |
 | "import my Claude history" / "mine my conversations" | `claude-history-ingest` |
 | "import my Codex history" / "mine my Codex sessions" | `codex-history-ingest` |
 | "import my Hermes history" / "mine my Hermes memories" / "ingest ~/.hermes" | `hermes-history-ingest` |

@@ -1646,6 +1646,29 @@ def cmd_cache_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_transcript(args: argparse.Namespace) -> int:
+    """Normalise a meeting or voice-note transcript into condensed markdown or JSON."""
+    from obsidian_wiki.transcript import parse_transcript, render_condensed
+
+    if args.file == "-":
+        text, name = sys.stdin.read(), ""
+    else:
+        path = Path(args.file).expanduser()
+        if not path.is_file():
+            print(f"error: file not found: {args.file}", file=sys.stderr)
+            return 1
+        text, name = path.read_text(encoding="utf-8", errors="replace"), path.name
+    transcript = parse_transcript(text, name=name)
+    if not transcript.turns:
+        print("error: no transcript text found", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(transcript.as_dict(), indent=2 if args.pretty else None))
+    else:
+        sys.stdout.write(render_condensed(transcript, fillers=args.keep_fillers))
+    return 0
+
+
 def cmd_ingest_guard(args: argparse.Namespace) -> int:
     from obsidian_wiki.batch import discover_sources
     from obsidian_wiki.ingest_guard import guard_sources
@@ -3249,6 +3272,19 @@ def build_parser() -> argparse.ArgumentParser:
     cc.add_argument("sources", nargs="+", help="source file or directory paths to check")
     cc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
     cc.set_defaults(func=cmd_cache_check)
+
+    tx = sub.add_parser(
+        "transcript",
+        help="normalise a meeting/voice-note transcript (VTT, SRT, speaker lines, Otter) for ingest",
+        description="Parse a transcript in any common export shape into one record: title, date, "
+                    "speakers and turns. Prints condensed markdown (same-speaker turns merged, "
+                    "filler words dropped) or JSON. Read-only.",
+    )
+    tx.add_argument("file", help="transcript file, or - for stdin")
+    tx.add_argument("--json", action="store_true", help="emit the parsed record as JSON")
+    tx.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    tx.add_argument("--keep-fillers", action="store_true", help="keep um/uh/you know in condensed output")
+    tx.set_defaults(func=cmd_transcript)
 
     ig = sub.add_parser(
         "ingest-guard",
