@@ -3165,6 +3165,52 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_costs(args: argparse.Namespace) -> int:
+    """Record what an agent run cost, or report spend and output per job."""
+    from obsidian_wiki import costs as cx
+    from obsidian_wiki.memory import MemoryError_
+
+    context = _resolve_schema_command_context(args.vault)
+    if context is None:
+        return 1
+    vault = context[0]
+    try:
+        if args.costs_action == "record":
+            if not args.job:
+                print("error: costs record JOB [key=value ...] [--from-json FILE|-]", file=sys.stderr)
+                return 1
+            figures: dict = {}
+            if args.from_json:
+                raw = sys.stdin.read() if args.from_json == "-" else Path(args.from_json).expanduser().read_text(encoding="utf-8")
+                figures.update(cx.parse_run_output(raw))
+            for key, value in (
+                ("cost_usd", args.cost_usd), ("tokens_in", args.tokens_in),
+                ("tokens_out", args.tokens_out), ("duration_s", args.duration_s),
+            ):
+                if value is not None:
+                    figures[key] = value
+            extra = {}
+            for pair in args.fields:
+                if "=" not in pair:
+                    raise cx.CostError(f"extra fields are key=value, got {pair!r}")
+                key, value = pair.split("=", 1)
+                extra[key.strip()] = value
+            line = cx.record_cost(vault, args.job, figures, extra)
+            print(json.dumps({"logged": line}) if args.json else line)
+            return 0
+
+        since = cx.parse_window(args.since, today=cx.vault_today(vault))
+        report = cx.cost_report(vault, since=since, max_cost_per_output=args.max_cost_per_output)
+        if args.json:
+            print(json.dumps(report, indent=2 if args.pretty else None))
+        else:
+            print(cx.render_text(report), end="")
+        return 2 if args.fail_on_flagged and report["flagged"] else 0
+    except (cx.CostError, MemoryError_, ValueError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_hooks(args: argparse.Namespace) -> int:
     """Register, remove, or inspect the Claude Code session hooks.
 
@@ -3662,6 +3708,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="authority locator recorded in the lint report (for example, vault/AGENTS.md)",
     )
     lt.set_defaults(func=cmd_lint)
+
+    co = sub.add_parser(
+        "costs",
+        help="cost per job: record what an agent run spent, report spend vs. output per job",
+        description="Record an agent run's spend as a COST line in log.md (from the agent CLI's JSON "
+                    "result, or flags), and report spend, tokens, time and pages produced per job.",
+        epilog="""examples:
+  claude -p --output-format json "/wiki-playbook-review" < /dev/null > run.json
+  costs record PLAYBOOK_REVIEW --from-json run.json
+  costs record INGEST_MEETING --cost-usd 0.42 --duration-s 95 source=meeting:wispr/abc
+  costs report --since 30d
+  costs report --since 30d --max-cost-per-output 0.50 --fail-on-flagged""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    co.add_argument("costs_action", choices=["record", "report"], help="what to do")
+    co.add_argument("job", nargs="?", help="record: the job's log verb (INGEST, PLAYBOOK_REVIEW, ...)")
+    co.add_argument("fields", nargs="*", metavar="KEY=VALUE", help="record: extra fields for the COST line")
+    co.add_argument("--from-json", metavar="FILE", help="record: agent CLI JSON result or JSONL events (- for stdin)")
+    co.add_argument("--cost-usd", type=float, help="record: dollars spent (overrides --from-json)")
+    co.add_argument("--tokens-in", type=float, help="record: input tokens, cache included")
+    co.add_argument("--tokens-out", type=float, help="record: output tokens")
+    co.add_argument("--duration-s", type=float, help="record: wall-clock seconds")
+    co.add_argument("--since", default="30d", help="report: 7d, 4w or YYYY-MM-DD (default: 30d)")
+    co.add_argument("--max-cost-per-output", type=float, help="report: flag jobs above this many dollars per page")
+    co.add_argument("--fail-on-flagged", action="store_true", help="report: exit 2 when any job is flagged")
+    co.add_argument("--vault", help="vault path or @name (defaults via CWD .env, then global config)")
+    co.add_argument("--json", action="store_true", help="emit machine-readable JSON")
+    co.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    co.set_defaults(func=cmd_costs)
 
     sn = sub.add_parser("snapshots", help="write YAML snapshots: (ingest set / lint-json apply)")
     sn_sub = sn.add_subparsers(dest="snapshots_command")

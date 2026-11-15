@@ -636,6 +636,39 @@ The revision flags are optional but are the point of the command: an agent can w
 
 `.patch.md` files are listed with `kind: patch` and refused by `promote`: merging a human-readable diff into a page whose surrounding text may have moved is judgment, and belongs to the skill.
 
+## Cost per job
+
+Scheduled agent runs cost money every time they fire. `obsidian-wiki costs` keeps the bill next to the work, in `log.md`, so a job that costs more than it produces gets noticed.
+
+**Record** a run's spend as one `COST job=<VERB>` line. The figures come from the agent CLI's JSON result: `total_cost_usd`, `usage` (cache reads and writes count as input tokens), `duration_ms` and `num_turns` from `claude -p --output-format json`. They can also come from JSON/JSONL events with a `usage` object, or from flags, which override the JSON:
+
+```bash
+claude -p --output-format json "/wiki-playbook-review" < /dev/null > /tmp/run.json
+obsidian-wiki costs record PLAYBOOK_REVIEW --from-json /tmp/run.json source=cron
+
+obsidian-wiki costs record INGEST_MEETING --cost-usd 0.42 --duration-s 95
+```
+
+A run that ended in an error (`is_error`) is recorded with `error=<subtype>`. It still cost money.
+
+**Report** joins the COST lines with each job's own log lines in the window:
+
+```bash
+obsidian-wiki costs report                               # last 30 days
+obsidian-wiki costs report --since 4w --json
+obsidian-wiki costs report --max-cost-per-output 0.50 --fail-on-flagged   # exit 2 when flagged
+```
+
+| Column | Meaning |
+|---|---|
+| `runs` | Log lines for the job in the window (COST lines count only for a job that logs nothing else) |
+| `spend` / `per run` | Dollars from COST lines, or from `cost_usd=` on the job's own line |
+| `output` | Sum of `pages_created`, `pages_updated`, `pages_written`, `staged`, `promoted`, `todos_added` on the job's lines |
+| `per output` | Spend divided by output |
+| `flags` | `no_output` (spent, produced nothing), `over_budget` (above `--max-cost-per-output`), `errors` |
+
+Jobs with no cost recorded show `-`; the report never estimates a figure. `wiki-status` has a costs mode that reads this report and recommends what to fix or stop.
+
 ## Vault syncing
 
 | Command | What it does |
