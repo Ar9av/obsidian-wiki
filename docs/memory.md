@@ -36,6 +36,7 @@ This is the distinction that matters most in daily use.
 | `log.md` | `memory log` / `memory sync` | Nothing — append-only history |
 | `index.md` | `memory index` / `memory sync` | Any section whose heading is not a category |
 | `hot.md` | `memory hot` / `memory sync` | `## Key Takeaways` |
+| `_meta/voice.md` | Seeded once by `setup` | All of it; read by `voice show` / `voice check` |
 | `_meta/profile.md` | `memory profile set` | Hand edits round-trip |
 | `_meta/todos.md` | `memory todo add` | Hand edits round-trip |
 | `_meta/facts.md` | `facts add` / `facts retire` | Hand edits round-trip; rows without an ID get one on the next write |

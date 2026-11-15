@@ -474,6 +474,25 @@ Two things worth knowing:
 
 `doctor` reports migration state, so an upgraded install surfaces it without anyone going looking.
 
+### Owner voice
+
+`_meta/voice.md` is how you sound when you write in public. `WRITING.md` decides how wiki pages read; the voice file decides how a post, a readout or an email drafted *in your name* reads. `setup` seeds a template once and never rewrites it. It is an ordinary page with `##` sections, recognised by heading:
+
+| Section | Contents |
+|---|---|
+| `## Never use` (or *banned*, *words I never use*) | One word or phrase per bullet. `leverage -> use` adds a suggested replacement. Punctuation entries such as `—` match literally |
+| `## Posts I love` (or *best*, *good examples*) | `[[wikilinks]]` to your best posts, or short quoted excerpts. Aim for the 50 best |
+| `## Posts I hate` (or *worst*, *bad examples*) | What not to sound like |
+| anything else | Free-form notes on tone |
+
+```bash
+obsidian-wiki voice show --json             # the parsed lists, for an agent
+obsidian-wiki voice check _readouts/post.md # exit 2 on a never-use word
+cat draft.md | obsidian-wiki voice check -
+```
+
+`voice check` matches whole words, case-insensitively, and lets a phrase span any whitespace (`game changer` matches `Game  changer`). Frontmatter, fenced code, inline code, wikilinks and link targets are skipped, so a page *about* a word doesn't trip it. HTML comments in the voice file are ignored. `wiki-narrate` reads the examples for tone and runs the check before returning a readout.
+
 ### Owner profile and todo index
 
 Two tables under `_meta/`, both created empty by `setup`:
