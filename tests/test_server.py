@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import os
 import subprocess
 import sys
 
@@ -270,6 +271,20 @@ def test_health_reports_doctor_and_lint(client, tmp_path):
     assert body["lint"]["stats"]["pages"] == 1
 
 
+def test_graph_lists_pages_and_resolved_links(client, tmp_path):
+    _page(tmp_path, "concepts/a.md", "links [[b]] and [[b|again]] and [[missing]]\n")
+    _page(tmp_path, "entities/b.md", "---\ntitle: >-\n  Bee Page\n---\nback to [[a]]\n")
+    _page(tmp_path, "index.md", "[[a]] [[b]]\n")  # bookkeeping, not a node
+    g = client.get("/v1/graph").json()
+    assert {(n["id"], n["path"], n["category"]) for n in g["nodes"]} == {
+        ("a", "concepts/a.md", "concepts"), ("b", "entities/b.md", "entities"),
+    }
+    assert g["edges"] == [["a", "b"], ["b", "a"]]  # deduped, unresolved dropped
+    assert {n["id"]: n["title"] for n in g["nodes"]} == {"a": "", "b": "Bee Page"}
+    client.headers.pop("authorization")
+    assert client.get("/v1/graph").status_code == 401
+
+
 def test_ui_shell_carries_no_vault_data(client, tmp_path):
     _page(tmp_path, "concepts/secret-page.md", "sensitive\n")
     client.headers.pop("authorization")
@@ -277,6 +292,61 @@ def test_ui_shell_carries_no_vault_data(client, tmp_path):
     # The shell is static: it must be fetch-driven, never server-rendered with vault content.
     assert page.status_code == 200
     assert "secret-page" not in page.text and "sensitive" not in page.text
+
+
+def test_connect_reports_what_an_agent_needs_behind_the_key(client, tmp_path):
+    body = client.get("/v1/connect").json()
+    # The interpreter running the server has the [server] extra, so configs that
+    # launch `python -m obsidian_wiki mcp` with it work without PATH.
+    assert body["python"] == sys.executable
+    assert body["vault"] == str(tmp_path)
+    assert body["key_required"] is True
+    assert {t["name"] for t in body["tools"]} >= {"memory_recap", "memory_search", "memory_write"}
+    client.headers.pop("authorization")
+    assert client.get("/v1/connect").status_code == 401  # reveals local paths
+
+
+def test_root_redirects_to_the_viewer_and_its_bundle_is_served(client):
+    import re
+
+    assert client.get("/", follow_redirects=False).headers["location"] == "/ui"
+    shell = client.get("/ui").text
+    assets = re.findall(r'(?:src|href)="(/ui/assets/[^"]+)"', shell)
+    assert assets, "built viewer missing: run `cd ui && npm run build`"
+    for asset in assets:
+        res = client.get(asset)
+        assert res.status_code == 200 and len(res.content) > 1000
+    assert client.get("/ui/assets/../../server.py").status_code == 404
+
+
+@pytest.mark.parametrize("key", ["", "set-key"])
+def test_ui_command_binds_loopback_and_only_drops_auth_without_a_key(tmp_path, monkeypatch, key):
+    import uvicorn
+    import webbrowser
+
+    from obsidian_wiki import cli
+
+    monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
+    monkeypatch.delenv("OBSIDIAN_VAULT_PATH", raising=False)
+    if key:
+        monkeypatch.setenv("WIKI_API_KEY", key)
+    else:
+        monkeypatch.delenv("WIKI_API_KEY", raising=False)
+    # A fresh import, so the server reads the env cmd_ui sets; `from obsidian_wiki
+    # import server` would otherwise reuse the package attribute.
+    import obsidian_wiki
+
+    sys.modules.pop("obsidian_wiki.server", None)
+    monkeypatch.delattr(obsidian_wiki, "server", raising=False)
+    seen = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: seen.update(kw, app=app))
+    monkeypatch.setattr(webbrowser, "open", lambda url: pytest.fail("--no-open still opened a browser"))
+
+    assert cli.main(["ui", "--vault", str(tmp_path), "--port", "4321", "--no-open"]) == 0
+    assert (seen["host"], seen["port"]) == ("127.0.0.1", 4321)
+    assert seen["app"] is sys.modules["obsidian_wiki.server"].app
+    assert os.environ["OBSIDIAN_VAULT_PATH"] == str(tmp_path.resolve())
+    assert os.environ.get("WIKI_ALLOW_ANONYMOUS") == (None if key else "1")
 
 
 @pytest.mark.parametrize("wiki_host, expected", [(None, "127.0.0.1"), ("0.0.0.0", "0.0.0.0")])

@@ -16,6 +16,9 @@ skills/packages/
 # Local vault — personal knowledge, never published with the framework
 /vault/
 
+# Viewer build deps (ui/ source is tracked; the bundle ships in obsidian_wiki/webui/)
+ui/node_modules/
+
 # Packed browser extension (rebuildable from extensions/brain-capture/)
 extensions/brain-capture/*.zip
 

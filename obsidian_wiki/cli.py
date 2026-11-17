@@ -3165,6 +3165,39 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ui(args: argparse.Namespace) -> int:
+    """Open the vault viewer in a browser, served on loopback only."""
+    from obsidian_wiki.client import MemoryError_, resolve_vault
+
+    try:
+        vault = resolve_vault(args.vault)
+    except MemoryError_ as exc:
+        print(f"obsidian-wiki ui: {exc}", file=sys.stderr)
+        return 1
+    os.environ["OBSIDIAN_VAULT_PATH"] = str(vault)
+    # Loopback is the guard here, so no key is needed unless one is already set.
+    if not os.environ.get("WIKI_API_KEY"):
+        os.environ["WIKI_ALLOW_ANONYMOUS"] = "1"
+    try:
+        import uvicorn
+
+        from obsidian_wiki import server
+    except ImportError as exc:
+        # The extra's mcp dependency only installs on Python >= 3.10, so name what's missing.
+        print(f"obsidian-wiki ui needs the server extra on Python >= 3.10 "
+              f"(missing {exc.name}): pip install 'obsidian-wiki[server]'", file=sys.stderr)
+        return 1
+    url = f"http://127.0.0.1:{args.port}/ui"
+    print(f"obsidian-wiki ui: {vault} -> {url}  (Ctrl-C to stop)", file=sys.stderr)
+    if not args.no_open:
+        import threading
+        import webbrowser
+
+        threading.Timer(1.0, webbrowser.open, [url]).start()
+    uvicorn.run(server.app, host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
+
+
 def cmd_costs(args: argparse.Namespace) -> int:
     """Record what an agent run cost, or report spend and output per job."""
     from obsidian_wiki import costs as cx
@@ -3920,6 +3953,12 @@ def build_parser() -> argparse.ArgumentParser:
     mc = sub.add_parser("mcp", help="serve the vault's memory tools over stdio (needs the [server] extra)")
     mc.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
     mc.set_defaults(func=cmd_mcp)
+
+    ui = sub.add_parser("ui", help="browse the vault in a local web viewer (needs the [server] extra)")
+    ui.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
+    ui.add_argument("--port", type=int, default=3114, help="port on 127.0.0.1 (default: 3114)")
+    ui.add_argument("--no-open", action="store_true", help="don't open a browser tab")
+    ui.set_defaults(func=cmd_ui)
 
     vp = sub.add_parser(
         "voice",
