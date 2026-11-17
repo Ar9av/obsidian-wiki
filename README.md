@@ -119,6 +119,8 @@ Want to look before you build? [`examples/demo-vault/`](https://github.com/Ar9av
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
 
+Or skip Obsidian: `obsidian-wiki ui` opens a local web viewer on `127.0.0.1:3114` with search, rendered pages and backlinks, the link graph, the activity log, your profile and open threads, and vault health. Its **Connect an agent** page gives copy-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code and Windsurf, so any agent can use the vault as memory. Needs `pip install 'obsidian-wiki[server]'` (Python 3.10+). [Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)
+
 Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
 
 ## Use it from Python
@@ -243,7 +245,7 @@ Full data, per-run logs and the scaling measurements are in
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | The index, log, hot cache, owner profile, and todo index |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | Topic graph over your agent session history |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | Capture pages into the vault, and fill web forms from it |
-| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | Run a vault as a Dockerized memory service agents reach over HTTP/MCP |
+| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | The local web viewer, connecting agents over MCP, and running a vault as a Dockerized memory service |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | Adding skills, keeping the READMEs in sync |
 
 ## Contributing

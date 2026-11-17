@@ -120,6 +120,8 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
 
+也可以不開 Obsidian：`obsidian-wiki ui` 會在 `127.0.0.1:3114` 開啟本機網頁檢視器，提供搜尋、渲染後的頁面與反向連結、連結圖譜、活動紀錄、你的個人檔案與未完成事項，以及 vault 健康狀態。其中的 **Connect an agent** 頁面提供可直接複製貼上的 MCP 設定，支援 Claude Code、Codex、Cursor、Claude Desktop、Gemini CLI、VS Code 與 Windsurf，讓任何 agent 都能把 vault 當成記憶使用。需要 `pip install 'obsidian-wiki[server]'`（Python 3.10 以上）。[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)（英文）
+
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
 
 ## 用 Python 直接使用
@@ -230,7 +232,7 @@ memory.recap()                       # 在 session 開始時注入
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | index、log、hot cache、擁有者檔案與待辦索引 |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | 建立在 agent session 歷史之上的主題圖譜 |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | 將網頁擷取進 vault，並用 vault 內容填寫網頁表單 |
-| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 以 Docker 將 vault 部署成記憶服務，讓 agent 透過 HTTP/MCP 存取 |
+| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 本機網頁檢視器、透過 MCP 連接 agent，以及用 Docker 將 vault 部署成記憶服務 |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | 新增 skill、維持兩份 README 同步 |
 
 ## 參與貢獻
