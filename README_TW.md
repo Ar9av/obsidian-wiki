@@ -120,9 +120,38 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
   <img width="900" alt="obsidian-wiki graph view" src="https://github.com/user-attachments/assets/f2980840-4b5b-438a-8264-5ad1de42f483" />
 </p>
 
-也可以不開 Obsidian：`obsidian-wiki ui` 會在 `127.0.0.1:3114` 開啟本機網頁檢視器，提供搜尋、渲染後的頁面與反向連結、連結圖譜、活動紀錄、你的個人檔案與未完成事項，以及 vault 健康狀態。其中的 **Connect an agent** 頁面提供可直接複製貼上的 MCP 設定，支援 Claude Code、Codex、Cursor、Claude Desktop、Gemini CLI、VS Code 與 Windsurf，讓任何 agent 都能把 vault 當成記憶使用。需要 `pip install 'obsidian-wiki[server]'`（Python 3.10 以上）。[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)（英文）
-
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
+
+## 在瀏覽器中瀏覽
+
+不需要 Obsidian。vault 附帶一個本機網頁檢視器：
+
+```bash
+pip install 'obsidian-wiki[server]'   # Python 3.10 以上
+obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
+```
+
+它提供總覽、搜尋、渲染後的頁面（含反向連結與屬性）、連結圖譜、活動紀錄、你的個人檔案與未完成事項、hot cache，以及 vault 健康狀態。它只監聽 loopback。用 `--vault` 指定 vault，用 `--port` 更改連接埠。
+
+<p align="center">
+  <img width="900" alt="obsidian-wiki 網頁檢視器：總覽" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-overview.png?raw=true" />
+</p>
+
+<p align="center">
+  <img width="900" alt="obsidian-wiki 網頁檢視器：含反向連結的頁面" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-page.png?raw=true" />
+</p>
+
+**把任何 agent 接上它。** 在側邊欄打開 **Connect an agent**：
+
+1. 選擇你的 agent（Claude Code、Codex、Cursor、Claude Desktop、Gemini CLI、VS Code、Windsurf 或任何 MCP client）並複製設定。stdio 不需要執行伺服器；HTTP 則連到託管的 vault。
+2. 把記憶使用說明貼進 agent 的 `AGENTS.md` / `CLAUDE.md`，讓它在 session 開始時真的去回顧，並把發現存回來。
+3. 驗證：請 agent 呼叫 `memory_recap`。
+
+<p align="center">
+  <img width="900" alt="obsidian-wiki 網頁檢視器：連接 agent" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-connect.png?raw=true" />
+</p>
+
+更多 → **[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)**（英文）
 
 ## 用 Python 直接使用
 
@@ -143,10 +172,6 @@ memory.recap()                       # 在 session 開始時注入
 ## 它會跨 session 記住
 
 一個 session 開始時，vault 的記憶就已經在 context 裡了——你是誰、有哪些未完成的線索、最近改了什麼——並在結束時，趁 context 關閉前把值得留下的內容擷取起來。
-
-<p align="center">
-  <img width="720" alt="session 生命週期：開始時注入回顧，結束時提示擷取" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/memory-session-lifecycle.png?raw=true" />
-</p>
 
 `index.md`、`log.md`、`hot.md`，以及 `_meta/` 底下的擁有者檔案與待辦索引，全都經由同一個 writer 寫入；它會取得 lock 並以 atomic 方式寫檔，所以平行執行的 agent 不會蓋掉彼此的更新。
 

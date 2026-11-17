@@ -99,9 +99,12 @@ function Markdown({ text }) {
         return <Badge variant="outline" colorScheme="gray" fontWeight="normal" textTransform="none" fontSize="0.7em" ms="1" verticalAlign="middle">{children}</Badge>
       }
       if (href.startsWith('#/wl/')) {
-        const node = index?.resolve(decodeURIComponent(href.slice(5)))
+        const target = decodeURIComponent(href.slice(5))
+        const node = index?.resolve(target)
+        // An unaliased [[path/to/page]] reads better as the page's title.
+        const bare = [].concat(children).join('') === target
         return node
-          ? <Link href={pageHref(node.path)} color={link}>{children}</Link>
+          ? <Link href={pageHref(node.path)} color={link}>{bare && node.title ? node.title : children}</Link>
           : <Text as="span" color="muted" textDecoration="underline dotted" title="no such page">{children}</Text>
       }
       // react-markdown blanks unsafe URLs (javascript:, data:); show those as text.
@@ -137,7 +140,7 @@ export function Overview() {
   )
   return (
     <>
-      <Header title="Overview" description={status.last_ingest ? `Last ingest ${status.last_ingest}` : 'Nothing ingested yet — run wiki-ingest.'} />
+      <Header title="Overview" description={status.last_ingest ? `Last ingest ${status.last_ingest}` : status.pages ? undefined : 'Nothing ingested yet — run wiki-ingest.'} />
       <Body>
         <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing="4" mb="6">
           {stat('Pages', status.pages)}
@@ -288,7 +291,6 @@ export function GraphView() {
   const [size, setSize] = useState({ w: 800, h: 600 })
   const [hl, setHl] = useState('')
   const colors = useToken('colors', PALETTE)
-  const bg = useColorModeValue('#ffffff', '#1a1a1a')
   const fg = useColorModeValue('#1a202c', '#e2e8f0')
   const edge = useColorModeValue('rgba(0,0,0,0.12)', 'rgba(255,255,255,0.12)')
   useEffect(() => {
@@ -297,6 +299,8 @@ export function GraphView() {
     ro.observe(box.current)
     return () => ro.disconnect()
   }, [graph])
+  // Refit when the frame changes size, once the first layout has settled.
+  useEffect(() => { if (fg2d.fitted) fg2d.current?.zoomToFit(0, 40) }, [size])
   const cats = useMemo(() => {
     const counts = {}
     graph?.nodes.forEach((n) => { counts[n.category] = (counts[n.category] ?? 0) + 1 })
@@ -319,10 +323,10 @@ export function GraphView() {
       <Wrap px="8" pb="3" spacing="3">{cats.map(([c, n]) => (
         <HStack key={c} spacing="1.5" fontSize="xs"><Box w="2.5" h="2.5" borderRadius="full" bg={color(c)} /><Text>{c}</Text><Text color="muted">{n}</Text></HStack>
       ))}</Wrap>
-      <Box ref={box} flex="1" mx="8" mb="6" borderWidth="1px" borderRadius="lg" overflow="hidden">
+      <Box ref={box} flex="1" minH="0" mx="8" mb="6" borderWidth="1px" borderRadius="lg" overflow="hidden">
         <ForceGraph2D
           ref={fg2d} onEngineStop={() => { if (!fg2d.fitted) { fg2d.fitted = true; fg2d.current?.zoomToFit(400, 40) } }}
-          graphData={data} width={size.w} height={size.h} backgroundColor={bg}
+          graphData={data} width={size.w} height={size.h} backgroundColor="rgba(0,0,0,0)"
           nodeLabel={(n) => esc(n.path)} linkColor={() => edge} cooldownTicks={120}
           onNodeClick={(n) => go(`/page/${encodeURIComponent(n.path)}`)}
           nodeCanvasObject={(n, ctx, scale) => {
