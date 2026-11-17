@@ -3159,10 +3159,20 @@ def cmd_mcp(args: argparse.Namespace) -> int:
     try:
         from obsidian_wiki import server
     except ImportError:
-        print("obsidian-wiki mcp needs the server extra: pip install 'obsidian-wiki[server]'", file=sys.stderr)
+        print(f"obsidian-wiki mcp needs the server extra: {_server_extra_hint()}", file=sys.stderr)
         return 1
     server.mcp.run("stdio")
     return 0
+
+
+def _server_extra_hint() -> str:
+    """Install command that targets the interpreter running us, not whatever pip is on PATH."""
+    prefix = sys.prefix.replace(os.sep, "/")
+    if "/pipx/venvs/" in prefix:
+        return "pipx install --force 'obsidian-wiki[server]'"
+    if "/uv/tools/" in prefix:
+        return "uv tool install --force 'obsidian-wiki[server]'"
+    return f"{sys.executable} -m pip install 'obsidian-wiki[server]'"
 
 
 def cmd_ui(args: argparse.Namespace) -> int:
@@ -3185,7 +3195,7 @@ def cmd_ui(args: argparse.Namespace) -> int:
     except ImportError as exc:
         # The extra's mcp dependency only installs on Python >= 3.10, so name what's missing.
         print(f"obsidian-wiki ui needs the server extra on Python >= 3.10 "
-              f"(missing {exc.name}): pip install 'obsidian-wiki[server]'", file=sys.stderr)
+              f"(missing {exc.name}): {_server_extra_hint()}", file=sys.stderr)
         return 1
     url = f"http://127.0.0.1:{args.port}/ui"
     print(f"obsidian-wiki ui: {vault} -> {url}  (Ctrl-C to stop)", file=sys.stderr)
