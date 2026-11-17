@@ -30,6 +30,16 @@ pip install 'obsidian-wiki[server]'
 WIKI_API_KEY=dev OBSIDIAN_VAULT_PATH=~/vault python -m obsidian_wiki.server
 ```
 
+## Web viewer
+
+`obsidian-wiki ui` opens a browser viewer for the resolved vault on `http://127.0.0.1:3114/ui`: an overview, page browser with search, rendered pages with backlinks, the link graph, the activity log, profile facts and open threads (add, close, forget), the hot cache, and the health, staging and sources views. It binds to loopback only and needs no key unless `WIKI_API_KEY` is set. `--port` and `--vault` override the defaults; `--no-open` skips the browser tab.
+
+**Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The page also gives you instructions to paste into `AGENTS.md` or a system prompt, so the agent actually calls `memory_recap` at session start and saves findings back.
+
+The same viewer is served at `/ui` by the HTTP server above, behind its API key (it asks once and keeps the key in `sessionStorage`).
+
+The viewer is a React app built with [Saas UI](https://saas-ui.dev) (Chakra UI). The source is in `ui/` and the built bundle is committed to `obsidian_wiki/webui/`, so installing the package needs no Node. After changing `ui/src`, rebuild with `cd ui && npm install && npm run build`. `npm run dev` gives hot reload against a running `obsidian-wiki ui --no-open`.
+
 ## Configuration
 
 | Variable | What it does | Default |

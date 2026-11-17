@@ -15,13 +15,15 @@ import hmac
 import json
 import os
 import re
+import sys
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel, Field
 
@@ -531,7 +533,49 @@ def staging() -> dict[str, Any]:
     return {"count": len(items), "items": items}
 
 
-_CONSOLE = Path(__file__).with_name("console.html")
+def graph() -> dict[str, Any]:
+    """The wikilink graph the viewer draws: one node per page, deduped edges.
+
+    Same page set and link resolution as `wiki-status` insights, so the picture
+    matches the hub/bridge numbers.
+    """
+    from obsidian_wiki.graph_analysis import iter_pages, parse_vault_graph
+    from obsidian_wiki.links import PageIndex
+    from obsidian_wiki.lint import _parse_frontmatter_values
+    from obsidian_wiki.vault import split_frontmatter
+
+    def title_of(rel: str) -> str:
+        # ponytail: re-reads each page parse_vault_graph already read; fold titles
+        # into that walk if /v1/graph ever shows up as slow on a big vault.
+        try:
+            text = (VAULT / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return ""
+        return _parse_frontmatter_values(split_frontmatter(text)[0]).get("title", "")
+
+    outgoing, tags = parse_vault_graph(VAULT)
+    rels = [p.relative_to(VAULT).as_posix() for p in iter_pages(VAULT)]
+    index = PageIndex(rels)
+    # setdefault: two files sharing one key share one id; the first wins, as in PageIndex.
+    paths: dict[str, str] = {}
+    for rel in rels:
+        paths.setdefault(index.id_for(rel), rel)
+    nodes = []
+    for node_id in outgoing:
+        path = paths.get(node_id, "")
+        nodes.append({
+            "id": node_id,
+            "path": path,
+            "title": title_of(path) if path else "",
+            "category": path.split("/", 1)[0] if "/" in path else "(root)",
+            "tags": tags.get(node_id, []),
+        })
+    edges = sorted({(src, dst) for src, dsts in outgoing.items() for dst in dsts})
+    return {"nodes": nodes, "edges": [list(e) for e in edges]}
+
+
+# The viewer is a prebuilt React bundle (source in ui/, `npm run build` writes here).
+_WEBUI = Path(__file__).with_name("webui")
 
 
 @app.get("/v1/memory/recap", dependencies=[Depends(require_key)])
@@ -572,8 +616,39 @@ def http_memory_sync(body: SyncRequest) -> dict[str, Any]:
 
 @app.get("/ui", response_class=HTMLResponse)
 def http_ui() -> str:
-    """The console shell. Carries no vault data — every number is fetched with the key."""
-    return _CONSOLE.read_text(encoding="utf-8")
+    """The viewer shell. Carries no vault data — every number is fetched with the key."""
+    return (_WEBUI / "index.html").read_text(encoding="utf-8")
+
+
+# Hashed JS/CSS chunks only; the shell above is the one HTML route.
+app.mount("/ui/assets", StaticFiles(directory=_WEBUI / "assets", check_dir=False), name="webui-assets")
+
+
+@app.get("/", include_in_schema=False)
+def http_root() -> RedirectResponse:
+    return RedirectResponse("/ui")
+
+
+@app.get("/v1/graph", dependencies=[Depends(require_key)])
+def http_graph() -> dict[str, Any]:
+    return graph()
+
+
+@app.get("/v1/connect", dependencies=[Depends(require_key)])
+async def http_connect() -> dict[str, Any]:
+    """What an agent needs to plug into this vault, for the viewer's Connect page.
+
+    `python` is this process's interpreter, which already has the server extra, so
+    `python -m obsidian_wiki mcp` works even where `obsidian-wiki` isn't on PATH
+    (GUI apps) or resolves to an install without the extra. Behind the key: it
+    reveals local paths.
+    """
+    return {
+        "python": sys.executable,
+        "vault": str(VAULT),
+        "key_required": not ANONYMOUS,
+        "tools": [{"name": t.name, "description": t.description or ""} for t in await mcp.list_tools()],
+    }
 
 
 @app.get("/v1/status", dependencies=[Depends(require_key)])

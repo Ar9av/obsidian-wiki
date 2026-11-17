@@ -1,0 +1,27 @@
+{
+  "name": "obsidian-wiki-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "test": "node --test src/lib.test.js"
+  },
+  "dependencies": {
+    "@chakra-ui/react": "2.10.9",
+    "@emotion/react": "11.14.0",
+    "@emotion/styled": "11.14.1",
+    "@saas-ui/react": "2.11.4",
+    "framer-motion": "11.18.2",
+    "lucide-react": "0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-force-graph-2d": "1.27.1",
+    "react-markdown": "9.0.1",
+    "remark-gfm": "4.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "4.3.4",
+    "vite": "6.4.6"
+  }
+}
