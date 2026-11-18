@@ -3208,6 +3208,51 @@ def cmd_ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """Run the HTTP + MCP memory server for the resolved vault — the self-hosted mode."""
+    from obsidian_wiki.client import MemoryError_, resolve_vault
+
+    try:
+        vault = resolve_vault(args.vault)
+    except MemoryError_ as exc:
+        print(f"obsidian-wiki serve: {exc}", file=sys.stderr)
+        return 1
+    if not vault.is_dir() and not os.environ.get("WIKI_GIT_REMOTE"):
+        print(f"obsidian-wiki serve: vault not found: {vault}", file=sys.stderr)
+        return 1
+    os.environ["OBSIDIAN_VAULT_PATH"] = str(vault)
+    host = args.host or os.environ.get("WIKI_HOST") or "127.0.0.1"
+    port = args.port or int(os.environ.get("WIKI_PORT") or 8080)
+    # server.py reads WIKI_HOST at import to set MCP's DNS-rebinding guard.
+    os.environ["WIKI_HOST"] = host
+    if args.sync_interval is not None:
+        os.environ["WIKI_GIT_SYNC_INTERVAL"] = str(args.sync_interval)
+    try:
+        import uvicorn
+
+        from obsidian_wiki import server
+    except ImportError as exc:
+        print(f"obsidian-wiki serve needs the server extra on Python >= 3.10 "
+              f"(missing {exc.name}): {_server_extra_hint()}", file=sys.stderr)
+        return 1
+    except RuntimeError as exc:  # no key configured, or a bad key pair
+        print(f"obsidian-wiki serve: {exc}", file=sys.stderr)
+        return 1
+    loopback = host in ("127.0.0.1", "localhost", "::1")
+    if server.ANONYMOUS and not loopback:
+        print("obsidian-wiki serve: refusing WIKI_ALLOW_ANONYMOUS=1 on a non-loopback "
+              f"interface ({host}) — anyone who can reach it could rewrite the vault", file=sys.stderr)
+        return 1
+    mode = "read-only" if not server.API_KEY and not server.ANONYMOUS else "read-write"
+    print(f"obsidian-wiki serve: {vault} -> http://{host}:{port}  "
+          f"(MCP at /mcp/, {mode}; Ctrl-C to stop)", file=sys.stderr)
+    if not loopback:
+        print("obsidian-wiki serve: listening beyond loopback over plain HTTP — "
+              "put TLS in front before this leaves your network (docs/deployment.md)", file=sys.stderr)
+    uvicorn.run(server.app, host=host, port=port)
+    return 0
+
+
 def cmd_costs(args: argparse.Namespace) -> int:
     """Record what an agent run cost, or report spend and output per job."""
     from obsidian_wiki import costs as cx
@@ -3969,6 +4014,27 @@ def build_parser() -> argparse.ArgumentParser:
     ui.add_argument("--port", type=int, default=3114, help="port on 127.0.0.1 (default: 3114)")
     ui.add_argument("--no-open", action="store_true", help="don't open a browser tab")
     ui.set_defaults(func=cmd_ui)
+
+    sv = sub.add_parser(
+        "serve",
+        help="self-host the vault: HTTP API + MCP over the network (needs the [server] extra)",
+        description="Run the memory server for the resolved vault: REST under /v1, MCP "
+                    "(streamable HTTP) at /mcp/, the viewer at /ui. Needs WIKI_API_KEY "
+                    "(or WIKI_READ_KEY alone for a read-only server).",
+        epilog="""examples:
+  WIKI_API_KEY=$(openssl rand -hex 24) obsidian-wiki serve
+  obsidian-wiki serve --host 0.0.0.0 --port 8080        behind your own TLS proxy
+  obsidian-wiki serve --sync-interval 300               two-way git sync every 5 minutes""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sv.add_argument("--vault", help="vault path (default: resolved from .env or the global config)")
+    sv.add_argument("--host", help="interface to bind (default: $WIKI_HOST or 127.0.0.1)")
+    sv.add_argument("--port", type=int, help="port (default: $WIKI_PORT or 8080)")
+    sv.add_argument(
+        "--sync-interval", type=int, metavar="SECONDS",
+        help="commit, pull --rebase and push the vault every SECONDS (default: $WIKI_GIT_SYNC_INTERVAL, off)",
+    )
+    sv.set_defaults(func=cmd_serve)
 
     vp = sub.add_parser(
         "voice",

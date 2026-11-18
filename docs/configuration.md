@@ -330,12 +330,15 @@ Pages can carry a `visibility/` tag marking their intended reach. This is **enti
 
 ## Memory server (optional)
 
-Only read by `obsidian_wiki/server.py`, the Dockerized HTTP + MCP front end. Irrelevant to local
+Only read by `obsidian_wiki/server.py`, the HTTP + MCP front end that `obsidian-wiki serve` and the Docker image run. Irrelevant to local
 skill use. Full guide: [Deployment](deployment.md).
 
 | Variable | What it does | Default |
 |---|---|---|
-| `WIKI_API_KEY` | Bearer token required on every `/v1/*` and `/mcp` request | *(none — the server refuses to start without it)* |
+| `WIKI_API_KEY` | Bearer token required on every `/v1/*` and `/mcp` request | *(none — the server refuses to start without it or `WIKI_READ_KEY`)* |
+| `WIKI_READ_KEY` | Second token that can search and read but not write; alone, it makes the server read-only | *(unset)* |
 | `WIKI_ALLOW_ANONYMOUS` | `1` disables auth entirely. Local development only | *(unset)* |
 | `WIKI_PORT` | Port the server listens on | `8080` |
 | `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |
+| `WIKI_GIT_REMOTE` | Git remote an empty vault is cloned from when the server starts | *(unset)* |
+| `WIKI_GIT_SYNC_INTERVAL` | Seconds between two-way git syncs (commit, rebase onto the remote, push); `0` is off | `0` |

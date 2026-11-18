@@ -12,6 +12,7 @@ there's nothing to go stale if the user changes it with plain git commands.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -122,3 +123,126 @@ def run_sync(vault_path: Path) -> tuple[int, str]:
 
     remote = get_remote(vault_path) or "origin"
     return 0, f"wiki-sync: pushed to {remote}"
+
+
+# --- two-way sync, for a vault served from a container ----------------------
+# `run_sync` above is one-way: a laptop pushing its vault. A self-hosted server
+# shares the vault with a laptop, so both sides write and it has to pull too.
+
+#: Lock files, journals and caches the vault writers create. Kept out of git via
+#: `.git/info/exclude` — local to this clone, so the user's .gitignore is untouched.
+SERVER_EXCLUDES = (
+    ".memory.lock",
+    ".manifest.lock",
+    ".memory-transaction.json",
+    ".graph-cache.json",
+    ".*.tmp",
+)
+
+
+def redact_remote(text: str) -> str:
+    """Hide credentials in an https remote (`https://user:token@host/...`).
+
+    A container is usually given a token-bearing URL, and sync messages end up
+    in /v1/status and the server log.
+    """
+    return re.sub(r"(https?://)[^/@\s]+@", r"\1***@", text)
+
+
+def _ensure_excludes(vault_path: Path) -> None:
+    exclude = vault_path / ".git" / "info" / "exclude"
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    have = exclude.read_text(encoding="utf-8").split() if exclude.is_file() else []
+    missing = [p for p in SERVER_EXCLUDES if p not in have]
+    if missing:
+        with exclude.open("a", encoding="utf-8") as fh:
+            fh.write("\n# obsidian-wiki server: transient vault files\n")
+            fh.write("".join(f"{p}\n" for p in missing))
+
+
+def bootstrap_remote(vault_path: Path, remote: str) -> str:
+    """Make the vault a checkout of `remote`, once, at server start.
+
+    An empty vault is cloned. An existing checkout is left alone (its own
+    `origin` wins, as everywhere else in this module). A non-empty directory
+    that is not a repo is initialised and pointed at `remote`; the first sync
+    pushes it. Never deletes or overwrites a file.
+    """
+    remote = remote.strip()
+    vault_path.mkdir(parents=True, exist_ok=True)
+    if (vault_path / ".git").is_dir():
+        _ensure_excludes(vault_path)
+        return f"wiki-sync: using existing checkout ({redact_remote(get_remote(vault_path) or 'no origin')})"
+    if not any(vault_path.iterdir()):
+        clone = subprocess.run(
+            ["git", "clone", "-q", remote, str(vault_path)],
+            capture_output=True, encoding="utf-8", errors="replace",
+        )
+        if clone.returncode != 0:
+            raise RuntimeError(f"git clone failed: {redact_remote(clone.stderr.strip())}")
+        _ensure_excludes(vault_path)
+        return "wiki-sync: cloned the vault from its remote"
+    configure_sync(vault_path, remote)
+    _ensure_excludes(vault_path)
+    return "wiki-sync: initialised git in the existing vault; the first sync pushes it"
+
+
+def pull_and_push(vault_path: Path, lock=None) -> tuple[int, str]:
+    """Commit local changes, rebase onto the remote, push. Returns (exit_code, message).
+
+    `lock` is a context-manager factory held around the steps that touch the
+    working tree (add/commit/rebase), so a server can keep its own writes out
+    of a half-applied rebase. Fetch and push run outside it.
+
+    On a rebase conflict the rebase is aborted and the local commit kept: no
+    edit from either side is lost, and the next cycle retries after a human
+    resolves it.
+    """
+    from contextlib import nullcontext
+
+    guard = lock or nullcontext
+    if not (vault_path / ".git").is_dir():
+        return 1, "wiki-sync: vault is not a git repo"
+    if get_remote(vault_path) is None:
+        return 1, "wiki-sync: vault has no origin remote"
+    _ensure_excludes(vault_path)
+
+    with guard():
+        add = _git(vault_path, "add", "-A")
+        if add.returncode != 0:
+            return 1, f"wiki-sync: git add failed: {add.stderr.strip()}"
+        committed = _git(vault_path, "diff", "--cached", "--quiet").returncode != 0
+        if committed:
+            commit = _git(vault_path, "commit", "-q", "-m", f"sync {datetime.now():%Y-%m-%d %H:%M} (server)")
+            if commit.returncode != 0:
+                return 1, f"wiki-sync: git commit failed: {commit.stderr.strip()}"
+
+    fetch = _git(vault_path, "fetch", "-q", "origin")
+    if fetch.returncode != 0:
+        return 1, f"wiki-sync: git fetch failed: {redact_remote(fetch.stderr.strip())}"
+
+    branch = _git(vault_path, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    upstream = f"origin/{branch}"
+    remote_has_branch = _git(vault_path, "rev-parse", "--verify", "-q", upstream).returncode == 0
+    has_head = _git(vault_path, "rev-parse", "--verify", "-q", "HEAD").returncode == 0
+
+    if remote_has_branch and has_head:
+        with guard():
+            # --autostash: a write can land between the commit above and here.
+            rebase = _git(vault_path, "rebase", "-q", "--autostash", upstream)
+            if rebase.returncode != 0:
+                _git(vault_path, "rebase", "--abort")
+                return 1, (
+                    f"wiki-sync: conflict rebasing onto {upstream}; local commits kept, "
+                    "nothing pushed — resolve it in a clone and push, the next cycle picks it up"
+                )
+
+    if not has_head:
+        return 0, "wiki-sync: nothing to sync yet"
+    ahead = _git(vault_path, "rev-list", "--count", f"{upstream}..HEAD") if remote_has_branch else None
+    if ahead is not None and ahead.stdout.strip() == "0":
+        return 0, "wiki-sync: up to date"
+    push = _git(vault_path, "push", "-q", "-u", "origin", f"HEAD:{branch}")
+    if push.returncode != 0:
+        return 1, f"wiki-sync: git push failed: {redact_remote(push.stderr.strip())}"
+    return 0, f"wiki-sync: pushed to {redact_remote(get_remote(vault_path) or 'origin')}"
