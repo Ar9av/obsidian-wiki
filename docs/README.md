@@ -12,7 +12,7 @@ Everything beyond the [README](../README.md) landing page.
 | [Architecture](architecture.md) | The four ingest stages, vault structure, what we added to Karpathy's pattern |
 | [Session Brain](session-brain.md) | Topic graph over your agent session history |
 | [Browser Extension](browser-extension.md) | Capture pages into the vault, and fill web forms from it |
-| [Deployment](deployment.md) | Run a vault as a Dockerized memory service agents reach over HTTP/MCP |
+| [Deployment](deployment.md) | Self-host a vault (Docker or `obsidian-wiki serve`) that agents reach over MCP or REST, with TLS, a read-only key and git sync |
 | [Contributing](contributing.md) | Adding skills, keeping the two READMEs in sync |
 
 New here? Read [Installation](installation.md), then [Skills Reference](skills.md).

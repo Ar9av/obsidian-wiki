@@ -1,11 +1,12 @@
 """HTTP + MCP front end for a vault, so remote agents can use it as memory.
 
-Single tenant: one process, one vault, one API key. The container does no LLM
+Single tenant: one process, one vault, one API key (plus an optional read-only
+one). The container does no LLM
 work — search, packing and frontmatter parsing all delegate to the existing
 `graphrag` / `context_pack` modules, and the caller's agent does the thinking.
 
 Needs the optional extra: ``pip install 'obsidian-wiki[server]'``.
-Run it with ``python -m obsidian_wiki.server``.
+Run it with ``obsidian-wiki serve`` or ``python -m obsidian_wiki.server``.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ import json
 import os
 import re
 import sys
-from contextlib import asynccontextmanager
+import threading
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
 from obsidian_wiki import clock
@@ -33,18 +36,34 @@ from obsidian_wiki.context_pack import ContextError, build_context_pack
 from obsidian_wiki.graphrag import query as graph_query
 from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
+from obsidian_wiki import sync as vault_sync
 from obsidian_wiki.sync import _git
 from obsidian_wiki.vault import iter_md, iter_md_under, okignore_patterns, okignored
 
 VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")).expanduser()
 API_KEY = os.environ.get("WIKI_API_KEY", "")
+# Optional second key that can search and read but never write. Set it alone for
+# a read-only deployment; hand it to agents that should consult the vault, not edit it.
+READ_KEY = os.environ.get("WIKI_READ_KEY", "")
 ANONYMOUS = os.environ.get("WIKI_ALLOW_ANONYMOUS") == "1"
 
-if not API_KEY and not ANONYMOUS:
+if not API_KEY and not READ_KEY and not ANONYMOUS:
     raise RuntimeError(
-        "refusing to start without WIKI_API_KEY. "
-        "Set it, or set WIKI_ALLOW_ANONYMOUS=1 for local development."
+        "refusing to start without WIKI_API_KEY (or WIKI_READ_KEY for a read-only server). "
+        "Set one, or set WIKI_ALLOW_ANONYMOUS=1 for local development."
     )
+if API_KEY and API_KEY == READ_KEY:
+    raise RuntimeError("WIKI_READ_KEY must differ from WIKI_API_KEY")
+
+# Optional two-way git sync, so the container's vault and the owner's laptop copy
+# stay one vault. Off unless an interval is set.
+GIT_REMOTE = os.environ.get("WIKI_GIT_REMOTE", "").strip()
+GIT_SYNC_INTERVAL = int(os.environ.get("WIKI_GIT_SYNC_INTERVAL", "0") or 0)
+
+# Held by every page write and by the working-tree half of a git sync, so a
+# rebase never lands on top of a half-written page. Memory files have their own
+# file lock (memory.memory_lock); sync takes that one too.
+_VAULT_WRITE_LOCK = threading.Lock()
 
 
 # --- vault operations -------------------------------------------------------
@@ -103,6 +122,12 @@ def write_page(
 ) -> dict[str, Any]:
     rel = f"{_category_slug(category)}/{_slug(title)}.md"
     target = _resolve(rel)
+    with _VAULT_WRITE_LOCK:
+        return _write_page_locked(rel, target, title, category, content,
+                                  tags=tags, sources=sources, summary=summary, upsert=upsert)
+
+
+def _write_page_locked(rel, target, title, category, content, *, tags, sources, summary, upsert):
     if target.exists() and not upsert:
         raise HTTPException(409, f"page already exists: {rel}")
     today = clock.today(clock.wiki_timezone(VAULT))
@@ -155,14 +180,34 @@ def context_pack(
 
 # --- HTTP -------------------------------------------------------------------
 
+def _access(header: str) -> str | None:
+    """"write", "read", or None for an Authorization header."""
+    if ANONYMOUS:
+        return "write"
+    token = (header[7:] if header.lower().startswith("bearer ") else "").encode()
+    # An unset key must never match: compare_digest(b"", b"") is True.
+    if API_KEY and hmac.compare_digest(token, API_KEY.encode()):
+        return "write"
+    if READ_KEY and hmac.compare_digest(token, READ_KEY.encode()):
+        return "read"
+    return None
+
+
 def _key_ok(header: str) -> bool:
-    token = header[7:] if header.lower().startswith("bearer ") else ""
-    return ANONYMOUS or hmac.compare_digest(token, API_KEY)
+    return _access(header) is not None
 
 
 def require_key(request: Request) -> None:
     if not _key_ok(request.headers.get("authorization", "")):
         raise HTTPException(401, "missing or invalid API key")
+
+
+def require_write_key(request: Request) -> None:
+    access = _access(request.headers.get("authorization", ""))
+    if access is None:
+        raise HTTPException(401, "missing or invalid API key")
+    if access != "write":
+        raise HTTPException(403, "this key is read-only")
 
 
 class PageWrite(BaseModel):
@@ -298,54 +343,145 @@ def memory_sync(verb: str = "API_WRITE", takeaways: str = "", **fields: str) -> 
     }
 
 
-mcp = MCPServer("obsidian-wiki")
-mcp.tool(name="memory_search", description="Search the wiki. Returns ranked pages with summaries.")(search)
-mcp.tool(name="memory_read", description="Read one wiki page as markdown, by vault-relative path.")(read_page)
-mcp.tool(name="memory_write", description="Write a wiki page. Use category '_raw' for a rough capture.")(write_page)
-mcp.tool(name="memory_context_pack", description="Compile a token-bounded context pack on a topic.")(context_pack)
-mcp.tool(name="memory_recap", description="Owner profile, open threads, and recent activity — call at session start.")(memory_recap)
-mcp.tool(name="memory_profile", description="Read or update durable facts about a person (list|set|forget); user_id scopes them.")(memory_profile)
-mcp.tool(name="memory_todo", description="Read or update threads carried between sessions (list|add|done|drop); user_id scopes them.")(memory_todo)
-mcp.tool(name="memory_sync", description="Reconcile index.md and hot.md after writes, under one lock.")(memory_sync)
+# Annotations let a client auto-approve the read tools and ask before the rest.
+# Every tool touches only this vault, so none is open-world.
+_READS = ToolAnnotations(read_only_hint=True, open_world_hint=False)
+_OVERWRITES = ToolAnnotations(read_only_hint=False, destructive_hint=True, open_world_hint=False)
+_EDITS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_world_hint=False)
 
-
-# Must be built before `mcp.session_manager` exists. Mounted at /mcp below, so
-# its own path is "/". Stateless: no server-side session state to lose on restart.
-# `host` must match the bind address: left at its loopback default, mcp turns on
-# DNS-rebinding protection and answers every LAN or container request with 421.
-_mcp_app = mcp.streamable_http_app(
-    streamable_http_path="/", stateless_http=True,
-    host=os.environ.get("WIKI_HOST", "127.0.0.1"),
+#: (name, function, description, annotations, read-only?)
+_TOOLS = (
+    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
+    ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
+    ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
+    ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
+    ("memory_recap", memory_recap, "Owner profile, open threads, and recent activity — call at session start.", _READS, True),
+    ("memory_profile", memory_profile, "Read or update durable facts about a person (list|set|forget); user_id scopes them.", _OVERWRITES, False),
+    ("memory_todo", memory_todo, "Read or update threads carried between sessions (list|add|done|drop); user_id scopes them.", _EDITS, False),
+    ("memory_sync", memory_sync, "Reconcile index.md and hot.md after writes, under one lock.", _EDITS, False),
 )
 
 
-def _keyed(inner):
+def _build_mcp(read_only: bool) -> MCPServer:
+    server = MCPServer("obsidian-wiki")
+    for name, fn, description, annotations, reads in _TOOLS:
+        if reads or not read_only:
+            server.tool(name=name, description=description, annotations=annotations)(fn)
+    return server
+
+
+# Two servers rather than a per-call check: a read-only caller never even sees a
+# write tool, so its agent doesn't plan around one it can't use.
+mcp = _build_mcp(read_only=False)
+mcp_read = _build_mcp(read_only=True)
+
+
+# Must be built before `session_manager` exists. Mounted at /mcp below, so its
+# own path is "/". Stateless: no server-side session state to lose on restart.
+# `host` must match the bind address: left at its loopback default, mcp turns on
+# DNS-rebinding protection and answers every LAN or container request with 421.
+def _http_app(server: MCPServer):
+    return server.streamable_http_app(
+        streamable_http_path="/", stateless_http=True,
+        host=os.environ.get("WIKI_HOST", "127.0.0.1"),
+    )
+
+
+_mcp_app = _http_app(mcp)
+_mcp_read_app = _http_app(mcp_read)
+
+
+def _keyed(write_app, read_app):
     """Route dependencies do not reach a mounted app, so /mcp checks the key itself."""
     async def app(scope, receive, send):
+        target = write_app
         if scope["type"] == "http":
             header = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
-            if not _key_ok(header):
+            access = _access(header)
+            if access is None:
                 await JSONResponse({"detail": "missing or invalid API key"}, 401)(scope, receive, send)
                 return
-        await inner(scope, receive, send)
+            target = write_app if access == "write" else read_app
+        await target(scope, receive, send)
     return app
+
+
+# --- git sync ---------------------------------------------------------------
+
+_SYNC_STATE: dict[str, Any] = {"enabled": False}
+# One cycle at a time: the shutdown sync can overlap a loop tick, and two git
+# processes in one checkout trip over .git/index.lock.
+_SYNC_RUN_LOCK = threading.Lock()
+
+
+@contextmanager
+def _tree_lock():
+    """Everything that writes the working tree: page writes and the memory writer."""
+    from obsidian_wiki import memory as mem
+
+    with _VAULT_WRITE_LOCK, mem.memory_lock(VAULT, timeout=60):
+        yield
+
+
+def sync_once() -> dict[str, Any]:
+    with _SYNC_RUN_LOCK:
+        try:
+            code, message = vault_sync.pull_and_push(VAULT, lock=_tree_lock)
+        except Exception as exc:  # a lock timeout or git crash must not take the server down
+            code, message = 1, vault_sync.redact_remote(f"wiki-sync: {exc}")
+        _SYNC_STATE.update(
+            ok=code == 0, message=message, last_run=datetime.now(timezone.utc).isoformat(),
+        )
+    print(message, file=sys.stderr, flush=True)
+    return dict(_SYNC_STATE)
+
+
+def _sync_loop(stop: threading.Event) -> None:
+    while not stop.wait(GIT_SYNC_INTERVAL):
+        sync_once()
+
+
+def _start_git_sync() -> threading.Event | None:
+    """Clone or adopt the remote, sync once, then keep syncing in the background."""
+    if GIT_REMOTE:
+        print(vault_sync.bootstrap_remote(VAULT, GIT_REMOTE), file=sys.stderr, flush=True)
+    if GIT_SYNC_INTERVAL <= 0:
+        return None
+    _SYNC_STATE.update(enabled=True, interval=GIT_SYNC_INTERVAL)
+    sync_once()
+    stop = threading.Event()
+    threading.Thread(target=_sync_loop, args=(stop,), name="wiki-git-sync", daemon=True).start()
+    return stop
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Without running the session manager here, /mcp accepts the first request
+    import anyio
+
+    stop = await anyio.to_thread.run_sync(_start_git_sync)
+    # Without running the session managers here, /mcp accepts the first request
     # and then hangs.
-    async with mcp.session_manager.run():
-        yield
+    try:
+        async with mcp.session_manager.run(), mcp_read.session_manager.run():
+            yield
+    finally:
+        if stop is not None:
+            stop.set()
+            # One last push, so a write made just before shutdown isn't stranded.
+            await anyio.to_thread.run_sync(sync_once)
 
 
 app = FastAPI(title="obsidian-wiki memory", lifespan=lifespan)
-app.mount("/mcp", _keyed(_mcp_app))
+app.mount("/mcp", _keyed(_mcp_app, _mcp_read_app))
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
-    return {"ok": VAULT.is_dir(), "vault": str(VAULT)}
+    body: dict[str, Any] = {"ok": VAULT.is_dir(), "vault": str(VAULT)}
+    if _SYNC_STATE.get("enabled"):
+        # Unauthenticated, so a yes/no only — the message can name the remote.
+        body["git_sync_ok"] = _SYNC_STATE.get("ok", True)
+    return body
 
 
 @app.get("/v1/search", dependencies=[Depends(require_key)])
@@ -358,7 +494,7 @@ def http_read(path: str) -> dict[str, Any]:
     return read_page(path)
 
 
-@app.post("/v1/pages", dependencies=[Depends(require_key)])
+@app.post("/v1/pages", dependencies=[Depends(require_write_key)])
 def http_write(body: PageWrite) -> dict[str, Any]:
     return write_page(
         body.title, body.category, body.content,
@@ -433,6 +569,7 @@ def _git_status() -> dict[str, Any]:
     dirty = _dirty_lines(porcelain.stdout)
     return {
         "repo": True,
+        "sync": dict(_SYNC_STATE),
         "branch": branch.stdout.strip(),
         "dirty": dirty[:50],
         "dirty_count": len(dirty),
@@ -590,7 +727,7 @@ def http_profile_list(user_id: str = "") -> dict[str, Any]:
     return memory_profile("list", user_id=user_id)
 
 
-@app.post("/v1/memory/profile", dependencies=[Depends(require_key)])
+@app.post("/v1/memory/profile", dependencies=[Depends(require_write_key)])
 def http_profile_set(body: ProfileWrite) -> dict[str, Any]:
     return memory_profile(
         body.action, key=body.key, value=body.value,
@@ -603,13 +740,13 @@ def http_todo_list(include_closed: bool = False, user_id: str = "") -> dict[str,
     return memory_todo("list", include_closed=include_closed, user_id=user_id)
 
 
-@app.post("/v1/memory/todos", dependencies=[Depends(require_key)])
+@app.post("/v1/memory/todos", dependencies=[Depends(require_write_key)])
 def http_todo_write(body: TodoWrite) -> dict[str, Any]:
     return memory_todo(body.action, text=body.text, todo_id=body.todo_id,
                        origin=body.origin, user_id=body.user_id)
 
 
-@app.post("/v1/memory/sync", dependencies=[Depends(require_key)])
+@app.post("/v1/memory/sync", dependencies=[Depends(require_write_key)])
 def http_memory_sync(body: SyncRequest) -> dict[str, Any]:
     return memory_sync(verb=body.verb, takeaways=body.takeaways, **(body.fields or {}))
 
@@ -635,19 +772,22 @@ def http_graph() -> dict[str, Any]:
 
 
 @app.get("/v1/connect", dependencies=[Depends(require_key)])
-async def http_connect() -> dict[str, Any]:
+async def http_connect(request: Request) -> dict[str, Any]:
     """What an agent needs to plug into this vault, for the viewer's Connect page.
 
     `python` is this process's interpreter, which already has the server extra, so
     `python -m obsidian_wiki mcp` works even where `obsidian-wiki` isn't on PATH
     (GUI apps) or resolves to an install without the extra. Behind the key: it
-    reveals local paths.
+    reveals local paths. Lists the tools the caller's key will actually see.
     """
+    access = _access(request.headers.get("authorization", ""))
+    server = mcp if access == "write" else mcp_read
     return {
         "python": sys.executable,
         "vault": str(VAULT),
         "key_required": not ANONYMOUS,
-        "tools": [{"name": t.name, "description": t.description or ""} for t in await mcp.list_tools()],
+        "access": access,
+        "tools": [{"name": t.name, "description": t.description or ""} for t in await server.list_tools()],
     }
 
 

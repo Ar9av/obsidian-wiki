@@ -1,12 +1,42 @@
+# Self-host a vault: `docker compose up -d`. Full guide: docs/deployment.md.
+#
+# Pulls the released image; `docker compose up --build` builds this checkout instead.
+# Settings come from a .env next to this file (see the Memory server section of .env.example).
 services:
   wiki:
+    image: ghcr.io/ar9av/obsidian-wiki:${WIKI_VERSION:-latest}
     build: .
-    ports: ["8080:8080"]
+    # Loopback by default: the API key travels in plain HTTP until TLS sits in front.
+    # Set WIKI_PUBLISH=8080 to reach it from your LAN, or use the tls profile below.
+    ports: ["${WIKI_PUBLISH:-127.0.0.1:8080}:8080"]
     environment:
-      WIKI_API_KEY: ${WIKI_API_KEY:?set WIKI_API_KEY in .env}
+      WIKI_API_KEY: ${WIKI_API_KEY:-}
+      WIKI_READ_KEY: ${WIKI_READ_KEY:-}
+      # Two-way git sync with the vault your laptop's Obsidian opens (off unless set).
+      WIKI_GIT_REMOTE: ${WIKI_GIT_REMOTE:-}
+      WIKI_GIT_SYNC_INTERVAL: ${WIKI_GIT_SYNC_INTERVAL:-0}
     volumes:
+      # Swap for a bind mount to serve a vault you already have: /path/to/vault:/vault
       - wiki-data:/vault
+    restart: unless-stopped
+
+  # HTTPS with an automatic Let's Encrypt certificate:
+  #   WIKI_DOMAIN=wiki.example.com docker compose --profile tls up -d
+  # The domain's DNS must point at this host, with ports 80 and 443 open.
+  caddy:
+    image: caddy:2
+    profiles: [tls]
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      WIKI_DOMAIN: ${WIKI_DOMAIN:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [wiki]
     restart: unless-stopped
 
 volumes:
   wiki-data:
+  caddy-data:
+  caddy-config:
