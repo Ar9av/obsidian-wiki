@@ -15,6 +15,17 @@ services:
       # Two-way git sync with the vault your laptop's Obsidian opens (off unless set).
       WIKI_GIT_REMOTE: ${WIKI_GIT_REMOTE:-}
       WIKI_GIT_SYNC_INTERVAL: ${WIKI_GIT_SYNC_INTERVAL:-0}
+      # OAuth sign-in for MCP clients (claude.ai, ChatGPT, Cursor...). Needs the
+      # public https:// URL, e.g. https://${WIKI_DOMAIN} with the tls profile.
+      WIKI_OAUTH: ${WIKI_OAUTH:-}
+      WIKI_PUBLIC_URL: ${WIKI_PUBLIC_URL:-}
+      WIKI_RATE_LIMIT: ${WIKI_RATE_LIMIT:-600}
+      WIKI_AUTH_LOCKOUT: ${WIKI_AUTH_LOCKOUT:-10}
+      # Caddy reaches the server over the compose network, so trust its
+      # X-Forwarded-For; otherwise every client looks like Caddy to the rate limit
+      # and lockout. If you publish the port beyond loopback without a proxy, set
+      # this to your proxy's address (or leave it empty) so clients can't spoof it.
+      WIKI_TRUSTED_PROXIES: ${WIKI_TRUSTED_PROXIES-*}
     volumes:
       # Swap for a bind mount to serve a vault you already have: /path/to/vault:/vault
       - wiki-data:/vault

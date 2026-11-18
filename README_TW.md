@@ -1,4 +1,5 @@
 <h1 align="center">obsidian-wiki</h1>
+<!-- mcp-name: io.github.Ar9av/obsidian-wiki -->
 
 <p align="center"><b>一個由 AI agent 陪你一起養大的數位大腦。</b></p>
 

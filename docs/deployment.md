@@ -113,6 +113,98 @@ Every tool also carries MCP annotations: `readOnlyHint` on the reads, and `destr
 `memory_write` and `memory_profile`, which can overwrite or forget. A client can use them to
 auto-approve reads and ask before writes.
 
+## Sign in with OAuth
+
+Some clients would rather sign in than be handed a header: claude.ai and ChatGPT connectors,
+Cursor, VS Code, and Codex (`codex mcp login`). Turn on OAuth 2.1 and they discover it from the
+server's 401, register themselves, and open a sign-in page:
+
+```bash
+# .env, next to the tls profile's WIKI_DOMAIN
+WIKI_OAUTH=1
+WIKI_PUBLIC_URL=https://wiki.example.com
+```
+
+- **Signing in** means typing a vault key into the server's consent page. `WIKI_API_KEY` grants
+  `wiki:read` and `wiki:write`; `WIKI_READ_KEY` grants `wiki:read` only, and that client then
+  sees the four read tools, like a read-only key. The page names the app and where the grant is
+  sent; approve only connections you started.
+- **Tokens** are standard: PKCE, dynamic client registration (RFC 7591), protected-resource
+  metadata (RFC 9728), one-hour access tokens, and 30-day refresh tokens that rotate on every use.
+  The protocol handling is the MCP SDK's; this server supplies storage and the consent step.
+- **Storage** is `<vault>/.wiki-server/oauth.json`, holding SHA-256 digests rather than tokens, so
+  the file grants nothing if it leaks. The folder carries its own `.gitignore`, so no git setup
+  commits it.
+- **Revoking:** `GET /v1/oauth/clients` lists signed-in apps; `DELETE /v1/oauth/clients/{id}`
+  revokes one. Both need the write key. Deleting `oauth.json` revokes them all.
+
+`WIKI_PUBLIC_URL` must be the exact `https://` address clients use: it is the token issuer, and
+it can't be inferred from a request behind a proxy. Static bearer keys keep working alongside
+OAuth.
+
+## Rate limits and lockout
+
+Every request except `/health` counts toward a per-client limit, 600 a minute by default
+(`WIKI_RATE_LIMIT`). After 10 rejected credentials in 5 minutes (`WIKI_AUTH_LOCKOUT`,
+`WIKI_AUTH_LOCKOUT_SECONDS`), that client gets **429** with `Retry-After` until the window passes,
+without its credentials being checked, so a lucky guess during the lockout reveals nothing.
+Rejected bearer keys, OAuth tokens and keys typed on the consent page all count. A request that
+carries no credential doesn't: MCP clients send exactly that to discover OAuth. Set either limit to
+`0` to turn it off.
+
+"Client" means the connecting address. Behind a reverse proxy that is the proxy, which would make
+both limits global, so tell the server which peers may name the real client in `X-Forwarded-For`:
+`WIKI_TRUSTED_PROXIES` takes addresses, CIDRs, or `*`. The compose file, `fly.toml` and
+`render.yaml` set `*`, since only their proxy reaches the server. If you publish the port directly
+on a network, set it to your proxy's address or leave it empty, or a client could spoof the
+header to dodge the limits.
+
+## Deploy to a platform
+
+Each template runs the released image with a persistent volume at `/vault` and checks `/health`.
+The platform terminates TLS. The server listens on `$PORT` when the platform assigns one. After
+the first deploy, set `WIKI_PUBLIC_URL` to the platform's address if you turn on OAuth.
+
+### Fly.io
+
+```bash
+fly launch --no-deploy --copy-config -c deploy/fly.toml --name <your-app>
+fly volumes create wiki_data --size 1
+fly secrets set WIKI_API_KEY=$(openssl rand -hex 24)
+fly deploy -c deploy/fly.toml              # https://<your-app>.fly.dev/mcp/
+```
+
+[`deploy/fly.toml`](../deploy/fly.toml) keeps one machine running, because it owns the volume
+and runs git sync.
+
+### Render
+
+[Deploy to Render](https://render.com/deploy?repo=https://github.com/Ar9av/obsidian-wiki) reads
+[`render.yaml`](../render.yaml): a web service from the image with a 1 GB disk, and a generated
+`WIKI_API_KEY` (copy it from the service's Environment tab). Persistent disks need a paid instance
+type.
+
+### Railway
+
+Create a service from this repo, then point **Settings → Config-as-code** at
+[`deploy/railway.json`](../deploy/railway.json). It builds the Dockerfile, checks `/health`, and
+refuses to deploy until a volume is mounted at `/vault`. Add the volume and `WIKI_API_KEY`
+(plus `WIKI_TRUSTED_PROXIES=*`), then generate a domain under **Networking**.
+
+## MCP Registry
+
+The server is listed in the official [MCP Registry](https://registry.modelcontextprotocol.io) as
+`io.github.Ar9av/obsidian-wiki`, from [`server.json`](../server.json). Clients that browse the
+registry (VS Code, Copilot) can install it three ways:
+
+- the PyPI package over stdio: `uvx --with fastapi --with mcp obsidian-wiki mcp`
+- the image over stdio, with your vault mounted
+- a remote entry pointing at your own host
+
+Every release tag re-publishes it from `.github/workflows/mcp-registry.yml`, once PyPI and GHCR
+have the new version. The registry checks ownership against the `mcp-name:` comment in the README
+and the image's `io.modelcontextprotocol.server.name` label.
+
 ## Web viewer
 
 `obsidian-wiki ui` opens a browser viewer for the resolved vault on `http://127.0.0.1:3114/ui`: an overview, page browser with search, rendered pages with backlinks, the link graph, the activity log, profile facts and open threads (add, close, forget), the hot cache, and the health, staging and sources views. It binds to loopback only and needs no key unless `WIKI_API_KEY` is set. `--port` and `--vault` override the defaults; `--no-open` skips the browser tab.
@@ -135,6 +227,14 @@ The viewer is a React app built with [Saas UI](https://saas-ui.dev) (Chakra UI).
 | `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |
 | `WIKI_GIT_REMOTE` | Git remote to clone an empty vault from at start | *(unset)* |
 | `WIKI_GIT_SYNC_INTERVAL` | Seconds between two-way git syncs; `0` turns sync off | `0` |
+| `WIKI_OAUTH` | `1` turns on [OAuth sign-in](#sign-in-with-oauth) for MCP clients | *(unset)* |
+| `WIKI_PUBLIC_URL` | The `https://` address clients reach; required with `WIKI_OAUTH=1` | *(unset)* |
+| `WIKI_RATE_LIMIT` | Requests per client per minute; `0` is off | `600` |
+| `WIKI_AUTH_LOCKOUT` | Rejected credentials before a client is locked out; `0` is off | `10` |
+| `WIKI_AUTH_LOCKOUT_SECONDS` | Window for counting failures, and how long a lockout lasts | `300` |
+| `WIKI_TRUSTED_PROXIES` | Peers whose `X-Forwarded-For` names the client (addresses, CIDRs, or `*`) | `127.0.0.1` |
+
+`WIKI_PORT` falls back to `PORT` (what Render and Railway assign), then `8080`.
 
 The process **refuses to start** without `WIKI_API_KEY` or `WIKI_READ_KEY`, unless
 `WIKI_ALLOW_ANONYMOUS=1`. There is no default key, and the two keys must differ.
@@ -146,7 +246,8 @@ Read only by `docker-compose.yml`: `WIKI_VERSION` (image tag, default `latest`),
 
 The endpoint is `https://<your-host>/mcp/` (streamable HTTP), with `Authorization: Bearer <key>`.
 Keep the key in an environment variable rather than pasting it into a config file. The viewer's
-**Connect an agent** page writes these for you.
+**Connect an agent** page writes these for you. With [OAuth](#sign-in-with-oauth) on, drop the
+header in any client that supports sign-in (Codex: `codex mcp login wiki-memory`).
 
 **Claude Code**
 
@@ -180,7 +281,8 @@ bearer_token_env_var = "WIKI_API_KEY"
 ```
 
 **Claude Desktop and claude.ai**: add it under **Settings → Connectors → Add custom connector**
-with the URL and an `Authorization: Bearer …` request header. Claude connects from Anthropic's
+with the URL and an `Authorization: Bearer …` request header, or with no header when OAuth is on
+(Claude opens the sign-in page). Claude connects from Anthropic's
 cloud, so the server needs a public HTTPS address (the Caddy profile, or `tailscale funnel`). For a
 server only your machine can reach, bridge it into `claude_desktop_config.json` with
 [`mcp-remote`](https://github.com/geelen/mcp-remote):
@@ -225,6 +327,8 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/memory/todos?include_closed=&user_id=` | Threads carried between sessions |
 | `POST` | `/v1/memory/todos` | `{action: add\|done\|drop, text, todo_id, origin, user_id}` |
 | `POST` | `/v1/memory/sync` | `{verb, takeaways, fields}` — reconcile index and hot cache |
+| `GET` | `/v1/oauth/clients` | Apps signed in over OAuth, with live grant counts (write key) |
+| `DELETE` | `/v1/oauth/clients/{client_id}` | Revoke an app's tokens and registration (write key) |
 
 ```bash
 curl -X POST localhost:8080/v1/pages -H "Authorization: Bearer $WIKI_API_KEY" \
@@ -262,6 +366,6 @@ Or point the vault at a git remote and use `obsidian-wiki sync` — see
 ## What this is not
 
 Single-tenant: one container serves one vault behind one key (and optionally one read-only key). `user_id` separates *memory about people* within that vault, which is enough for a team sharing one brain; it is not per-user isolation and is not an authorization boundary — anyone with the key can read any scope. No per-user isolation, no quotas, no
-rate limiting, no billing. To serve several people, run a container per vault and put a reverse proxy
+billing; rate limiting is per client address, not per person. To serve several people, run a container per vault and put a reverse proxy
 in front. Terminate TLS at that proxy — the container speaks plain HTTP, and the API key is only as
 private as the connection carrying it.

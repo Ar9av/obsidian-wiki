@@ -1,0 +1,39 @@
+# Fly.io: one machine, one volume, HTTPS on <app>.fly.dev. Guide: docs/deployment.md#flyio
+#
+#   fly launch --no-deploy --copy-config -c deploy/fly.toml --name <your-app>
+#   fly volumes create wiki_data --size 1
+#   fly secrets set WIKI_API_KEY=$(openssl rand -hex 24)
+#   fly deploy -c deploy/fly.toml
+app = "obsidian-wiki"
+primary_region = "iad"
+
+[build]
+  image = "ghcr.io/ar9av/obsidian-wiki:latest"
+
+[env]
+  WIKI_PORT = "8080"
+  # Only Fly's proxy reaches the machine, so its X-Forwarded-For names the client.
+  WIKI_TRUSTED_PROXIES = "*"
+
+[[mounts]]
+  source = "wiki_data"
+  destination = "/vault"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # One machine owns the volume and runs git sync; keep it up.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

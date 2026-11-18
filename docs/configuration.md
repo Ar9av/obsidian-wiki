@@ -342,3 +342,9 @@ skill use. Full guide: [Deployment](deployment.md).
 | `WIKI_HOST` | Interface to bind. The Docker image sets `0.0.0.0`; override only to expose the server deliberately | `127.0.0.1` |
 | `WIKI_GIT_REMOTE` | Git remote an empty vault is cloned from when the server starts | *(unset)* |
 | `WIKI_GIT_SYNC_INTERVAL` | Seconds between two-way git syncs (commit, rebase onto the remote, push); `0` is off | `0` |
+| `WIKI_OAUTH` | `1` turns on OAuth 2.1 sign-in for MCP clients (consent page asks for a vault key) | *(unset)* |
+| `WIKI_PUBLIC_URL` | The `https://` address clients reach; the OAuth issuer. Required with `WIKI_OAUTH=1` | *(unset)* |
+| `WIKI_RATE_LIMIT` | Requests per client per minute; `0` is off | `600` |
+| `WIKI_AUTH_LOCKOUT` | Rejected credentials (per client, per window) before a 429 lockout; `0` is off | `10` |
+| `WIKI_AUTH_LOCKOUT_SECONDS` | Failure window and lockout length | `300` |
+| `WIKI_TRUSTED_PROXIES` | Proxies whose `X-Forwarded-For` names the real client (addresses, CIDRs, `*`) | `127.0.0.1` |

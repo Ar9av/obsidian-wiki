@@ -55,6 +55,15 @@ if not API_KEY and not READ_KEY and not ANONYMOUS:
 if API_KEY and API_KEY == READ_KEY:
     raise RuntimeError("WIKI_READ_KEY must differ from WIKI_API_KEY")
 
+# Optional OAuth 2.1 for MCP clients that sign in rather than send a header.
+# The issuer must be the URL clients reach, so it can't be guessed from a request.
+OAUTH = os.environ.get("WIKI_OAUTH") == "1"
+PUBLIC_URL = os.environ.get("WIKI_PUBLIC_URL", "").strip().rstrip("/")
+if OAUTH and not PUBLIC_URL:
+    raise RuntimeError("WIKI_OAUTH=1 needs WIKI_PUBLIC_URL, the https:// address clients use")
+if OAUTH and ANONYMOUS:
+    raise RuntimeError("WIKI_OAUTH=1 signs in with WIKI_API_KEY or WIKI_READ_KEY; it can't run anonymous")
+
 # Optional two-way git sync, so the container's vault and the owner's laptop copy
 # stay one vault. Off unless an interval is set.
 GIT_REMOTE = os.environ.get("WIKI_GIT_REMOTE", "").strip()
@@ -180,17 +189,33 @@ def context_pack(
 
 # --- HTTP -------------------------------------------------------------------
 
-def _access(header: str) -> str | None:
-    """"write", "read", or None for an Authorization header."""
-    if ANONYMOUS:
-        return "write"
-    token = (header[7:] if header.lower().startswith("bearer ") else "").encode()
+oauth_provider = None
+if OAUTH:
+    from obsidian_wiki.oauth import WikiOAuthProvider
+
+    # Late-bound: _key_access is defined just below.
+    oauth_provider = WikiOAuthProvider(VAULT, PUBLIC_URL, lambda secret: _key_access(secret))
+
+def _key_access(secret: str) -> str | None:
+    """"write" or "read" for one of the static keys, else None."""
+    token = secret.encode()
     # An unset key must never match: compare_digest(b"", b"") is True.
     if API_KEY and hmac.compare_digest(token, API_KEY.encode()):
         return "write"
     if READ_KEY and hmac.compare_digest(token, READ_KEY.encode()):
         return "read"
     return None
+
+
+def _access(header: str) -> str | None:
+    """"write", "read", or None for an Authorization header."""
+    if ANONYMOUS:
+        return "write"
+    token = header[7:] if header.lower().startswith("bearer ") else ""
+    access = _key_access(token)
+    if access is None and token and oauth_provider is not None:
+        access = oauth_provider.access_for(token)
+    return access
 
 
 def _key_ok(header: str) -> bool:
@@ -399,7 +424,9 @@ def _keyed(write_app, read_app):
             header = dict(scope["headers"]).get(b"authorization", b"").decode("latin-1")
             access = _access(header)
             if access is None:
-                await JSONResponse({"detail": "missing or invalid API key"}, 401)(scope, receive, send)
+                # RFC 9728: point an OAuth-capable client at the metadata to sign in.
+                headers = {"WWW-Authenticate": f'Bearer resource_metadata="{_RESOURCE_METADATA}"'} if OAUTH else None
+                await JSONResponse({"detail": "missing or invalid API key"}, 401, headers=headers)(scope, receive, send)
                 return
             target = write_app if access == "write" else read_app
         await target(scope, receive, send)
@@ -473,6 +500,48 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="obsidian-wiki memory", lifespan=lifespan)
 app.mount("/mcp", _keyed(_mcp_app, _mcp_read_app))
+
+_RESOURCE_METADATA = f"{PUBLIC_URL}/.well-known/oauth-protected-resource/mcp/"
+if OAUTH:
+    from mcp.server.auth.routes import create_auth_routes, create_protected_resource_routes
+    from mcp.server.auth.settings import ClientRegistrationOptions, RevocationOptions
+    from pydantic import AnyHttpUrl
+
+    from obsidian_wiki.oauth import CONSENT_PATH, SCOPES
+
+    from mcp.server.auth.settings import AuthSettings
+
+    # Through AuthSettings, not AnyHttpUrl(): pydantic appends "/" to a bare
+    # host, and RFC 8414 compares the issuer as an exact string.
+    _issuer = AuthSettings(issuer_url=PUBLIC_URL, resource_server_url=None).issuer_url
+    app.router.routes.extend(create_auth_routes(
+        oauth_provider, issuer_url=_issuer,
+        client_registration_options=ClientRegistrationOptions(
+            enabled=True, valid_scopes=SCOPES, default_scopes=SCOPES,
+        ),
+        revocation_options=RevocationOptions(enabled=True),
+    ))
+    # Clients derive the metadata path from the URL they were given, with or
+    # without the trailing slash, or fall back to the bare well-known path. Each
+    # document names the resource it was fetched for (RFC 9728 §3.3).
+    for resource in (f"{PUBLIC_URL}/mcp/", f"{PUBLIC_URL}/mcp", PUBLIC_URL):
+        app.router.routes.extend(create_protected_resource_routes(
+            resource_url=AnyHttpUrl(resource), authorization_servers=[_issuer],
+            scopes_supported=SCOPES, resource_name="obsidian-wiki",
+        ))
+    app.add_api_route(CONSENT_PATH, oauth_provider.consent, methods=["GET", "POST"], include_in_schema=False)
+
+
+# Outermost: rate limiting and the failed-auth lockout see every request,
+# including /mcp and the OAuth endpoints.
+from obsidian_wiki.guard import Guard  # noqa: E402
+
+app.add_middleware(
+    Guard,
+    rate_limit=int(os.environ.get("WIKI_RATE_LIMIT", "600") or 0),
+    lockout_limit=int(os.environ.get("WIKI_AUTH_LOCKOUT", "10") or 0),
+    lockout_seconds=int(os.environ.get("WIKI_AUTH_LOCKOUT_SECONDS", "300") or 300),
+)
 
 
 @app.get("/health")
@@ -787,6 +856,8 @@ async def http_connect(request: Request) -> dict[str, Any]:
         "vault": str(VAULT),
         "key_required": not ANONYMOUS,
         "access": access,
+        "oauth": OAUTH,
+        "public_url": PUBLIC_URL,
         "tools": [{"name": t.name, "description": t.description or ""} for t in await server.list_tools()],
     }
 
@@ -806,15 +877,43 @@ def http_staging() -> dict[str, Any]:
     return staging()
 
 
-def main() -> None:
+@app.get("/v1/oauth/clients", dependencies=[Depends(require_write_key)])
+def http_oauth_clients() -> dict[str, Any]:
+    """Apps that signed in over OAuth, so the owner can see and revoke them."""
+    if oauth_provider is None:
+        return {"enabled": False, "clients": []}
+    return {"enabled": True, "clients": oauth_provider.clients()}
+
+
+@app.delete("/v1/oauth/clients/{client_id}", dependencies=[Depends(require_write_key)])
+def http_oauth_forget(client_id: str) -> dict[str, Any]:
+    if oauth_provider is None or not oauth_provider.forget_client(client_id):
+        raise HTTPException(404, f"no such OAuth client: {client_id}")
+    return {"revoked": client_id}
+
+
+def run(host: str | None = None, port: int | None = None) -> None:
+    """Serve `app` with uvicorn — shared by `obsidian-wiki serve` and `python -m`."""
     import uvicorn
 
     # Loopback by default: /ui is a browser console over the whole vault, and the
     # bare `python -m obsidian_wiki.server` case is a laptop or a dev box, not a
     # deliberate exposure. Containers need every interface, so the Dockerfile sets
     # WIKI_HOST=0.0.0.0 explicitly.
-    host = os.environ.get("WIKI_HOST", "127.0.0.1")
-    uvicorn.run(app, host=host, port=int(os.environ.get("WIKI_PORT", "8080")))
+    host = host or os.environ.get("WIKI_HOST", "127.0.0.1")
+    # PORT is what Render, Railway, Heroku and friends assign.
+    port = port or int(os.environ.get("WIKI_PORT") or os.environ.get("PORT") or 8080)
+    kwargs: dict[str, Any] = {}
+    # Behind a proxy every client is the proxy, which would make the per-client
+    # rate limit and lockout global. Trusted peers' X-Forwarded-For names the
+    # real client instead. Unset keeps uvicorn's default (127.0.0.1 only).
+    if os.environ.get("WIKI_TRUSTED_PROXIES"):
+        kwargs["forwarded_allow_ips"] = os.environ["WIKI_TRUSTED_PROXIES"]
+    uvicorn.run(app, host=host, port=port, **kwargs)
+
+
+def main() -> None:
+    run()
 
 
 if __name__ == "__main__":
