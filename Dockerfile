@@ -4,6 +4,9 @@
 # Or pull the released image: ghcr.io/ar9av/obsidian-wiki:latest
 FROM python:3.12-slim
 
+# Ownership proof for the MCP Registry (server.json); must match its "name".
+LABEL io.modelcontextprotocol.server.name="io.github.Ar9av/obsidian-wiki"
+
 # git: obsidian_wiki/sync.py shells out to it for vault backup and two-way sync
 # (WIKI_GIT_REMOTE). openssh-client: for git@ remotes with a mounted deploy key.
 RUN apt-get update && apt-get install -y --no-install-recommends git openssh-client \
@@ -23,13 +26,14 @@ RUN useradd --create-home wiki && mkdir -p /vault && chown wiki:wiki /vault
 USER wiki
 
 # WIKI_HOST is loopback by default; a container must listen on every interface.
-ENV OBSIDIAN_VAULT_PATH=/vault WIKI_PORT=8080 WIKI_HOST=0.0.0.0
+# The port is WIKI_PORT, else the PaaS-assigned PORT (Render, Railway), else 8080.
+ENV OBSIDIAN_VAULT_PATH=/vault WIKI_HOST=0.0.0.0
 # Author for the server's sync commits; override to attribute them to yourself.
 ENV GIT_AUTHOR_NAME="obsidian-wiki server" GIT_AUTHOR_EMAIL=obsidian-wiki@localhost \
     GIT_COMMITTER_NAME="obsidian-wiki server" GIT_COMMITTER_EMAIL=obsidian-wiki@localhost
 VOLUME /vault
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health').status==200 else 1)"
+    CMD python -c "import os,sys,urllib.request; p=os.environ.get('WIKI_PORT') or os.environ.get('PORT') or '8080'; sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{p}/health').status==200 else 1)"
 
 CMD ["python", "-m", "obsidian_wiki.server"]

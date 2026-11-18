@@ -1,0 +1,86 @@
+name: mcp-registry
+
+# List each release in the official MCP Registry (registry.modelcontextprotocol.io)
+# from server.json. Runs on the same tags as publish.yml (PyPI) and docker.yml
+# (GHCR), and waits for both: the registry verifies ownership by reading the
+# `mcp-name:` line in the PyPI README and the image's
+# io.modelcontextprotocol.server.name label, so they must exist first.
+#
+# No secrets: `mcp-publisher login github-oidc` proves this repository's owner
+# controls the io.github.Ar9av/* namespace.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to (re)publish, e.g. v2026.11.6"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # GitHub OIDC login to the registry
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.9
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Stamp the release version into server.json
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet packaging
+          # hatch-vcs normalises the tag the way PyPI does: v2026.05.2 -> 2026.5.2.
+          version=$(python3 -c "import sys; from packaging.version import Version; print(Version(sys.argv[1]))" "${TAG#v}")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          jq --arg v "$version" --arg tag "$TAG" '
+            .version = $v
+            | (.packages[] | select(.registryType == "pypi")).version = $v
+            | (.packages[] | select(.registryType == "oci")).identifier = "ghcr.io/ar9av/obsidian-wiki:\($tag)"
+          ' server.json > server.tmp && mv server.tmp server.json
+          cat server.json
+
+      - name: Wait for the PyPI release and the GHCR image
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            pypi=$(curl -fsS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/obsidian-wiki/$VERSION/json" || true)
+            image=0
+            docker manifest inspect "ghcr.io/ar9av/obsidian-wiki:$TAG" >/dev/null 2>&1 && image=1
+            if [ "$pypi" = "200" ] && [ "$image" = "1" ]; then
+              echo "PyPI $VERSION and ghcr.io/ar9av/obsidian-wiki:$TAG are both live"; exit 0
+            fi
+            echo "waiting (pypi=$pypi image=$image)..."; sleep 20
+          done
+          echo "::error::PyPI $VERSION or image $TAG never appeared; re-run with workflow_dispatch once they exist"
+          exit 1
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o "$archive.sigstore.json" "$base/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+
+      - name: Publish to the MCP Registry
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish

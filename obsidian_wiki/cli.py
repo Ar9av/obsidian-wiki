@@ -3222,14 +3222,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
         return 1
     os.environ["OBSIDIAN_VAULT_PATH"] = str(vault)
     host = args.host or os.environ.get("WIKI_HOST") or "127.0.0.1"
-    port = args.port or int(os.environ.get("WIKI_PORT") or 8080)
+    port = args.port or int(os.environ.get("WIKI_PORT") or os.environ.get("PORT") or 8080)
     # server.py reads WIKI_HOST at import to set MCP's DNS-rebinding guard.
     os.environ["WIKI_HOST"] = host
     if args.sync_interval is not None:
         os.environ["WIKI_GIT_SYNC_INTERVAL"] = str(args.sync_interval)
     try:
-        import uvicorn
-
         from obsidian_wiki import server
     except ImportError as exc:
         print(f"obsidian-wiki serve needs the server extra on Python >= 3.10 "
@@ -3249,7 +3247,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     if not loopback:
         print("obsidian-wiki serve: listening beyond loopback over plain HTTP — "
               "put TLS in front before this leaves your network (docs/deployment.md)", file=sys.stderr)
-    uvicorn.run(server.app, host=host, port=port)
+    server.run(host, port)
     return 0
 
 
