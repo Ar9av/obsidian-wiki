@@ -131,6 +131,68 @@ def _okignored_in(vault_root: Path, path: Path, patterns: list[str]) -> bool:
     return path.is_relative_to(vault_root) and okignored(path.relative_to(vault_root), patterns)
 
 
+def _patterns_for_source(vault_root: Path, source_root: Path, patterns: list[str]) -> list[str]:
+    """Drop the patterns that exclude `source_root` itself (or a folder above it).
+
+    Naming a folder is an explicit request to ingest it, which overrides a
+    `.okignore` entry for that folder: listing `_sources/` there keeps lint off
+    the raw sources, and must not make `batch-plan v v/_sources` find nothing
+    (#344). Patterns for paths deeper inside the folder still apply.
+    """
+    if not source_root.is_relative_to(vault_root):
+        return patterns
+    rel = source_root.relative_to(vault_root)
+    if not rel.parts:
+        return patterns
+    return [p for p in patterns if not okignored(rel, [p])]
+
+
+def _discover(
+    source_dir: Path,
+    *,
+    vault: Path | None,
+    include_code: bool,
+) -> tuple[list[dict], int]:
+    """`discover_sources`, plus how many candidates `.okignore` excluded."""
+    tracked = _git_tracked_files(source_dir)
+    if tracked is not None:
+        candidates = sorted(tracked)
+    else:
+        candidates = []
+        for dirpath, dirnames, filenames in os.walk(source_dir):
+            dirnames[:] = [
+                d for d in dirnames
+                if d not in SKIP_DIRS and not d.startswith(".")
+            ]
+            for fn in sorted(filenames):
+                candidates.append(Path(dirpath) / fn)
+
+    # Anything inside the vault follows its `.okignore`, wherever the walk began,
+    # except the entries that would exclude the folder the caller named.
+    # The patterns are vault-relative, so they say nothing about files outside it.
+    patterns = okignore_patterns(vault) if vault is not None else []
+    okignored_count = 0
+    if patterns:
+        vault_root, source_root = vault.resolve(), source_dir.resolve()
+        patterns = _patterns_for_source(vault_root, source_root, patterns)
+        before = len(candidates)
+        candidates = [
+            p for p in candidates
+            if not _okignored_in(vault_root, source_root / p.relative_to(source_dir), patterns)
+        ]
+        okignored_count = before - len(candidates)
+
+    files = []
+    for p in candidates:
+        kind = _classify(p)
+        if kind == "skip":
+            continue
+        if kind == "code" and not include_code:
+            continue
+        files.append({"path": str(p), "kind": kind, "size_bytes": _file_size(p)})
+    return files, okignored_count
+
+
 def discover_sources(
     source_dir: Path,
     *,
@@ -147,39 +209,11 @@ def discover_sources(
     correctly skips whatever a project actually ignores, not just the
     common-case SKIP_DIRS list below). Otherwise falls back to a plain
     directory walk.
+
+    Files inside the vault follow its `.okignore`, except that an entry
+    excluding source_dir itself is ignored: the caller named that folder.
     """
-    tracked = _git_tracked_files(source_dir)
-    if tracked is not None:
-        candidates = sorted(tracked)
-    else:
-        candidates = []
-        for dirpath, dirnames, filenames in os.walk(source_dir):
-            dirnames[:] = [
-                d for d in dirnames
-                if d not in SKIP_DIRS and not d.startswith(".")
-            ]
-            for fn in sorted(filenames):
-                candidates.append(Path(dirpath) / fn)
-
-    # Anything inside the vault follows its `.okignore`, wherever the walk began.
-    # The patterns are vault-relative, so they say nothing about files outside it.
-    patterns = okignore_patterns(vault) if vault is not None else []
-    if patterns:
-        vault_root, source_root = vault.resolve(), source_dir.resolve()
-        candidates = [
-            p for p in candidates
-            if not _okignored_in(vault_root, source_root / p.relative_to(source_dir), patterns)
-        ]
-
-    files = []
-    for p in candidates:
-        kind = _classify(p)
-        if kind == "skip":
-            continue
-        if kind == "code" and not include_code:
-            continue
-        files.append({"path": str(p), "kind": kind, "size_bytes": _file_size(p)})
-    return files
+    return _discover(source_dir, vault=vault, include_code=include_code)[0]
 
 
 # ---------------------------------------------------------------------------
@@ -248,7 +282,7 @@ def plan_batches(
     include_code: bool = False,
 ) -> dict[str, Any]:
     """Discover sources, filter unchanged, and split into batches."""
-    all_files = discover_sources(source_dir, vault=vault, include_code=include_code)
+    all_files, skipped_okignored = _discover(source_dir, vault=vault, include_code=include_code)
 
     skipped_binary = 0  # files already excluded by _classify
     skipped_unchanged = 0
@@ -294,6 +328,7 @@ def plan_batches(
             "batch_count": len(batches_out),
             "skipped_unchanged": skipped_unchanged,
             "skipped_binary": skipped_binary,
+            "skipped_okignored": skipped_okignored,
         },
         "merge_hint": merge_hint,
     }
