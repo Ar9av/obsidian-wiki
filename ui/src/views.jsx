@@ -541,9 +541,10 @@ export function ConnectView() {
   const [transport, setTransport] = useState('stdio')
   if (info.error) return <ErrorState message={info.error} />
   if (!info.data) return <Loading />
-  const { python, vault, key_required: keyRequired, tools } = info.data
-  const url = `${window.location.origin}/mcp/`
-  const snippets = connectSnippets({ python, vault, url, keyRequired }, transport)
+  const { python, vault, key_required: keyRequired, tools, oauth, public_url: publicUrl } = info.data
+  // Behind a proxy the browser's origin may differ from the address agents use.
+  const url = `${publicUrl || window.location.origin}/mcp/`
+  const snippets = connectSnippets({ python, vault, url, keyRequired, oauth }, transport)
   const step = (n, title) => <HStack><Badge colorScheme="purple" borderRadius="full" px="2">{n}</Badge><span>{title}</span></HStack>
   return (
     <>
@@ -560,7 +561,8 @@ export function ConnectView() {
                 ? <>The agent launches its own memory process, so it needs no server running. These configs use this machine's Python (<Code fontSize="xs" wordBreak="break-all">{python}</Code>) and vault (<Code fontSize="xs" wordBreak="break-all">{vault}</Code>), so they work in GUI apps that can't see your PATH.</>
                 : <>The agent talks to this server at <Code fontSize="xs">{url}</Code>, so it only works while the server is running. {keyRequired
                   ? <>Set <Code fontSize="xs">WIKI_API_KEY</Code> in the agent's environment. The key is never written into these configs.</>
-                  : <>This server runs without a key (loopback only). Start it with <Code fontSize="xs">WIKI_API_KEY</Code> set before exposing it.</>}</>}
+                  : <>This server runs without a key (loopback only). Start it with <Code fontSize="xs">WIKI_API_KEY</Code> set before exposing it.</>}
+                  {oauth && <> OAuth sign-in is on: clients that support it (claude.ai, Cursor, VS Code, <Code fontSize="xs">codex mcp login</Code>) can drop the header and sign in with your vault key instead.</>}</>}
             </Text>
             <Tabs variant="soft-rounded" colorScheme="purple" size="sm" isLazy>
               <TabList flexWrap="wrap" gap="1">{snippets.map((s) => <Tab key={s.id}>{s.label}</Tab>)}</TabList>

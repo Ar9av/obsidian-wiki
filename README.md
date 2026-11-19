@@ -1,4 +1,5 @@
 <h1 align="center">obsidian-wiki</h1>
+<!-- mcp-name: io.github.Ar9av/obsidian-wiki -->
 
 <p align="center"><b>A unified digital brain you grow with your AI agents.</b></p>
 
