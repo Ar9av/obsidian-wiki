@@ -13,7 +13,7 @@ import ast
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCANNED_DIRS = ("obsidian_wiki", "scripts", "tools")
+SCANNED_DIRS = ("obsidian_wiki", "scripts", "tools", "skills")
 TEXT_PATH_METHODS = {"read_text", "write_text"}
 
 
