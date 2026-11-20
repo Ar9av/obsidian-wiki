@@ -952,6 +952,8 @@ class SettingsPatch(BaseModel):
     provider: str | None = None
     model: str | None = None
     anthropic_api_key: str | None = None
+    litellm_api_base: str | None = None
+    litellm_api_key: str | None = None
     web: bool | None = None
 
 

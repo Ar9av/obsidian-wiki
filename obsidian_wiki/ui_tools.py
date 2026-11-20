@@ -4,10 +4,12 @@ Vault switching, an inbox that drops files into ``_raw/`` for the next ingest,
 viewer settings (model provider and key), AI answers grounded in the vault, and
 agent jobs that run a wiki skill through the local ``claude`` CLI.
 
-Two ways to reach a model. The ``claude`` CLI, if installed, uses whatever
+Three ways to reach a model. The ``claude`` CLI, if installed, uses whatever
 Claude Code is signed in with, a subscription included. An Anthropic API key
-saved in Settings uses the ``anthropic`` SDK. Agent jobs need the CLI: they
-edit the vault with file tools, which a single API call cannot do.
+saved in Settings uses the ``anthropic`` SDK. LiteLLM, chosen in Settings,
+answers with any model it supports (OpenAI, Gemini, Bedrock, Ollama, a LiteLLM
+proxy, ...). Agent jobs need the CLI: they edit the vault with file tools,
+which a single API call cannot do.
 """
 
 from __future__ import annotations
@@ -20,6 +22,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -174,8 +177,10 @@ def remove_from_inbox(vault: Path, name: str) -> None:
 # --- settings -------------------------------------------------------------------
 # Kept outside the vault: a vault is often a git repo, and a key must never be committed.
 
-PROVIDERS = ("auto", "claude-cli", "anthropic")
+PROVIDERS = ("auto", "claude-cli", "anthropic", "litellm")
 DEFAULT_API_MODEL = "claude-opus-5-5"
+SECRET_SETTINGS = ("anthropic_api_key", "litellm_api_key")
+LITELLM_ATTEMPTS = 3
 
 
 def _settings_path() -> Path:
@@ -196,7 +201,7 @@ def save_settings(patch: dict[str, Any]) -> dict[str, Any]:
         if patch["provider"] not in PROVIDERS:
             raise UiError(400, f"provider must be one of {', '.join(PROVIDERS)}")
         settings["provider"] = patch["provider"]
-    for key in ("model", "anthropic_api_key"):
+    for key in ("model", "litellm_api_base", *SECRET_SETTINGS):
         if key in patch:
             value = str(patch[key] or "").strip()
             if value:
@@ -226,12 +231,28 @@ def _sdk_installed() -> bool:
     return True
 
 
+def _litellm_installed() -> bool:
+    try:
+        import litellm  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def _key_hint(key: str) -> str:
+    return f"…{key[-4:]}" if len(key) > 8 else ""
+
+
 def resolve_provider(settings: dict[str, Any]) -> str | None:
     choice = settings.get("provider", "auto")
     if choice == "claude-cli":
         return "claude-cli" if shutil.which("claude") else None
     if choice == "anthropic":
         return "anthropic" if _api_key(settings) else None
+    if choice == "litellm":
+        # A LiteLLM model id names the provider ("gemini/gemini-2.5-flash"), so
+        # there is no default to fall back on. Never picked by "auto".
+        return "litellm" if settings.get("model") and _litellm_installed() else None
     if shutil.which("claude"):
         return "claude-cli"
     return "anthropic" if _api_key(settings) else None
@@ -249,9 +270,13 @@ def public_settings(settings: dict[str, Any] | None = None) -> dict[str, Any]:
         "claude_cli": shutil.which("claude"),
         "sdk_installed": _sdk_installed(),
         "anthropic_key_set": bool(key),
-        "anthropic_key_hint": f"…{key[-4:]}" if len(key) > 8 else "",
+        "anthropic_key_hint": _key_hint(key),
         "anthropic_key_from_env": bool(key) and not settings.get("anthropic_api_key"),
         "default_api_model": DEFAULT_API_MODEL,
+        "litellm_installed": _litellm_installed(),
+        "litellm_api_base": settings.get("litellm_api_base", ""),
+        "litellm_key_set": bool(settings.get("litellm_api_key")),
+        "litellm_key_hint": _key_hint(settings.get("litellm_api_key", "")),
     }
 
 
@@ -289,7 +314,8 @@ def ask(vault: Path, question: str, web: bool | None = None) -> dict[str, Any]:
     if provider is None:
         raise UiError(
             409,
-            "no model available. Install Claude Code (it uses your subscription) or add an Anthropic API key in Settings.",
+            "no model available. Install Claude Code (it uses your subscription), or add an Anthropic API key "
+            "or a LiteLLM model in Settings.",
         )
     web = settings.get("web", True) if web is None else web
     pack, pages = _context(vault, question)
@@ -297,6 +323,8 @@ def ask(vault: Path, question: str, web: bool | None = None) -> dict[str, Any]:
     prompt = f"{pack}\n\n---\n\nQuestion: {question}"
     if provider == "claude-cli":
         answer, cost = _ask_cli(system, prompt, web, settings.get("model", ""))
+    elif provider == "litellm":
+        answer, cost = _ask_litellm(system, prompt, web, settings)
     else:
         answer, cost = _ask_api(system, prompt, web, settings)
     return {"answer": answer, "provider": provider, "web": web, "pages": pages, "cost_usd": cost}
@@ -364,6 +392,77 @@ def _ask_api(system: str, prompt: str, web: bool, settings: dict[str, Any]) -> t
     if response.stop_reason == "refusal":
         raise UiError(422, "the model declined to answer this one")
     return "".join(block.text for block in response.content if block.type == "text"), None
+
+
+def _ask_litellm(system: str, prompt: str, web: bool, settings: dict[str, Any]) -> tuple[str, float | None]:
+    try:
+        import litellm
+        import openai  # a litellm dependency; the base of every error it raises
+    except ImportError as exc:
+        raise UiError(501, "the litellm package is missing; reinstall with the [litellm] extra") from exc
+    # Its "Give Feedback / Get Help" banner goes to stdout on every failed call.
+    litellm.suppress_debug_info = True
+    model = settings["model"]
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        "max_tokens": 16000,
+        "timeout": 600,
+        # Drop what a provider rejects (e.g. web search on a model without it)
+        # instead of failing the whole answer.
+        "drop_params": True,
+    }
+    if web:
+        # LiteLLM maps this to each provider's own search (OpenAI search models,
+        # Gemini grounding, Anthropic's web search tool, ...).
+        kwargs["web_search_options"] = {"search_context_size": "medium"}
+    if settings.get("litellm_api_base"):
+        kwargs["api_base"] = settings["litellm_api_base"]
+    if settings.get("litellm_api_key"):
+        kwargs["api_key"] = settings["litellm_api_key"]
+    if model.startswith("litellm_proxy/"):
+        # A LiteLLM proxy receives the request as-is, so it does the dropping.
+        kwargs["extra_body"] = {"drop_params": True}
+    # Retried here rather than with litellm's num_retries, which needs the
+    # tenacity package that litellm does not install.
+    transient = (
+        litellm.exceptions.RateLimitError,
+        litellm.exceptions.APIConnectionError,
+        litellm.exceptions.InternalServerError,
+        litellm.exceptions.ServiceUnavailableError,
+    )
+    try:
+        for attempt in range(LITELLM_ATTEMPTS):
+            try:
+                response = litellm.completion(**kwargs)
+                break
+            except transient:
+                if attempt == LITELLM_ATTEMPTS - 1:
+                    raise
+                time.sleep(2**attempt)
+    except litellm.exceptions.AuthenticationError as exc:
+        raise UiError(401, "the LiteLLM provider rejected the API key; check it in Settings") from exc
+    except litellm.exceptions.RateLimitError as exc:
+        raise UiError(429, "the model provider's rate limit was hit; try again shortly") from exc
+    except litellm.exceptions.APIConnectionError as exc:
+        raise UiError(502, f"couldn't reach the model provider for {model}") from exc
+    except openai.APIError as exc:
+        # Every LiteLLM error subclasses openai.APIError, including bad requests
+        # such as an unknown model id, which litellm.exceptions.APIError misses.
+        raise UiError(502, f"LiteLLM error for {model}: {str(exc)[:300]}") from exc
+    answer = response.choices[0].message.content or ""
+    if response.choices[0].finish_reason == "content_filter" and not answer:
+        raise UiError(422, "the model declined to answer this one")
+    return answer, _litellm_cost(litellm, response)
+
+
+def _litellm_cost(litellm: Any, response: Any) -> float | None:
+    """The call's cost from LiteLLM's price map, or None for a model it can't price."""
+    try:
+        cost = litellm.completion_cost(completion_response=response)
+    except Exception:
+        return None
+    return float(cost) if cost else None
 
 
 # --- agent jobs ---------------------------------------------------------------------

@@ -47,6 +47,8 @@ server = [
   # The web viewer's Ask page, when an API key is used instead of the claude CLI.
   "anthropic>=1.0; python_version >= '3.10'",
 ]
+# The Ask page through LiteLLM: any model it supports instead of only Anthropic's.
+litellm = ["litellm>=1.97.0,<1.106.0; python_version >= '3.10'"]
 
 [project.urls]
 Homepage = "https://github.com/Ar9av/obsidian-wiki"
