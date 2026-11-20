@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki 網頁檢視器：Ask 以附引用連結的方式，從 vault 回答問題" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-ask.png?raw=true" />
+  <img width="900" alt="obsidian-wiki 網頁檢視器：Ask 以附引用連結的方式，從 vault 回答問題" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-ask.png" />
   <br><sub>Ask：在本機網頁檢視器中，從範例 vault 得到附引用的答案。</sub>
 </p>
 
@@ -144,12 +144,12 @@ obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 
 <table>
   <tr>
-    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含下一步行動的總覽" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-overview.png?raw=true" /></td>
-    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Inbox" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-inbox.png?raw=true" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含下一步行動的總覽" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-overview.png" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Inbox" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-inbox.png" /></td>
   </tr>
   <tr>
-    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Insights" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-insights.png?raw=true" /></td>
-    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含反向連結的頁面" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-page.png?raw=true" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Insights" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-insights.png" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含反向連結的頁面" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-page.png" /></td>
   </tr>
 </table>
 
@@ -160,7 +160,7 @@ obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 3. 驗證：請 agent 呼叫 `memory_recap`。
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki 網頁檢視器：連接 agent" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-connect.png?raw=true" />
+  <img width="900" alt="obsidian-wiki 網頁檢視器：連接 agent" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-connect.png" />
 </p>
 
 更多 → **[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)**（英文）

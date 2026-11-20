@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki web viewer: Ask answers a question from the vault with cited page links" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-ask.png?raw=true" />
+  <img width="900" alt="obsidian-wiki web viewer: Ask answers a question from the vault with cited page links" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-ask.png" />
   <br><sub>Ask: a cited answer from the sample vault, in the local web viewer.</sub>
 </p>
 
@@ -143,12 +143,12 @@ It listens on loopback only. Use `--vault` to choose a vault and `--port` to cha
 
 <table>
   <tr>
-    <td><img width="440" alt="obsidian-wiki web viewer: overview with next actions" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-overview.png?raw=true" /></td>
-    <td><img width="440" alt="obsidian-wiki web viewer: inbox" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-inbox.png?raw=true" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: overview with next actions" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-overview.png" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: inbox" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-inbox.png" /></td>
   </tr>
   <tr>
-    <td><img width="440" alt="obsidian-wiki web viewer: insights" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-insights.png?raw=true" /></td>
-    <td><img width="440" alt="obsidian-wiki web viewer: a rendered page with backlinks" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-page.png?raw=true" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: insights" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-insights.png" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: a rendered page with backlinks" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-page.png" /></td>
   </tr>
 </table>
 
@@ -159,7 +159,7 @@ It listens on loopback only. Use `--vault` to choose a vault and `--port` to cha
 3. Check it: ask the agent to call `memory_recap`.
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki web viewer: connect an agent" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-connect.png?raw=true" />
+  <img width="900" alt="obsidian-wiki web viewer: connect an agent" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-connect.png" />
 </p>
 
 More → **[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)**
