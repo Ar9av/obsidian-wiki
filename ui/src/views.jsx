@@ -9,17 +9,18 @@ import { EmptyState, Property, PropertyList } from '@saas-ui/react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import ForceGraph2D from 'react-force-graph-2d'
-import { Check, Copy, ExternalLink } from 'lucide-react'
+import { Check, Copy, ExternalLink, Sparkles } from 'lucide-react'
 import { api, go, useVault } from './main.jsx'
+import { NextActions } from './tools.jsx'
 import { AGENT_INSTRUCTIONS, connectSnippets, parseLog, splitFrontmatter, withLinks } from './lib.js'
 
 // --- building blocks -------------------------------------------------------
-const pageHref = (path) => `#/page/${encodeURIComponent(path)}`
-const titleOf = (path) => path.split('/').pop().replace(/\.md$/, '').replace(/[-_]/g, ' ')
+export const pageHref = (path) => `#/page/${encodeURIComponent(path)}`
+export const titleOf = (path) => path.split('/').pop().replace(/\.md$/, '').replace(/[-_]/g, ' ')
 // The page's frontmatter title when the graph has it, else a name from the filename.
-const nameOf = (index, path) => index?.byPath.get(path)?.title || titleOf(path)
+export const nameOf = (index, path) => index?.byPath.get(path)?.title || titleOf(path)
 
-function Header({ title, description, children }) {
+export function Header({ title, description, children }) {
   return (
     <Flex px={{ base: 5, md: 8 }} pt="6" pb="4" align="end" gap="4" wrap="wrap">
       <Box flex="1" minW="0">
@@ -30,9 +31,9 @@ function Header({ title, description, children }) {
     </Flex>
   )
 }
-const Body = (props) => <Box px={{ base: 5, md: 8 }} pb="10" {...props} />
+export const Body = (props) => <Box px={{ base: 5, md: 8 }} pb="10" {...props} />
 
-function Section({ title, children, ...rest }) {
+export function Section({ title, children, ...rest }) {
   return (
     <Card variant="outline" {...rest}>
       {title && <CardHeader pb="0"><Heading size="xs" textTransform="uppercase" color="muted" letterSpacing="wide">{title}</Heading></CardHeader>}
@@ -41,7 +42,7 @@ function Section({ title, children, ...rest }) {
   )
 }
 
-function useFetch(path, deps = []) {
+export function useFetch(path, deps = []) {
   const [state, setState] = useState({ data: null, error: null })
   useEffect(() => {
     let live = true
@@ -53,11 +54,11 @@ function useFetch(path, deps = []) {
   return state
 }
 
-const Loading = () => <Stack px="8">{[0, 1, 2].map((i) => <Skeleton key={i} h="6" />)}</Stack>
+export const Loading = () => <Stack px="8">{[0, 1, 2].map((i) => <Skeleton key={i} h="6" />)}</Stack>
 export const ErrorState = ({ message }) => <EmptyState colorScheme="red" title="Couldn't load this" description={message} py="16" />
 export const NotFound = () => <EmptyState title="Nothing here" description="That view doesn't exist." py="16" />
 
-function DataTable({ head, rows, empty = 'Nothing to show.' }) {
+export function DataTable({ head, rows, empty = 'Nothing to show.' }) {
   // Phones get one card per row instead of a table that scrolls sideways.
   const stacked = useBreakpointValue({ base: true, md: false }, { ssr: false })
   if (!rows.length) return <Text color="muted" fontSize="sm">{empty}</Text>
@@ -90,7 +91,7 @@ const StatusBadge = ({ s }) => <Badge colorScheme={statusColor[s] ?? 'gray'}>{s}
 // react-markdown never renders raw HTML and drops javascript: URLs, so agent-authored
 // pages can't inject markup. Wikilinks become internal #/wl/ links resolved on click.
 
-function Markdown({ text }) {
+export function Markdown({ text }) {
   const { index } = useVault()
   const link = useColorModeValue('purple.600', 'purple.300')
   const components = {
@@ -133,6 +134,7 @@ function Markdown({ text }) {
 export function Overview() {
   const { status, graph, index, todos } = useVault()
   const log = useFetch('/v1/pages/log.md')
+  const [ask, setAsk] = useState('')
   if (!status) return <Loading />
   const hubs = index ? [...index.inbound.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8) : []
   const stat = (label, n, help) => (
@@ -140,17 +142,25 @@ export function Overview() {
   )
   return (
     <>
-      <Header title="Overview" description={status.last_ingest ? `Last ingest ${status.last_ingest}` : status.pages ? undefined : 'Nothing ingested yet — run wiki-ingest.'} />
+      <Header title="Overview" description={status.last_ingest ? `Last ingest ${status.last_ingest}` : status.pages ? undefined : 'Nothing ingested yet. Drop files anywhere on this page to start.'}>
+        <form onSubmit={(e) => { e.preventDefault(); if (ask.trim()) go(`/ask?q=${encodeURIComponent(ask)}`) }} style={{ width: '100%', maxWidth: '28rem' }}>
+          <HStack><Input size="sm" placeholder="Ask your wiki anything" value={ask} onChange={(e) => setAsk(e.target.value)} />
+            <Button size="sm" type="submit" colorScheme="purple" leftIcon={<Sparkles size={14} />} isDisabled={!ask.trim()}>Ask</Button></HStack>
+        </form>
+      </Header>
       <Body>
         <SimpleGrid columns={{ base: 2, md: 3, xl: 6 }} spacing="4" mb="6">
           {stat('Pages', status.pages)}
           {stat('Links', graph?.edges.length)}
           {stat('Categories', Object.keys(status.categories).length)}
           {stat('Open threads', todos.length)}
-          {stat('_raw', status.raw_count, 'awaiting ingest')}
+          <Box as="a" href="#/inbox">{stat('Inbox', status.raw_count, 'in _raw/, awaiting ingest')}</Box>
           {stat('Staged', status.staging_count, 'awaiting review')}
         </SimpleGrid>
         <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="4">
+          <Section title={<HStack><span>Next actions</span><Link href="#/actions" fontSize="xs" textTransform="none" fontWeight="normal" ms="auto">All actions</Link></HStack>} gridColumn={{ lg: 'span 2' }}>
+            <NextActions />
+          </Section>
           <Section title="Recently changed">
             <Stack spacing="1">{status.recent_pages.filter((p) => !index || index.byPath.has(p.path)).slice(0, 10).map((p) => (
               <Flex key={p.path} justify="space-between" gap="4" fontSize="sm">
@@ -348,7 +358,7 @@ export function GraphView() {
 }
 
 const verbColor = { INGEST: 'purple', CAPTURE: 'teal', UPDATE: 'blue', LINT: 'orange', INIT: 'gray' }
-function Timeline({ entries, compact }) {
+export function Timeline({ entries, compact }) {
   return (
     <Stack spacing={compact ? 2 : 3}>{entries.map((e, i) => {
       const page = e.fields.page
@@ -511,7 +521,7 @@ export function SourcesView() {
   )
 }
 
-function CodeBlock({ code, label, lang, wrap }) {
+export function CodeBlock({ code, label, lang, wrap }) {
   const { hasCopied, onCopy } = useClipboard(code)
   return (
     <Box borderWidth="1px" borderRadius="md" overflow="hidden">

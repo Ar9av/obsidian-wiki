@@ -54,3 +54,17 @@ test('connect snippets: valid configs, quoted paths, no embedded key', async () 
   const open = Object.fromEntries(connectSnippets({ ...env, keyRequired: false }, 'http').map((s) => [s.id, s.code]))
   assert.ok(!open['claude-code'].includes('--header') && !JSON.parse(open.cursor).mcpServers['wiki-memory'].headers)
 })
+
+test('next actions: one per need, most useful first, nothing for a tidy vault', async () => {
+  const { nextActions } = await import('./lib.js')
+  const tidy = { pages: 3, raw_count: 0, staging_count: 0, sources: [], git: { repo: true, dirty_count: 0 } }
+  assert.deepEqual(nextActions({ status: tidy, todos: [], lint: { stats: { findings: { broken_links: 0 } } } }), [])
+  assert.deepEqual(nextActions({ status: null }), [])
+  const busy = { ...tidy, raw_count: 2, staging_count: 1, sources: [{ missing_pages: ['a.md'] }], git: { repo: true, dirty_count: 4, branch: 'main' } }
+  const acts = nextActions({ status: busy, todos: [{ stale: true }], lint: { stats: { findings: { broken_links: 3, orphans: 1 } } } })
+  assert.deepEqual(acts.map((a) => a.id), ['ingest', 'lost', 'staging', 'lint', 'stale', 'sync'])
+  assert.equal(acts[0].title, '2 files waiting in _raw/')
+  assert.equal(acts[0].job, 'ingest')
+  assert.equal(acts[3].detail, '3 broken links, 1 orphans')
+  assert.equal(nextActions({ status: { ...tidy, pages: 0 } })[0].go, '/inbox')
+})

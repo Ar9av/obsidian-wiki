@@ -36,6 +36,25 @@ WIKI_API_KEY=dev OBSIDIAN_VAULT_PATH=~/vault python -m obsidian_wiki.server
 
 **Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The page also gives you instructions to paste into `AGENTS.md` or a system prompt, so the agent actually calls `memory_recap` at session start and saves findings back.
 
+### Working from the viewer
+
+The viewer does more than browse:
+
+- **Vault switcher** (top of the sidebar). It lists the vault the server started on, your global default, and every `config.<name>` that `/wiki-switch` manages. Picking one repoints this server, MCP clients included. Your default vault stays the same, and only configured vaults can be opened.
+- **Inbox.** Drop files anywhere in the window, paste a note (a pasted screenshot becomes its own file), or add a link with a line on why it matters. Each item lands at the top level of `_raw/`, which the next `wiki-ingest` reads in raw mode. Files are capped at 25 MB.
+- **Ask.** Answers come from a context pack of your own pages, with each claim cited as a link to its page and a "Worth adding" list of gaps. Turn on web search to fill those gaps; web findings go in their own section with URLs. **Save to inbox** files an answer for the next ingest.
+- **Insights.** The `graph-analyse` output: questions your graph raises, bridge pages, unexpected connections, hubs, clusters, and blind spots (pages with no links in or out).
+- **Actions.** What the vault needs next (files waiting in `_raw/`, lint findings, staged writes, lost sources, stale threads, uncommitted changes), plus one-click runs of `wiki-ingest`, `wiki-lint`, `cross-linker`, `wiki-synthesize` and `wiki-digest`.
+
+Ask and Actions need a model, set up under **Settings**:
+
+| Provider | Uses | Covers |
+|---|---|---|
+| Claude Code CLI | `claude -p` on this machine, signed in as you, so a Claude subscription works | Ask and agent jobs |
+| Anthropic API key | The `anthropic` SDK (in the `[server]` extra), billed to your API account; defaults to `claude-opus-5-5` | Ask only |
+
+**Automatic** (the default) picks Claude Code when it is on `PATH`, else the key. Agent jobs always need Claude Code because they edit files. A job runs `claude -p` in the vault with `--permission-mode acceptEdits` and an allowlist of file tools plus `obsidian-wiki`, `mkdir`, `mv` and `ls`. Settings live in `<global config dir>/ui-settings.json` (mode 0600), outside the vault so a key is never committed. The browser sees whether a key is set and its last four characters, never the key itself.
+
 The same viewer is served at `/ui` by the HTTP server above, behind its API key (it asks once and keeps the key in `sessionStorage`).
 
 The viewer is a React app built with [Saas UI](https://saas-ui.dev) (Chakra UI). The source is in `ui/` and the built bundle is committed to `obsidian_wiki/webui/`, so installing the package needs no Node. After changing `ui/src`, rebuild with `cd ui && npm install && npm run build`. `npm run dev` gives hot reload against a running `obsidian-wiki ui --no-open`.
@@ -93,6 +112,14 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/memory/todos?include_closed=&user_id=` | Threads carried between sessions |
 | `POST` | `/v1/memory/todos` | `{action: add\|done\|drop, text, todo_id, origin, user_id}` |
 | `POST` | `/v1/memory/sync` | `{verb, takeaways, fields}` — reconcile index and hot cache |
+| `GET` `POST` | `/v1/vaults` | List configured vaults; `{path}` switches to one of them |
+| `GET` `POST` | `/v1/inbox` | List top-level `_raw/` files; `{kind: text\|url\|file, title, text, url, filename, data_b64}` adds one |
+| `POST` | `/v1/inbox/remove` | `{name}` deletes one top-level `_raw/` file |
+| `GET` | `/v1/insights` | Graph analysis: hubs, bridges, communities, suggested questions |
+| `POST` | `/v1/ask` | `{question, web}` answers from the vault through the configured model |
+| `GET` `POST` | `/v1/settings` | Viewer settings; the API key is write-only |
+| `GET` `POST` | `/v1/jobs` | Agent jobs; `{task: ingest\|lint\|cross-link\|synthesize\|digest}` starts one |
+| `POST` | `/v1/git/sync` | Commit and push the vault (`obsidian-wiki sync`) |
 
 ```bash
 curl -X POST localhost:8080/v1/pages -H "Authorization: Bearer $WIKI_API_KEY" \

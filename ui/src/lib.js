@@ -37,6 +37,42 @@ export function parseLog(md) {
   return out.sort((a, b) => b.ts.localeCompare(a.ts))
 }
 
+// --- Next actions ------------------------------------------------------------
+// What the vault needs next, most useful first. Each action names how to resolve
+// it: a wiki skill run as an agent job, a link to a view, or a git sync.
+export function nextActions({ status, todos = [], lint = null }) {
+  if (!status) return []
+  const out = []
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+  if (!status.pages && !status.raw_count) {
+    out.push({ id: 'empty', title: 'The vault is empty', detail: 'Drop notes, links or files into the inbox, then ingest them.', go: '/inbox' })
+  }
+  if (status.raw_count) {
+    out.push({ id: 'ingest', title: `${plural(status.raw_count, 'file')} waiting in _raw/`, detail: 'Ingest turns them into linked wiki pages.', job: 'ingest' })
+  }
+  const lost = (status.sources ?? []).filter((s) => s.missing_pages?.length)
+  if (lost.length) {
+    out.push({ id: 'lost', title: `${plural(lost.length, 'source')} lost pages`, detail: 'Pages they produced no longer exist. Re-ingest or prune them.', go: '/sources' })
+  }
+  if (status.staging_count) {
+    out.push({ id: 'staging', title: `${plural(status.staging_count, 'staged write')} to review`, detail: 'Agent edits waiting for your approval.', go: '/staging' })
+  }
+  const findings = Object.entries(lint?.stats?.findings ?? {}).filter(([, n]) => n)
+  if (findings.length) {
+    const total = findings.reduce((a, [, n]) => a + n, 0)
+    const top = findings.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')
+    out.push({ id: 'lint', title: `${plural(total, 'lint finding')}`, detail: top, job: 'lint' })
+  }
+  const stale = todos.filter((t) => t.stale)
+  if (stale.length) {
+    out.push({ id: 'stale', title: `${plural(stale.length, 'stale thread')}`, detail: 'Close or drop the ones you are done with.', go: '/memory' })
+  }
+  if (status.git?.repo && status.git.dirty_count) {
+    out.push({ id: 'sync', title: `${plural(status.git.dirty_count, 'uncommitted change')}`, detail: `Commit and push the vault (branch ${status.git.branch}).`, sync: true })
+  }
+  return out
+}
+
 // --- Connect an agent ------------------------------------------------------
 // Ready-to-paste MCP configs for the machine serving the viewer. stdio launches
 // `python -m obsidian_wiki mcp` with this server's own interpreter (it has the
