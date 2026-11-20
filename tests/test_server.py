@@ -460,6 +460,7 @@ def test_inbox_writes_into_raw_and_stays_inside_it(client, tmp_path):
                                         "data_b64": base64.b64encode(b"%PDF").decode()}).json()
     assert up["path"].startswith("_raw/") and (tmp_path / up["path"]).read_bytes() == b"%PDF"
     assert len(client.get("/v1/inbox").json()["items"]) == 3
+    assert client.get("/v1/status").json()["raw_files"] == 3  # the PDF counts, unlike raw_count
     assert client.post("/v1/inbox/remove", json={"name": "../log.md"}).status_code == 404
     assert client.post("/v1/inbox/remove", json={"name": up["name"]}).status_code == 200
     assert not (tmp_path / up["path"]).exists()
@@ -485,3 +486,18 @@ def test_ask_says_so_when_no_model_is_available(client, ui_config, monkeypatch):
     assert r.status_code == 409 and "API key" in r.json()["detail"]
     assert client.post("/v1/jobs", json={"task": "ingest"}).status_code == 409
     assert client.post("/v1/jobs", json={"task": "rm -rf"}).status_code == 400
+
+
+def test_lint_for_next_actions_is_reused_until_a_page_changes(client, tmp_path, monkeypatch):
+    server = sys.modules["obsidian_wiki.server"]
+    runs = []
+    monkeypatch.setattr(server, "lint_vault", lambda vault: runs.append(1) or {"status": "pass", "stats": {}})
+    (tmp_path / "a.md").write_text("---\ntitle: A\n---\n")
+    assert client.get("/v1/lint").json()["status"] == "pass"
+    client.get("/v1/lint")
+    assert len(runs) == 1
+    (tmp_path / "b.md").write_text("---\ntitle: B\n---\n")
+    client.get("/v1/lint")
+    assert len(runs) == 2
+    client.get("/v1/health")  # the Health view always runs a fresh one
+    assert len(runs) == 3

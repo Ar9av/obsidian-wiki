@@ -154,7 +154,7 @@ export function Overview() {
           {stat('Links', graph?.edges.length)}
           {stat('Categories', Object.keys(status.categories).length)}
           {stat('Open threads', todos.length)}
-          <Box as="a" href="#/inbox">{stat('Inbox', status.raw_count, 'in _raw/, awaiting ingest')}</Box>
+          <Box as="a" href="#/inbox">{stat('Inbox', status.raw_files ?? status.raw_count, 'in _raw/, awaiting ingest')}</Box>
           {stat('Staged', status.staging_count, 'awaiting review')}
         </SimpleGrid>
         <SimpleGrid columns={{ base: 1, lg: 2 }} spacing="4">
