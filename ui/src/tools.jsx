@@ -202,13 +202,13 @@ function NextActionList({ actions, compact }) {
 
 export function NextActions() {
   const { status, todos } = useVault()
-  const health = useFetch('/v1/health')
-  return <NextActionList compact actions={nextActions({ status, todos, lint: health.data?.lint })} />
+  const lint = useFetch('/v1/lint')
+  return <NextActionList compact actions={nextActions({ status, todos, lint: lint.data })} />
 }
 
 export function ActionsView() {
   const { status, todos } = useVault()
-  const health = useFetch('/v1/health')
+  const lint = useFetch('/v1/lint')
   const [jobs, reload] = useJobs()
   const toast = useToast()
   return (
@@ -217,7 +217,7 @@ export function ActionsView() {
       <Body>
         <Stack spacing="4" maxW="5xl">
           <Section title="Next up">
-            {!status ? <Loading /> : <NextActionList actions={nextActions({ status, todos, lint: health.data?.lint })} />}
+            {!status ? <Loading /> : <NextActionList actions={nextActions({ status, todos, lint: lint.data })} />}
           </Section>
           <Section title="Run a skill">
             {!jobs ? <Loading /> : (

@@ -60,7 +60,7 @@ export function nextActions({ status, todos = [], lint = null }) {
   const findings = Object.entries(lint?.stats?.findings ?? {}).filter(([, n]) => n)
   if (findings.length) {
     const total = findings.reduce((a, [, n]) => a + n, 0)
-    const top = findings.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`).join(', ')
+    const top = findings.sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, n]) => plural(n, k.replace(/_/g, ' ').replace(/s$/, ''))).join(', ')
     out.push({ id: 'lint', title: `${plural(total, 'lint finding')}`, detail: top, job: 'lint' })
   }
   const stale = todos.filter((t) => t.stale)

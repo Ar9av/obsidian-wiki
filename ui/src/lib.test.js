@@ -75,6 +75,6 @@ test('next actions: one per need, most useful first, nothing for a tidy vault', 
   assert.deepEqual(acts.map((a) => a.id), ['ingest', 'lost', 'staging', 'lint', 'stale', 'sync'])
   assert.equal(acts[0].title, '2 files waiting in _raw/')
   assert.equal(acts[0].job, 'ingest')
-  assert.equal(acts[3].detail, '3 broken links, 1 orphans')
+  assert.equal(acts[3].detail, '3 broken links, 1 orphan')
   assert.equal(nextActions({ status: { ...tidy, pages: 0 } })[0].go, '/inbox')
 })

@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -709,6 +710,24 @@ def status() -> dict[str, Any]:
     }
 
 
+_LINT_TTL = 60.0  # seconds a cached lint result may be reused while no page has changed
+_lint_cache: dict[str, Any] = {}
+
+
+def lint_summary() -> dict[str, Any]:
+    """lint_vault, reused while the vault is unchanged.
+
+    The Overview and Actions pages ask for this on every visit, and a full lint parses
+    every page. The key is the vault plus each page's mtime, with a short TTL for what
+    the page walk can't see (`.manifest.json`, `_raw/`).
+    """
+    pages = iter_md(VAULT)
+    sig = (str(VAULT), len(pages), max((p.stat().st_mtime_ns for p in pages), default=0))
+    if _lint_cache.get("sig") != sig or time.monotonic() - _lint_cache["at"] > _LINT_TTL:
+        _lint_cache.update(sig=sig, at=time.monotonic(), lint=lint_vault(VAULT))
+    return _lint_cache["lint"]
+
+
 def vault_health() -> dict[str, Any]:
     """Doctor + lint, straight from the same functions the CLI calls."""
     from obsidian_wiki.cli import run_doctor
@@ -868,6 +887,12 @@ async def http_connect(request: Request) -> dict[str, Any]:
 @app.get("/v1/status", dependencies=[Depends(require_key)])
 def http_status() -> dict[str, Any]:
     return status()
+
+
+@app.get("/v1/lint", dependencies=[Depends(require_key)])
+def http_lint() -> dict[str, Any]:
+    """Cached lint for the viewer's Next actions; /v1/health is the fresh, full report."""
+    return lint_summary()
 
 
 @app.get("/v1/health", dependencies=[Depends(require_key)])
