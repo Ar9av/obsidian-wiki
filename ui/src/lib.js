@@ -82,7 +82,11 @@ const shq = (s) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`
 const json = (o) => JSON.stringify(o, null, 2)
 const NAME = 'wiki-memory'
 
-export function connectSnippets({ python, vault, url, keyRequired }, transport = 'stdio') {
+// Hosted Claude (claude.ai, and Desktop's Connectors) reaches a server from
+// Anthropic's cloud, so a loopback or LAN address can't work there.
+const isPublic = (url) => /^https:\/\//.test(url) && !/^https:\/\/(localhost|127\.|10\.|192\.168\.|\[::1\])/.test(url)
+
+export function connectSnippets({ python, vault, url, keyRequired, oauth = false }, transport = 'stdio') {
   const args = ['-m', 'obsidian_wiki', 'mcp', '--vault', vault]
   const stdio = { command: python, args }
   const auth = (fmt) => (keyRequired ? { headers: { Authorization: `Bearer ${fmt}` } } : {})
@@ -107,12 +111,34 @@ export function connectSnippets({ python, vault, url, keyRequired }, transport =
       id: 'cursor', label: 'Cursor', where: '~/.cursor/mcp.json (or .cursor/mcp.json in a project)', lang: 'json',
       code: servers(http ? { url, ...auth('${env:WIKI_API_KEY}') } : stdio),
     },
+    // The config file only launches local processes; over HTTP, mcp-remote bridges
+    // stdio to this server. The key goes in the bridge's env, never on its argv.
     {
       id: 'claude-desktop', label: 'Claude Desktop',
       where: 'Settings → Developer → Edit Config (claude_desktop_config.json)', lang: 'json',
-      code: servers(stdio),
-      note: http ? 'Claude Desktop launches local servers from this file, so this uses stdio either way.' : undefined,
+      code: servers(http
+        ? {
+            command: 'npx',
+            args: ['-y', 'mcp-remote', url, ...(keyRequired ? ['--header', 'Authorization:${WIKI_AUTH}'] : [])],
+            ...(keyRequired ? { env: { WIKI_AUTH: 'Bearer <WIKI_API_KEY>' } } : {}),
+          }
+        : stdio),
+      note: http
+        ? `Bridges this server into Claude Desktop with mcp-remote (needs Node). Replace <WIKI_API_KEY> with your key.${isPublic(url) ? ' Or use the "claude.ai connector" tab instead: no Node, and it syncs to claude.ai and mobile.' : ''}`
+        : undefined,
     },
+    ...(http
+      ? [{
+          id: 'claude-connector', label: 'claude.ai connector',
+          where: 'claude.ai or Claude Desktop → Settings → Connectors → Add custom connector', lang: 'text',
+          code: oauth
+            ? `Remote MCP server URL: ${url}\n\nNo header needed: Claude opens this server's sign-in page.\nEnter WIKI_API_KEY (read and write) or WIKI_READ_KEY (read-only).`
+            : `Remote MCP server URL: ${url}${keyRequired ? '\nRequest header:  Authorization: Bearer <WIKI_API_KEY>' : ''}`,
+          note: isPublic(url)
+            ? 'Claude connects from Anthropic\'s cloud, so this works anywhere you use Claude, including mobile.'
+            : 'Claude connects from Anthropic\'s cloud, so this needs a public https:// address (see docs/deployment.md#https). For a server only this machine can reach, use the Claude Desktop tab.',
+        }]
+      : []),
     {
       id: 'gemini', label: 'Gemini CLI', where: '~/.gemini/settings.json', lang: 'json',
       code: servers(http ? { httpUrl: url, ...auth('$WIKI_API_KEY') } : stdio),

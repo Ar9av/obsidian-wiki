@@ -1,4 +1,5 @@
 <h1 align="center">obsidian-wiki</h1>
+<!-- mcp-name: io.github.Ar9av/obsidian-wiki -->
 
 <p align="center"><b>A unified digital brain you grow with your AI agents.</b></p>
 
@@ -270,7 +271,7 @@ Full data, per-run logs and the scaling measurements are in
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | The index, log, hot cache, owner profile, and todo index |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | Topic graph over your agent session history |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | Capture pages into the vault, and fill web forms from it |
-| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | The local web viewer, connecting agents over MCP, and running a vault as a Dockerized memory service |
+| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | The local web viewer, connecting agents over MCP, and self-hosting a vault (Docker or `obsidian-wiki serve`) with TLS, a read-only key and git sync |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | Adding skills, keeping the READMEs in sync |
 
 ## Contributing

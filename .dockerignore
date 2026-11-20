@@ -4,3 +4,4 @@ vault/
 assets/
 .pytest_cache
 **/__pycache__
+ui/node_modules

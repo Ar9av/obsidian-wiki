@@ -1,0 +1,22 @@
+# Render Blueprint: https://render.com/deploy?repo=https://github.com/Ar9av/obsidian-wiki
+# One web service from the released image, with a persistent disk for the vault.
+# Render assigns PORT and terminates TLS on <name>.onrender.com. Guide: docs/deployment.md#render
+services:
+  - type: web
+    name: obsidian-wiki
+    runtime: image
+    image:
+      url: ghcr.io/ar9av/obsidian-wiki:latest
+    # Persistent disks need a paid instance type; the vault must survive deploys.
+    plan: starter
+    healthCheckPath: /health
+    disk:
+      name: vault
+      mountPath: /vault
+      sizeGB: 1
+    envVars:
+      - key: WIKI_API_KEY
+        generateValue: true
+      # Only Render's proxy reaches the service, so its X-Forwarded-For names the client.
+      - key: WIKI_TRUSTED_PROXIES
+        value: "*"

@@ -333,3 +333,56 @@ class TestOkignore:
         (vault / ".okignore").write_text("quarantine/\n", encoding="utf-8")
         self._sources(tmp_path / "elsewhere")
         assert sorted(self._names(tmp_path / "elsewhere", vault)) == ["hidden.md", "kept.md"]
+
+    # #344: naming a folder overrides a `.okignore` entry for that folder.
+    @pytest.mark.parametrize("pattern", ["_sources/", "/_sources", "_sources", "_sour*"])
+    def test_named_folder_listed_in_okignore_is_planned(self, tmp_path, pattern):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_sources")
+        (vault / ".okignore").write_text(f"{pattern}\n", encoding="utf-8")
+        assert sorted(self._names(vault / "_sources", vault)) == ["hidden.md", "kept.md"]
+
+    def test_named_folder_below_an_okignored_one_is_planned(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_sources" / "batch1")
+        (vault / ".okignore").write_text("_sources/\n", encoding="utf-8")
+        assert sorted(self._names(vault / "_sources" / "batch1", vault)) == ["hidden.md", "kept.md"]
+
+    def test_deeper_entries_still_apply_inside_a_named_folder(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_sources")
+        (vault / ".okignore").write_text("_sources/\n_sources/quarantine\n*.draft.md\n", encoding="utf-8")
+        (vault / "_sources" / "notes.draft.md").write_text("x\n", encoding="utf-8")
+        assert self._names(vault / "_sources", vault) == ["kept.md"]
+
+    def test_walk_from_the_vault_root_still_skips_the_folder(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_sources")
+        (vault / "page.md").write_text("x\n", encoding="utf-8")
+        (vault / ".okignore").write_text("_sources/\n", encoding="utf-8")
+        assert self._names(vault, vault) == ["page.md"]
+
+    def test_plan_reports_okignored_count(self, tmp_path):
+        vault = tmp_path / "vault"
+        self._sources(vault / "_raw")
+        (vault / ".okignore").write_text("_raw/quarantine\n", encoding="utf-8")
+        stats = plan_batches(vault / "_raw", vault)["stats"]
+        assert stats["total_files"] == 1
+        assert stats["skipped_okignored"] == 1
+
+    def test_cli_plans_an_okignored_source_folder(self, tmp_path):
+        vault = tmp_path / "v"
+        for i in range(20):
+            path = vault / "_sources" / f"note{i}.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(f"note {i}\n", encoding="utf-8")
+        (vault / ".okignore").write_text("_sources/\n", encoding="utf-8")
+        proc = subprocess.run(
+            [sys.executable, "-m", "obsidian_wiki.cli", "batch-plan", str(vault), str(vault / "_sources")],
+            capture_output=True, text=True,
+        )
+        assert proc.returncode == 0, proc.stderr
+        stats = json.loads(proc.stdout)["stats"]
+        assert stats["total_files"] == 20
+        assert stats["to_ingest"] == 20
+        assert stats["skipped_okignored"] == 0

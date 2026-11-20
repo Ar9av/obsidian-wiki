@@ -1,0 +1,6 @@
+# TLS in front of the memory server; used by `docker compose --profile tls up`.
+# Caddy fetches and renews the certificate for $WIKI_DOMAIN on its own, and
+# streams MCP's text/event-stream responses without buffering.
+{$WIKI_DOMAIN} {
+	reverse_proxy wiki:8080
+}

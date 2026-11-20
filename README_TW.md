@@ -1,4 +1,5 @@
 <h1 align="center">obsidian-wiki</h1>
+<!-- mcp-name: io.github.Ar9av/obsidian-wiki -->
 
 <p align="center"><b>一個由 AI agent 陪你一起養大的數位大腦。</b></p>
 
@@ -257,7 +258,7 @@ memory.recap()                       # 在 session 開始時注入
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | index、log、hot cache、擁有者檔案與待辦索引 |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | 建立在 agent session 歷史之上的主題圖譜 |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | 將網頁擷取進 vault，並用 vault 內容填寫網頁表單 |
-| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 本機網頁檢視器、透過 MCP 連接 agent，以及用 Docker 將 vault 部署成記憶服務 |
+| **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 本機網頁檢視器、透過 MCP 連接 agent，以及自架 vault（Docker 或 `obsidian-wiki serve`），支援 TLS、唯讀金鑰與 git 同步 |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | 新增 skill、維持兩份 README 同步 |
 
 ## 參與貢獻

@@ -110,12 +110,14 @@ When the source is a large directory of docs, plan the parallel dispatch first:
 obsidian-wiki batch-plan "$OBSIDIAN_VAULT_PATH" <source-dir> --pretty
 ```
 
-This outputs a JSON plan with `batches` (each a list of files + total_bytes + kind counts) and `stats` (total, to_ingest, skipped_unchanged).
+This outputs a JSON plan with `batches` (each a list of files + total_bytes + kind counts) and `stats` (total_files, to_ingest, skipped_unchanged, skipped_okignored).
+
+The source folder you name is planned even if the vault's `.okignore` lists it (a `_sources/` entry that keeps lint off raw sources doesn't block ingesting them). `.okignore` entries for paths deeper inside it still apply, and `stats.skipped_okignored` counts the files they excluded.
 
 **What to do with the plan:**
 
-1. **Check `stats.skipped_unchanged`** — report to the user how many files are being skipped (already ingested, hash unchanged).
-2. **If `batch_count == 0`** — all files are unchanged. Tell the user and stop.
+1. **Check `stats.skipped_unchanged`** — report to the user how many files are being skipped (already ingested, hash unchanged). If `stats.skipped_okignored` is non-zero, report that too.
+2. **If `batch_count == 0`** — say why, from the stats: `total_files == 0` with `skipped_okignored > 0` means `.okignore` excluded every file; `total_files == 0` otherwise means the folder holds nothing ingestible; `skipped_unchanged == total_files` means every file is already ingested. Tell the user which one and stop.
 3. **If `batch_count == 1`** — proceed with the single batch as a normal Step 1 ingest.
 4. **Before dispatching anything**, run `obsidian-wiki ingest-guard` on the source directory (see Step 4). Resolve every `blocked` source first. Move any `siblings` into one batch, because subagents running in parallel can't see each other's writes.
 5. **If `batch_count > 1`** — dispatch each batch as a **parallel subagent** (multiple Agent tool calls in a single message). Each subagent receives a message like:

@@ -1,0 +1,79 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.Ar9av/obsidian-wiki",
+  "title": "obsidian-wiki",
+  "description": "Memory for agents in a markdown vault you own: search, read, write, recap, context packs.",
+  "repository": {
+    "url": "https://github.com/Ar9av/obsidian-wiki",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md",
+  "version": "2026.11.7",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "obsidian-wiki",
+      "version": "2026.11.7",
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [
+        { "type": "named", "name": "--with", "value": "fastapi>=0.115", "description": "MCP server dependency (the [server] extra)" },
+        { "type": "named", "name": "--with", "value": "mcp>=2.0", "description": "MCP server dependency (the [server] extra)" }
+      ],
+      "packageArguments": [
+        { "type": "positional", "value": "mcp" }
+      ],
+      "environmentVariables": [
+        {
+          "name": "OBSIDIAN_VAULT_PATH",
+          "description": "Vault to serve. Defaults to the vault obsidian-wiki setup configured.",
+          "format": "filepath",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/ar9av/obsidian-wiki:v2026.11.7",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-v",
+          "value": "{vault_path}:/vault",
+          "description": "Mount your vault into the container",
+          "isRequired": true,
+          "variables": {
+            "vault_path": { "description": "Absolute path to your vault", "format": "filepath", "isRequired": true }
+          }
+        }
+      ],
+      "packageArguments": [
+        { "type": "positional", "value": "obsidian-wiki" },
+        { "type": "positional", "value": "mcp" }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://{host}/mcp/",
+      "variables": {
+        "host": { "description": "Where you self-host the server (docs/deployment.md), e.g. wiki.example.com", "isRequired": true }
+      },
+      "headers": [
+        {
+          "name": "Authorization",
+          "value": "Bearer {api_key}",
+          "description": "WIKI_API_KEY (or WIKI_READ_KEY for read-only). Omit when the server has WIKI_OAUTH=1 and the client signs in.",
+          "isRequired": false,
+          "isSecret": true,
+          "variables": {
+            "api_key": { "description": "The server's WIKI_API_KEY or WIKI_READ_KEY", "isRequired": true, "isSecret": true }
+          }
+        }
+      ]
+    }
+  ]
+}
