@@ -392,6 +392,11 @@ def start_job(vault: Path, task: str) -> dict[str, Any]:
     claude = shutil.which("claude")
     if not claude:
         raise UiError(409, "agent jobs need Claude Code installed; run the command in your own agent instead")
+    # Jobs load user settings only (see below), so the skill must be a user skill.
+    skill = AGENT_TASKS[task][1].split()[0].lstrip("/")
+    skills_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude") / "skills"
+    if not (skills_dir / skill / "SKILL.md").is_file():
+        raise UiError(409, f"the {skill} skill isn't installed in {skills_dir}; run `obsidian-wiki setup`")
     with _jobs_lock:
         if any(j["status"] == "running" and j["vault"] == str(vault) for j in _jobs.values()):
             raise UiError(409, "a job is already running on this vault")
@@ -403,8 +408,12 @@ def start_job(vault: Path, task: str) -> dict[str, Any]:
         }
         _jobs[job["id"]] = job
     model = load_settings().get("model", "")
+    # The job runs inside the vault, and a cloned or shared vault can carry its own
+    # .claude/settings.json (hooks, allow rules) and .mcp.json. Load only the
+    # user's own settings and no MCP servers, so vault content can't run code.
     cmd = [claude, "-p", prompt, "--output-format", "json", "--permission-mode", "acceptEdits",
-           "--allowedTools", JOB_TOOLS, "--no-session-persistence"] + (["--model", model] if model else [])
+           "--allowedTools", JOB_TOOLS, "--no-session-persistence",
+           "--setting-sources", "user", "--strict-mcp-config"] + (["--model", model] if model else [])
     threading.Thread(target=_run_job, args=(job, cmd, vault), daemon=True).start()
     return dict(job)
 

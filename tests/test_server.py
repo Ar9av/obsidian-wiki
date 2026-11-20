@@ -521,3 +521,30 @@ def test_lint_for_next_actions_is_reused_until_a_page_changes(client, tmp_path, 
     assert len(runs) == 2
     client.get("/v1/health")  # the Health view always runs a fresh one
     assert len(runs) == 3
+
+
+def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch):
+    """A shared vault's .claude/settings.json hooks or .mcp.json must not run in a job."""
+    from obsidian_wiki import ui_tools
+
+    claude_home = tmp_path / "claude-home"
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(claude_home))
+    monkeypatch.setattr(ui_tools.shutil, "which", lambda name: "/bin/claude")
+    seen = {}
+    monkeypatch.setattr(ui_tools, "_run_job", lambda job, cmd, vault: seen.update(cmd=cmd))
+    monkeypatch.setattr(ui_tools, "_jobs", {})
+    # Run the job thread inline, so the command is captured before we look.
+    monkeypatch.setattr(ui_tools.threading, "Thread",
+                        lambda target, args, **kw: type("T", (), {"start": lambda self: target(*args)})())
+    vault = tmp_path / "vault"
+    vault.mkdir()
+
+    with pytest.raises(ui_tools.UiError, match="wiki-lint skill isn't installed"):
+        ui_tools.start_job(vault, "lint")
+
+    (claude_home / "skills" / "wiki-lint").mkdir(parents=True)
+    (claude_home / "skills" / "wiki-lint" / "SKILL.md").write_text("x")
+    ui_tools.start_job(vault, "lint")
+    cmd = seen["cmd"]
+    assert cmd[cmd.index("--setting-sources") + 1] == "user"
+    assert "--strict-mcp-config" in cmd
