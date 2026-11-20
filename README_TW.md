@@ -133,7 +133,7 @@ obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 
 它不只是閱讀器：
 
-- **Ask。** 答案來自你自己的頁面，附引用，並列出它遇到的缺口（「Worth adding」）。開啟網路搜尋就能補上這些缺口。它可以透過 Claude Code 使用你的 Claude 訂閱，或使用你在 Settings 儲存的 Anthropic API key。相關摘錄會送給你選的模型，其他內容都不會離開你的電腦。
+- **Ask。** 答案來自你自己的頁面，附引用，並列出它遇到的缺口（「Worth adding」）。網路搜尋預設開啟，可補上這些缺口。它可以透過 Claude Code 使用你的 Claude 訂閱，或使用你在 Settings 儲存的 Anthropic API key。只有相關摘錄會送給你選的模型，vault 的其他內容都留在你的電腦上。
 - **Inbox。** 在任何地方拖入檔案、貼上筆記或螢幕截圖、加入連結。一切都會留在 `_raw/`，等下一次 ingest，或直接按 **Ingest now**。
 - **Actions。** 接下來該做什麼（未整理的檔案、lint 發現、過期的事項），並可一鍵執行 ingest、lint、cross-linker、synthesize 與 digest。
 - **Insights。** 連結圖譜中的 hub、橋接頁、群集與盲點，以及值得提出的問題。

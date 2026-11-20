@@ -132,7 +132,7 @@ obsidian-wiki ui                      # opens http://127.0.0.1:3114/ui
 
 It's more than a reader:
 
-- **Ask.** Answers come from your own pages, cited, with a "Worth adding" list of the gaps it hit. Turn on web search to fill them. It runs on your Claude subscription through Claude Code, or on an Anthropic API key you save in Settings. The relevant excerpts go to the model you pick, and nothing else leaves your machine.
+- **Ask.** Answers come from your own pages, cited, with a "Worth adding" list of the gaps it hit. Web search is on by default and fills them. It runs on your Claude subscription through Claude Code, or on an Anthropic API key you save in Settings. Only the relevant excerpts go to the model you pick; the rest of your vault stays on your machine.
 - **Inbox.** Drop files anywhere, paste a note or a screenshot, add a link. Everything waits in `_raw/` until the next ingest, or hit **Ingest now**.
 - **Actions.** What needs doing next (unsorted files, lint findings, stale threads), with one-click runs of ingest, lint, cross-linker, synthesize and digest.
 - **Insights.** Hubs, bridges, clusters and blind spots in your link graph, plus questions worth asking about them.
