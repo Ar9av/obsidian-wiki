@@ -365,6 +365,26 @@ def test_bind_host_is_loopback_unless_asked(client, monkeypatch, wiki_host, expe
     assert seen["host"] == expected
 
 
+def test_anonymous_server_refuses_a_rebound_host(tmp_path, monkeypatch):
+    """Keyless `obsidian-wiki ui` must not answer a DNS-rebinding page (Host: attacker)."""
+    (tmp_path / "concepts").mkdir()
+    (tmp_path / "concepts" / "secret.md").write_text("pin 1234\n", encoding="utf-8")
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    monkeypatch.delenv("WIKI_API_KEY", raising=False)
+    monkeypatch.delenv("WIKI_HOST", raising=False)
+    monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    with TestClient(server.app) as c:
+        page = "/v1/pages/concepts/secret.md"
+        assert c.get(page, headers={"host": "attacker.example:3114"}).status_code == 400
+        write = {"title": "planted", "content": "x"}
+        assert c.post("/v1/pages", json=write, headers={"host": "attacker.example"}).status_code == 400
+        assert c.get(page, headers={"host": "127.0.0.1:3114"}).status_code == 200
+        assert c.get(page, headers={"host": "localhost:3114"}).status_code == 200
+    assert not (tmp_path / "concepts" / "planted.md").exists()
+
+
 MCP_LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
 # TestClient sends Host: testserver, which loopback rebinding protection refuses.
 MCP_HEADERS = {"accept": "application/json, text/event-stream", "host": "localhost:8080"}

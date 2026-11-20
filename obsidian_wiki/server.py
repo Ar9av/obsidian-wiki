@@ -534,6 +534,17 @@ if OAUTH:
     app.add_api_route(CONSENT_PATH, oauth_provider.consent, methods=["GET", "POST"], include_in_schema=False)
 
 
+# Anonymous mode trusts loopback, but any web page can reach loopback through DNS
+# rebinding: attacker.example re-resolves to 127.0.0.1 and its script becomes
+# same-origin with the vault API. The Host header still says attacker.example, so
+# refuse anything but a loopback name. Keyed servers don't need this: a rebound
+# page has no key.
+_LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "::1", "[::1]"]
+if ANONYMOUS and os.environ.get("WIKI_HOST", "127.0.0.1") in _LOOPBACK_HOSTS:
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=_LOOPBACK_HOSTS)
+
 # Outermost: rate limiting and the failed-auth lockout see every request,
 # including /mcp and the OAuth endpoints.
 from obsidian_wiki.guard import Guard  # noqa: E402
