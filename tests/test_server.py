@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import subprocess
 import sys
@@ -419,3 +420,84 @@ def test_mcp_subcommand_serves_the_vault_over_stdio(tmp_path, monkeypatch):
     names, page = anyio.run(run)
     assert {"memory_search", "memory_read", "memory_write"} <= names
     assert "The moon pulls the sea." in page.content[0].text
+
+
+@pytest.fixture
+def ui_config(tmp_path, monkeypatch):
+    """A private global config dir holding one named vault, for the viewer's tools."""
+    from obsidian_wiki import ui_tools
+
+    cfg = tmp_path / "cfg"
+    other = tmp_path / "other-vault"
+    other.mkdir()
+    cfg.mkdir()
+    (cfg / "config.work").write_text(f'OBSIDIAN_VAULT_PATH="{other}"\n')
+    (cfg / "config.bak-20260101").write_text(f'OBSIDIAN_VAULT_PATH="{tmp_path / "gone"}"\n')
+    monkeypatch.setattr(ui_tools, "config_dir", lambda: cfg)
+    return cfg, other
+
+
+def test_vault_switch_only_reaches_configured_vaults(client, tmp_path, ui_config):
+    _, other = ui_config
+    listed = client.get("/v1/vaults").json()
+    assert [v["name"] for v in listed["vaults"]] == ["startup", "work"]  # the .bak backup is skipped
+    assert client.post("/v1/vaults", json={"path": "/etc"}).status_code == 400
+    assert client.post("/v1/vaults", json={"path": str(other)}).json()["current"] == str(other)
+    assert client.get("/v1/status").json()["vault"] == str(other)
+    assert client.post("/v1/vaults", json={"path": str(tmp_path.resolve())}).status_code == 200
+
+
+def test_inbox_writes_into_raw_and_stays_inside_it(client, tmp_path):
+    import base64
+
+    note = client.post("/v1/inbox", json={"kind": "text", "title": "Idea: x", "text": "body"}).json()
+    assert note["path"].startswith("_raw/") and note["path"].endswith("-idea-x.md")
+    assert "title: >-\n  Idea: x" in (tmp_path / note["path"]).read_text()
+    link = client.post("/v1/inbox", json={"kind": "url", "url": "https://example.com/a"}).json()
+    assert "source_url: https://example.com/a" in (tmp_path / link["path"]).read_text()
+    assert client.post("/v1/inbox", json={"kind": "url", "url": "javascript:alert(1)"}).status_code == 400
+    up = client.post("/v1/inbox", json={"kind": "file", "filename": "../../evil.pdf",
+                                        "data_b64": base64.b64encode(b"%PDF").decode()}).json()
+    assert up["path"].startswith("_raw/") and (tmp_path / up["path"]).read_bytes() == b"%PDF"
+    assert len(client.get("/v1/inbox").json()["items"]) == 3
+    assert client.get("/v1/status").json()["raw_files"] == 3  # the PDF counts, unlike raw_count
+    assert client.post("/v1/inbox/remove", json={"name": "../log.md"}).status_code == 404
+    assert client.post("/v1/inbox/remove", json={"name": up["name"]}).status_code == 200
+    assert not (tmp_path / up["path"]).exists()
+
+
+def test_settings_keep_the_key_out_of_the_browser(client, ui_config, monkeypatch):
+    cfg, _ = ui_config
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    saved = client.post("/v1/settings", json={"anthropic_api_key": "sk-ant-secret-1234", "provider": "anthropic"}).json()
+    assert saved["anthropic_key_set"] and saved["anthropic_key_hint"] == "…1234"
+    assert "secret" not in json.dumps(client.get("/v1/settings").json())
+    assert (cfg / "ui-settings.json").stat().st_mode & 0o077 == 0
+    assert client.post("/v1/settings", json={"provider": "nope"}).status_code == 400
+    assert not client.post("/v1/settings", json={"anthropic_api_key": ""}).json()["anthropic_key_set"]
+
+
+def test_ask_says_so_when_no_model_is_available(client, ui_config, monkeypatch):
+    from obsidian_wiki import ui_tools
+
+    monkeypatch.setattr(ui_tools.shutil, "which", lambda _: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post("/v1/ask", json={"question": "anything"})
+    assert r.status_code == 409 and "API key" in r.json()["detail"]
+    assert client.post("/v1/jobs", json={"task": "ingest"}).status_code == 409
+    assert client.post("/v1/jobs", json={"task": "rm -rf"}).status_code == 400
+
+
+def test_lint_for_next_actions_is_reused_until_a_page_changes(client, tmp_path, monkeypatch):
+    server = sys.modules["obsidian_wiki.server"]
+    runs = []
+    monkeypatch.setattr(server, "lint_vault", lambda vault: runs.append(1) or {"status": "pass", "stats": {}})
+    (tmp_path / "a.md").write_text("---\ntitle: A\n---\n")
+    assert client.get("/v1/lint").json()["status"] == "pass"
+    client.get("/v1/lint")
+    assert len(runs) == 1
+    (tmp_path / "b.md").write_text("---\ntitle: B\n---\n")
+    client.get("/v1/lint")
+    assert len(runs) == 2
+    client.get("/v1/health")  # the Health view always runs a fresh one
+    assert len(runs) == 3

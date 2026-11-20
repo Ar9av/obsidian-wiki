@@ -16,11 +16,8 @@
 </p>
 
 <p align="center">
-  <img width="768" alt="obsidian-wiki" src="assets/hero.png" />
-</p>
-
-<p align="center">
-  <img width="768" alt="obsidian-wiki CLI: query, lint and context-pack on a demo vault" src="assets/demo.gif" />
+  <img width="900" alt="obsidian-wiki web viewer: Ask answers a question from the vault with cited page links" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-ask.png" />
+  <br><sub>Ask: a cited answer from the sample vault, in the local web viewer.</sub>
 </p>
 
 <p align="center">
@@ -84,6 +81,8 @@ Other paths — `git clone`, Claude Code plugin, Skills CLI, multiple vaults →
 /wiki-history-ingest claude         # mine everything you've ever asked Claude
 ```
 
+No terminal handy? Drop files, paste notes or add links in the [web viewer's Inbox](#work-in-your-browser). They wait in `_raw/` for the next ingest.
+
 **Ask it.** Answers come back with `[[wikilink]]` citations, not vibes.
 
 ```text
@@ -122,7 +121,7 @@ Want to look before you build? [`examples/demo-vault/`](https://github.com/Ar9av
 
 Or export the whole graph to `graph.json`, GraphML (Gephi/yEd), Neo4j Cypher, Postgres SQL, or a self-contained interactive `graph.html`.
 
-## Browse it in your browser
+## Work in your browser
 
 No Obsidian needed. The vault comes with a local web viewer:
 
@@ -131,15 +130,27 @@ pip install 'obsidian-wiki[server]'   # Python 3.10+
 obsidian-wiki ui                      # opens http://127.0.0.1:3114/ui
 ```
 
-It shows an overview, search, rendered pages with backlinks and properties, the link graph, the activity log, your profile and open threads, the hot cache, and vault health. It listens on loopback only. Use `--vault` to choose a vault and `--port` to change the port.
+It's more than a reader:
 
-<p align="center">
-  <img width="900" alt="obsidian-wiki web viewer: overview" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-overview.png?raw=true" />
-</p>
+- **Ask.** Answers come from your own pages, cited, with a "Worth adding" list of the gaps it hit. Web search is on by default, to fill them, and you can switch it off in Settings or per question. It runs on your Claude subscription through Claude Code, or on an Anthropic API key you save in Settings. The relevant excerpts (and any search queries) go to the model you pick. The rest of the vault stays on your machine.
+- **Inbox.** Drop files anywhere, paste a note or a screenshot, add a link. Everything waits in `_raw/` until the next ingest, or hit **Ingest now**.
+- **Actions.** What needs doing next (unsorted files, lint findings, stale threads), with one-click runs of ingest, lint, cross-linker, synthesize and digest.
+- **Insights.** Hubs, bridges, clusters and blind spots in your link graph, plus questions worth asking about them.
+- **Vault switcher.** Jump between the vaults you set up with `/wiki-switch`.
+- And the reading side: search, rendered pages with backlinks and properties, the graph, activity, profile and open threads, the hot cache, and vault health.
 
-<p align="center">
-  <img width="900" alt="obsidian-wiki web viewer: a rendered page with backlinks" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-page.png?raw=true" />
-</p>
+It listens on loopback only. Use `--vault` to choose a vault and `--port` to change the port.
+
+<table>
+  <tr>
+    <td><img width="440" alt="obsidian-wiki web viewer: overview with next actions" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-overview.png" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: inbox" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-inbox.png" /></td>
+  </tr>
+  <tr>
+    <td><img width="440" alt="obsidian-wiki web viewer: insights" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-insights.png" /></td>
+    <td><img width="440" alt="obsidian-wiki web viewer: a rendered page with backlinks" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-page.png" /></td>
+  </tr>
+</table>
 
 **Connect any agent to it.** Open **Connect an agent** in the sidebar:
 
@@ -148,7 +159,7 @@ It shows an overview, search, rendered pages with backlinks and properties, the 
 3. Check it: ask the agent to call `memory_recap`.
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki web viewer: connect an agent" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-connect.png?raw=true" />
+  <img width="900" alt="obsidian-wiki web viewer: connect an agent" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-connect.png" />
 </p>
 
 More → **[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)**

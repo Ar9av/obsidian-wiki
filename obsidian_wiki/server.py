@@ -1,9 +1,10 @@
 """HTTP + MCP front end for a vault, so remote agents can use it as memory.
 
-Single tenant: one process, one vault, one API key (plus an optional read-only
-one). The container does no LLM
-work — search, packing and frontmatter parsing all delegate to the existing
-`graphrag` / `context_pack` modules, and the caller's agent does the thinking.
+Single tenant: one process, one vault at a time, one API key (plus an optional
+read-only one). The memory API does no LLM work: search, packing and frontmatter
+parsing all delegate to the existing `graphrag` / `context_pack` modules, and the
+caller's agent does the thinking. The viewer's Ask and Actions pages are the
+exception; see `ui_tools`.
 
 Needs the optional extra: ``pip install 'obsidian-wiki[server]'``.
 Run it with ``obsidian-wiki serve`` or ``python -m obsidian_wiki.server``.
@@ -18,6 +19,7 @@ import os
 import re
 import sys
 import threading
+import time
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -692,6 +694,8 @@ def status() -> dict[str, Any]:
         "pages": len(pages),
         "categories": dict(sorted(categories.items())),
         "raw_count": _count_md("_raw"),
+        # Every top-level file the next ingest will see, not just markdown: a dropped PDF counts.
+        "raw_files": len(ui_tools.list_inbox(VAULT)),
         "staging_count": _count_md("_staging"),
         "last_ingest": last_ingest,
         "sources": sources,
@@ -704,6 +708,24 @@ def status() -> dict[str, Any]:
         ],
         "git": _git_status(),
     }
+
+
+_LINT_TTL = 60.0  # seconds a cached lint result may be reused while no page has changed
+_lint_cache: dict[str, Any] = {}
+
+
+def lint_summary() -> dict[str, Any]:
+    """lint_vault, reused while the vault is unchanged.
+
+    The Overview and Actions pages ask for this on every visit, and a full lint parses
+    every page. The key is the vault plus each page's mtime, with a short TTL for what
+    the page walk can't see (`.manifest.json`, `_raw/`).
+    """
+    pages = iter_md(VAULT)
+    sig = (str(VAULT), len(pages), max((p.stat().st_mtime_ns for p in pages), default=0))
+    if _lint_cache.get("sig") != sig or time.monotonic() - _lint_cache["at"] > _LINT_TTL:
+        _lint_cache.update(sig=sig, at=time.monotonic(), lint=lint_vault(VAULT))
+    return _lint_cache["lint"]
 
 
 def vault_health() -> dict[str, Any]:
@@ -867,6 +889,12 @@ def http_status() -> dict[str, Any]:
     return status()
 
 
+@app.get("/v1/lint", dependencies=[Depends(require_key)])
+def http_lint() -> dict[str, Any]:
+    """Cached lint for the viewer's Next actions; /v1/health is the fresh, full report."""
+    return lint_summary()
+
+
 @app.get("/v1/health", dependencies=[Depends(require_key)])
 def http_vault_health() -> dict[str, Any]:
     return vault_health()
@@ -875,6 +903,129 @@ def http_vault_health() -> dict[str, Any]:
 @app.get("/v1/staging", dependencies=[Depends(require_key)])
 def http_staging() -> dict[str, Any]:
     return staging()
+
+
+# --- viewer tools: vault switching, inbox, settings, ask, agent jobs ------------
+# The logic lives in ui_tools; these routes only translate its errors.
+
+from obsidian_wiki import ui_tools  # noqa: E402
+
+STARTUP_VAULT = VAULT
+
+
+def _ui(fn, *args):
+    try:
+        return fn(*args)
+    except ui_tools.UiError as exc:
+        raise HTTPException(exc.status, str(exc)) from exc
+
+
+class VaultSwitch(BaseModel):
+    path: str
+
+
+class InboxItem(BaseModel):
+    kind: str = "text"
+    title: str = ""
+    text: str = ""
+    url: str = ""
+    filename: str = ""
+    data_b64: str = ""
+
+
+class InboxRemove(BaseModel):
+    name: str
+
+
+class SettingsPatch(BaseModel):
+    provider: str | None = None
+    model: str | None = None
+    anthropic_api_key: str | None = None
+    web: bool | None = None
+
+
+class AskRequest(BaseModel):
+    question: str
+    web: bool | None = None
+
+
+class JobRequest(BaseModel):
+    task: str
+
+
+@app.get("/v1/vaults", dependencies=[Depends(require_key)])
+def http_vaults() -> dict[str, Any]:
+    return {"current": str(VAULT), "vaults": ui_tools.known_vaults(STARTUP_VAULT)}
+
+
+@app.post("/v1/vaults", dependencies=[Depends(require_write_key)])
+def http_switch_vault(body: VaultSwitch) -> dict[str, Any]:
+    """Point this process at another configured vault. MCP clients follow too."""
+    global VAULT
+    VAULT = _ui(ui_tools.pick_vault, STARTUP_VAULT, body.path)
+    return {"current": str(VAULT)}
+
+
+@app.get("/v1/inbox", dependencies=[Depends(require_key)])
+def http_inbox() -> dict[str, Any]:
+    return {"items": ui_tools.list_inbox(VAULT)}
+
+
+@app.post("/v1/inbox", dependencies=[Depends(require_write_key)])
+def http_inbox_add(body: InboxItem) -> dict[str, Any]:
+    return _ui(ui_tools.add_to_inbox, VAULT, body.model_dump())
+
+
+@app.post("/v1/inbox/remove", dependencies=[Depends(require_write_key)])
+def http_inbox_remove(body: InboxRemove) -> dict[str, Any]:
+    _ui(ui_tools.remove_from_inbox, VAULT, body.name)
+    return {"removed": body.name}
+
+
+@app.get("/v1/insights", dependencies=[Depends(require_key)])
+def http_insights() -> dict[str, Any]:
+    from obsidian_wiki.graph_analysis import analyse_vault
+
+    return analyse_vault(VAULT, top_n=12)
+
+
+@app.get("/v1/settings", dependencies=[Depends(require_key)])
+def http_settings() -> dict[str, Any]:
+    return ui_tools.public_settings()
+
+
+@app.post("/v1/settings", dependencies=[Depends(require_write_key)])
+def http_settings_save(body: SettingsPatch) -> dict[str, Any]:
+    return _ui(ui_tools.save_settings, body.model_dump(exclude_none=True))
+
+
+@app.post("/v1/ask", dependencies=[Depends(require_write_key)])
+def http_ask(body: AskRequest) -> dict[str, Any]:
+    return _ui(ui_tools.ask, VAULT, body.question, body.web)
+
+
+@app.get("/v1/jobs", dependencies=[Depends(require_key)])
+def http_jobs() -> dict[str, Any]:
+    return {
+        "jobs": ui_tools.list_jobs(),
+        "tasks": [{"task": k, "label": v[0], "prompt": v[1]} for k, v in ui_tools.AGENT_TASKS.items()],
+        "agent": bool(ui_tools.shutil.which("claude")),
+    }
+
+
+@app.post("/v1/jobs", dependencies=[Depends(require_write_key)])
+def http_job_start(body: JobRequest) -> dict[str, Any]:
+    return _ui(ui_tools.start_job, VAULT, body.task)
+
+
+@app.post("/v1/git/sync", dependencies=[Depends(require_write_key)])
+def http_git_sync() -> dict[str, Any]:
+    from obsidian_wiki.sync import run_sync
+
+    code, message = run_sync(VAULT)
+    if code:
+        raise HTTPException(409, message)
+    return {"message": message}
 
 
 @app.get("/v1/oauth/clients", dependencies=[Depends(require_write_key)])

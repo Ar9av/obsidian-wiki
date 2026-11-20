@@ -1,13 +1,18 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Badge, Box, Flex, IconButton, Spacer, Text, Tooltip, extendTheme, useColorMode } from '@chakra-ui/react'
+import {
+  Badge, Box, Button, Flex, IconButton, Menu, MenuButton, MenuDivider, MenuItemOption, MenuList, MenuOptionGroup, Spacer, Text, Tooltip,
+  extendTheme, useColorMode, useToast,
+} from '@chakra-ui/react'
 import {
   AppShell, NavGroup, NavItem, SaasProvider, SearchInput, Sidebar, SidebarSection, SidebarToggleButton, theme as saasTheme, useSidebarContext,
 } from '@saas-ui/react'
 import {
-  Activity, BookOpen, Brain, FileText, Flame, GitBranch, HeartPulse, Inbox, LayoutDashboard, Moon, Network, Plug, RefreshCw, Sun,
+  Activity, BookOpen, Brain, ChevronsUpDown, ClipboardCheck, FileText, Flame, GitBranch, HeartPulse, Inbox, LayoutDashboard, Lightbulb, Moon,
+  Network, Play, Plug, RefreshCw, Settings, Sparkles, Sun,
 } from 'lucide-react'
 import * as V from './views.jsx'
+import * as T from './tools.jsx'
 import { slug } from './lib.js'
 
 // --- API -------------------------------------------------------------------
@@ -44,6 +49,7 @@ function useVaultData() {
   const [status, setStatus] = useState(null)
   const [graph, setGraph] = useState(null)
   const [todos, setTodos] = useState([])
+  const [vaults, setVaults] = useState(null)
   const [error, setError] = useState(null)
   const load = useCallback(() => {
     declined = false
@@ -51,7 +57,15 @@ function useVaultData() {
     api.get('/v1/status').then(setStatus).catch((e) => setError(e.message))
     api.get('/v1/graph').then(setGraph).catch((e) => setError(e.message))
     api.get('/v1/memory/todos').then((t) => setTodos(t.todos)).catch(() => {})
+    api.get('/v1/vaults').then(setVaults).catch(() => {})
   }, [])
+  // The server holds one current vault; switching repoints it, then every view reloads.
+  const switchVault = useCallback(async (path) => {
+    await api.post('/v1/vaults', { path })
+    setStatus(null); setGraph(null)
+    go('/')
+    load()
+  }, [load])
   useEffect(load, [load])
 
   const index = useMemo(() => {
@@ -73,7 +87,7 @@ function useVaultData() {
     return { byId, byPath, inbound, outbound, resolve }
   }, [graph])
 
-  return { status, graph, index, todos, setTodos, error, reload: load }
+  return { status, graph, index, todos, setTodos, vaults, switchVault, error, reload: load }
 }
 
 // --- routing ---------------------------------------------------------------
@@ -106,6 +120,41 @@ function CloseOnNavigate({ route }) {
   return null
 }
 
+function VaultSwitcher({ compact }) {
+  const { status, vaults, switchVault } = useVault()
+  const toast = useToast()
+  const current = vaults?.current ?? status?.vault
+  const name = current?.split('/').pop() ?? '…'
+  const pick = (path) => path !== current && switchVault(path).catch((e) => toast({ status: 'error', title: 'Could not switch', description: e.message }))
+  return (
+    <Menu placement="bottom-start">
+      <Tooltip label={current} openDelay={500}>
+        <MenuButton as={Button} size="sm" variant="ghost" px="2" h={compact ? '8' : '11'} textAlign="left" minW="0" maxW="full" flex="1">
+          <Flex align="center" gap="2" minW="0">
+            <Box lineHeight="short" minW="0" flex="1">
+              {!compact && <Text fontWeight="semibold" fontSize="sm">Obsidian Wiki</Text>}
+              <Text fontSize={compact ? 'sm' : 'xs'} fontWeight={compact ? 'semibold' : 'normal'} color={compact ? undefined : 'muted'} noOfLines={1}>{name}</Text>
+            </Box>
+            <ChevronsUpDown size={14} style={{ flexShrink: 0 }} />
+          </Flex>
+        </MenuButton>
+      </Tooltip>
+      <MenuList zIndex="popover" maxW="sm">
+        <MenuOptionGroup title="Switch vault" type="radio" value={current} onChange={pick}>
+          {(vaults?.vaults ?? []).map((v) => (
+            <MenuItemOption key={v.path} value={v.path} isDisabled={!v.exists}>
+              <Text fontSize="sm">{v.label} <Text as="span" color="muted" fontSize="xs">{v.name === 'startup' ? '' : `@${v.name}`}{v.exists ? '' : ' (missing)'}</Text></Text>
+              <Text fontSize="xs" color="muted" noOfLines={1}>{v.path}</Text>
+            </MenuItemOption>
+          ))}
+        </MenuOptionGroup>
+        <MenuDivider />
+        <Text px="3" py="1" fontSize="xs" color="muted">Add vaults with /wiki-switch. Switching here changes this server only, not your default.</Text>
+      </MenuList>
+    </Menu>
+  )
+}
+
 function AppSidebar({ route }) {
   const { status, todos, graph, reload } = useVault()
   const { colorMode, toggleColorMode } = useColorMode()
@@ -123,14 +172,10 @@ function AppSidebar({ route }) {
       <SidebarToggleButton />
       <CloseOnNavigate route={route} />
       <SidebarSection direction="row" pt={{ base: 12, md: 4 }} px="4">
-        <Flex align="center" gap="2">
-          <Box as={BookOpen} boxSize="5" color="purple.500" />
-          <Box lineHeight="short">
-            <Text fontWeight="semibold">Obsidian Wiki</Text>
-            <Tooltip label={status?.vault}><Text fontSize="xs" color="muted" noOfLines={1}>{status?.vault.split('/').pop() ?? '…'}</Text></Tooltip>
-          </Box>
+        <Flex align="center" gap="1" minW="0" flex="1">
+          <Box as={BookOpen} boxSize="5" color="purple.500" flexShrink="0" />
+          <VaultSwitcher />
         </Flex>
-        <Spacer />
         <Tooltip label="Reload vault data"><IconButton size="xs" variant="ghost" aria-label="Refresh" icon={<RefreshCw size={14} />} onClick={reload} /></Tooltip>
         <Tooltip label="Toggle theme"><IconButton size="xs" variant="ghost" aria-label="Toggle theme" icon={colorMode === 'dark' ? <Sun size={14} /> : <Moon size={14} />} onClick={toggleColorMode} /></Tooltip>
       </SidebarSection>
@@ -142,8 +187,12 @@ function AppSidebar({ route }) {
       <SidebarSection flex="1" overflowY="auto" px="2">
         <NavGroup>
           {item('/', 'Overview', <LayoutDashboard />)}
+          {item('/ask', 'Ask', <Sparkles />)}
+          {item('/inbox', 'Inbox', <Inbox />, (status?.raw_files ?? status?.raw_count) || null)}
+          {item('/actions', 'Actions', <Play />)}
           {item('/pages', 'Pages', <FileText />, status?.pages, at('/pages') && !cat)}
           {item('/graph', 'Graph', <Network />, graph?.edges.length)}
+          {item('/insights', 'Insights', <Lightbulb />)}
           {item('/activity', 'Activity', <Activity />)}
           {item('/connect', 'Connect an agent', <Plug />)}
         </NavGroup>
@@ -153,8 +202,9 @@ function AppSidebar({ route }) {
         </NavGroup>
         <NavGroup title="Maintenance" isCollapsible>
           {item('/health', 'Health', <HeartPulse />)}
-          {item('/staging', 'Staging', <Inbox />, status?.staging_count)}
+          {item('/staging', 'Staging', <ClipboardCheck />, status?.staging_count)}
           {item('/sources', 'Sources & git', <GitBranch />, status?.sources.length)}
+          {item('/settings', 'Settings', <Settings />)}
         </NavGroup>
         {cats.length > 0 && (
           <NavGroup title="Categories" isCollapsible defaultIsOpen>
@@ -176,9 +226,42 @@ function Router({ route }) {
   const views = {
     '/': V.Overview, '/pages': V.Pages, '/graph': V.GraphView, '/activity': V.ActivityView, '/connect': V.ConnectView,
     '/memory': V.MemoryView, '/hot': V.HotView, '/health': V.HealthView, '/staging': V.StagingView, '/sources': V.SourcesView,
+    '/ask': T.AskView, '/inbox': T.InboxView, '/actions': T.ActionsView, '/insights': T.InsightsView, '/settings': T.SettingsView,
   }
   const View = views[p] ?? V.NotFound
   return <View params={route.params} />
+}
+
+// Files dropped anywhere in the window go to the inbox; the Inbox view's own drop
+// zone stops the event first, so nothing is uploaded twice.
+function DropAnywhere({ children }) {
+  const { reload } = useVault()
+  const toast = useToast()
+  const [over, setOver] = useState(false)
+  const files = (e) => [...(e.dataTransfer?.types ?? [])].includes('Files')
+  return (
+    <Box as="main" h="100vh" overflowY="auto" position="relative"
+      onDragOver={(e) => { if (files(e)) { e.preventDefault(); setOver(true) } }}
+      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOver(false) }}
+      onDrop={async (e) => {
+        if (!files(e)) return
+        e.preventDefault(); setOver(false)
+        try {
+          const saved = await T.uploadFiles([...e.dataTransfer.files])
+          toast({ status: 'success', title: `Added ${saved.length} to the inbox`, description: 'They go in on the next ingest.' })
+          reload()
+        } catch (err) { toast({ status: 'error', title: 'Upload failed', description: err.message }) }
+      }}>
+      {children}
+      {over && (
+        <Flex position="fixed" inset="0" zIndex="overlay" align="center" justify="center" bg="blackAlpha.500" pointerEvents="none">
+          <Box bg="chakra-body-bg" borderRadius="lg" px="8" py="6" borderWidth="2px" borderStyle="dashed" borderColor="purple.400">
+            <Text fontWeight="semibold">Drop to add to the inbox</Text>
+          </Box>
+        </Flex>
+      )}
+    </Box>
+  )
 }
 
 function App() {
@@ -187,17 +270,17 @@ function App() {
   return (
     <Vault.Provider value={vault}>
       <AppShell variant="static" height="100vh" sidebar={<AppSidebar route={route} />}>
-        <Box as="main" h="100vh" overflowY="auto" position="relative">
+        <DropAnywhere>
           {/* Phones: a solid bar behind Saas UI's fixed drawer toggle (12px, 32px tall), so
               nothing floats over scrolling content. Desktop keeps its controls in the sidebar. */}
           <Flex display={{ base: 'flex', md: 'none' }} position="sticky" top="0" zIndex="sticky" h="14" align="center"
             pl="14" pr="2" bg="chakra-body-bg" borderBottomWidth="1px">
-            <Text fontWeight="semibold" fontSize="sm">Obsidian Wiki</Text>
+            <VaultSwitcher compact />
             <Spacer />
             <IconButton aria-label="Refresh" icon={<RefreshCw size={14} />} size="sm" variant="ghost" onClick={vault.reload} />
           </Flex>
           {vault.error ? <V.ErrorState message={vault.error} /> : <Router route={route} />}
-        </Box>
+        </DropAnywhere>
       </AppShell>
     </Vault.Provider>
   )

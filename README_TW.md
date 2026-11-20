@@ -17,11 +17,8 @@
 </p>
 
 <p align="center">
-  <img width="768" alt="obsidian-wiki" src="assets/hero.png" />
-</p>
-
-<p align="center">
-  <img width="768" alt="obsidian-wiki CLI：在範例 vault 上執行 query、lint 與 context-pack" src="assets/demo.gif" />
+  <img width="900" alt="obsidian-wiki 網頁檢視器：Ask 以附引用連結的方式，從 vault 回答問題" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-ask.png" />
+  <br><sub>Ask：在本機網頁檢視器中，從範例 vault 得到附引用的答案。</sub>
 </p>
 
 <p align="center">
@@ -85,6 +82,8 @@ Plugin 裡的 skill 會加上命名空間（`/obsidian-wiki:wiki-ingest`），�
 /wiki-history-ingest claude         # 挖出你問過 Claude 的所有東西
 ```
 
+手邊沒有終端機？可以在[網頁檢視器的 Inbox](#在瀏覽器中操作) 拖入檔案、貼上筆記或加入連結。它們會留在 `_raw/`，等下一次 ingest 處理。
+
 **問它。** 回答會附上 `[[wikilink]]` 引用，而不是憑感覺。
 
 ```text
@@ -123,7 +122,7 @@ obsidian-wiki sessions-query "the auth bug with the weird retry loop"
 
 你也可以把整個圖譜匯出成 `graph.json`、GraphML（Gephi/yEd）、Neo4j Cypher、Postgres SQL，或一個自帶所有資源的互動式 `graph.html`。
 
-## 在瀏覽器中瀏覽
+## 在瀏覽器中操作
 
 不需要 Obsidian。vault 附帶一個本機網頁檢視器：
 
@@ -132,15 +131,27 @@ pip install 'obsidian-wiki[server]'   # Python 3.10 以上
 obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 ```
 
-它提供總覽、搜尋、渲染後的頁面（含反向連結與屬性）、連結圖譜、活動紀錄、你的個人檔案與未完成事項、hot cache，以及 vault 健康狀態。它只監聽 loopback。用 `--vault` 指定 vault，用 `--port` 更改連接埠。
+它不只是閱讀器：
 
-<p align="center">
-  <img width="900" alt="obsidian-wiki 網頁檢視器：總覽" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-overview.png?raw=true" />
-</p>
+- **Ask。** 答案來自你自己的頁面，附引用，並列出它遇到的缺口（「Worth adding」）。網路搜尋預設開啟，用來補上這些缺口，你可以在 Settings 或每次提問時關閉它。它可以透過 Claude Code 使用你的 Claude 訂閱，或使用你在 Settings 儲存的 Anthropic API key。相關摘錄（以及任何搜尋查詢）會送給你選的模型，vault 的其餘內容都留在你的電腦上。
+- **Inbox。** 在任何地方拖入檔案、貼上筆記或螢幕截圖、加入連結。一切都會留在 `_raw/`，等下一次 ingest，或直接按 **Ingest now**。
+- **Actions。** 接下來該做什麼（未整理的檔案、lint 發現、過期的事項），並可一鍵執行 ingest、lint、cross-linker、synthesize 與 digest。
+- **Insights。** 連結圖譜中的 hub、橋接頁、群集與盲點，以及值得提出的問題。
+- **Vault 切換器。** 在你用 `/wiki-switch` 設定的 vault 之間切換。
+- 還有閱讀功能：搜尋、含反向連結與屬性的渲染頁面、圖譜、活動紀錄、個人檔案與未完成事項、hot cache，以及 vault 健康狀態。
 
-<p align="center">
-  <img width="900" alt="obsidian-wiki 網頁檢視器：含反向連結的頁面" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-page.png?raw=true" />
-</p>
+它只監聽 loopback。用 `--vault` 指定 vault，用 `--port` 更改連接埠。
+
+<table>
+  <tr>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含下一步行動的總覽" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-overview.png" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Inbox" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-inbox.png" /></td>
+  </tr>
+  <tr>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：Insights" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-insights.png" /></td>
+    <td><img width="440" alt="obsidian-wiki 網頁檢視器：含反向連結的頁面" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-page.png" /></td>
+  </tr>
+</table>
 
 **把任何 agent 接上它。** 在側邊欄打開 **Connect an agent**：
 
@@ -149,7 +160,7 @@ obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 3. 驗證：請 agent 呼叫 `memory_recap`。
 
 <p align="center">
-  <img width="900" alt="obsidian-wiki 網頁檢視器：連接 agent" src="https://github.com/Ar9av/obsidian-wiki/blob/main/docs/images/ui-connect.png?raw=true" />
+  <img width="900" alt="obsidian-wiki 網頁檢視器：連接 agent" src="https://raw.githubusercontent.com/Ar9av/obsidian-wiki/f55805110865cd7c1b7c77b8f8edd4552eab58cf/docs/images/ui-connect.png" />
 </p>
 
 更多 → **[Web viewer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md#web-viewer)**（英文）

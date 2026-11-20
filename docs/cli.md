@@ -22,7 +22,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
 | `serve` | Self-host the vault: REST API, MCP over streamable HTTP at `/mcp/`, and the viewer at `/ui`; loopback unless `--host`, optional two-way git sync with `--sync-interval`. Needs the `[server]` extra and `WIKI_API_KEY` (see [Deployment](deployment.md)) |
 | `mcp` | Serve the vault's memory tools over stdio for an agent to launch; needs the `[server]` extra (see [Deployment](deployment.md#connect-an-agent-mcp)) |
-| `ui` | Open a local web viewer for the vault (pages, graph, activity, memory, health, and copy-paste MCP configs to connect any agent) on `127.0.0.1:3114`; needs the `[server]` extra (see [Deployment](deployment.md#web-viewer)) |
+| `ui` | Open a local web viewer for the vault (pages, graph, insights, activity, memory, health, an inbox that feeds `_raw/`, AI answers over the vault, one-click skill runs, a vault switcher, and copy-paste MCP configs to connect any agent) on `127.0.0.1:3114`; needs the `[server]` extra (see [Deployment](deployment.md#web-viewer)) |
 
 ```bash
 obsidian-wiki setup --vault ~/brain
