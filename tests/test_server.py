@@ -460,6 +460,7 @@ def test_inbox_writes_into_raw_and_stays_inside_it(client, tmp_path):
                                         "data_b64": base64.b64encode(b"%PDF").decode()}).json()
     assert up["path"].startswith("_raw/") and (tmp_path / up["path"]).read_bytes() == b"%PDF"
     assert len(client.get("/v1/inbox").json()["items"]) == 3
+    assert client.get("/v1/status").json()["raw_files"] == 3  # the PDF counts, unlike raw_count
     assert client.post("/v1/inbox/remove", json={"name": "../log.md"}).status_code == 404
     assert client.post("/v1/inbox/remove", json={"name": up["name"]}).status_code == 200
     assert not (tmp_path / up["path"]).exists()

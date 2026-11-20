@@ -693,6 +693,8 @@ def status() -> dict[str, Any]:
         "pages": len(pages),
         "categories": dict(sorted(categories.items())),
         "raw_count": _count_md("_raw"),
+        # Every top-level file the next ingest will see, not just markdown: a dropped PDF counts.
+        "raw_files": len(ui_tools.list_inbox(VAULT)),
         "staging_count": _count_md("_staging"),
         "last_ingest": last_ingest,
         "sources": sources,

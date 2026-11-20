@@ -44,11 +44,11 @@ export function nextActions({ status, todos = [], lint = null }) {
   if (!status) return []
   const out = []
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
-  if (!status.pages && !status.raw_count) {
+  if (!status.pages && !(status.raw_files ?? status.raw_count)) {
     out.push({ id: 'empty', title: 'The vault is empty', detail: 'Drop notes, links or files into the inbox, then ingest them.', go: '/inbox' })
   }
-  if (status.raw_count) {
-    out.push({ id: 'ingest', title: `${plural(status.raw_count, 'file')} waiting in _raw/`, detail: 'Ingest turns them into linked wiki pages.', job: 'ingest' })
+  if ((status.raw_files ?? status.raw_count)) {
+    out.push({ id: 'ingest', title: `${plural((status.raw_files ?? status.raw_count), 'file')} waiting in _raw/`, detail: 'Ingest turns them into linked wiki pages.', job: 'ingest' })
   }
   const lost = (status.sources ?? []).filter((s) => s.missing_pages?.length)
   if (lost.length) {

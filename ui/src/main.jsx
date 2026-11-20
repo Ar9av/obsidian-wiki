@@ -129,13 +129,14 @@ function VaultSwitcher({ compact }) {
   return (
     <Menu placement="bottom-start">
       <Tooltip label={current} openDelay={500}>
-        <MenuButton as={Button} size="sm" variant="ghost" px="2" h={compact ? '8' : '10'} rightIcon={<ChevronsUpDown size={14} />} textAlign="left" minW="0" maxW="full">
-          {compact ? <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{name}</Text> : (
-            <Box lineHeight="short" minW="0">
-              <Text fontWeight="semibold" fontSize="sm">Obsidian Wiki</Text>
-              <Text fontSize="xs" color="muted" fontWeight="normal" noOfLines={1}>{name}</Text>
+        <MenuButton as={Button} size="sm" variant="ghost" px="2" h={compact ? '8' : '11'} textAlign="left" minW="0" maxW="full" flex="1">
+          <Flex align="center" gap="2" minW="0">
+            <Box lineHeight="short" minW="0" flex="1">
+              {!compact && <Text fontWeight="semibold" fontSize="sm">Obsidian Wiki</Text>}
+              <Text fontSize={compact ? 'sm' : 'xs'} fontWeight={compact ? 'semibold' : 'normal'} color={compact ? undefined : 'muted'} noOfLines={1}>{name}</Text>
             </Box>
-          )}
+            <ChevronsUpDown size={14} style={{ flexShrink: 0 }} />
+          </Flex>
         </MenuButton>
       </Tooltip>
       <MenuList zIndex="popover" maxW="sm">
@@ -175,7 +176,6 @@ function AppSidebar({ route }) {
           <Box as={BookOpen} boxSize="5" color="purple.500" flexShrink="0" />
           <VaultSwitcher />
         </Flex>
-        <Spacer />
         <Tooltip label="Reload vault data"><IconButton size="xs" variant="ghost" aria-label="Refresh" icon={<RefreshCw size={14} />} onClick={reload} /></Tooltip>
         <Tooltip label="Toggle theme"><IconButton size="xs" variant="ghost" aria-label="Toggle theme" icon={colorMode === 'dark' ? <Sun size={14} /> : <Moon size={14} />} onClick={toggleColorMode} /></Tooltip>
       </SidebarSection>
@@ -188,7 +188,7 @@ function AppSidebar({ route }) {
         <NavGroup>
           {item('/', 'Overview', <LayoutDashboard />)}
           {item('/ask', 'Ask', <Sparkles />)}
-          {item('/inbox', 'Inbox', <Inbox />, status?.raw_count || null)}
+          {item('/inbox', 'Inbox', <Inbox />, (status?.raw_files ?? status?.raw_count) || null)}
           {item('/actions', 'Actions', <Play />)}
           {item('/pages', 'Pages', <FileText />, status?.pages, at('/pages') && !cat)}
           {item('/graph', 'Graph', <Network />, graph?.edges.length)}
