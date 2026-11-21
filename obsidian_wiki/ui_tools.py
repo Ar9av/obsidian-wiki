@@ -318,6 +318,9 @@ def ask(vault: Path, question: str, web: bool | None = None) -> dict[str, Any]:
             "or a LiteLLM model in Settings.",
         )
     web = settings.get("web", True) if web is None else web
+    if web and provider == "litellm" and not _litellm_can_search(settings.get("model", "")):
+        # Don't tell a model to search the web when it has no way to.
+        web = False
     pack, pages = _context(vault, question)
     system = ASK_SYSTEM.format(web=WEB_LINE if web else "")
     prompt = f"{pack}\n\n---\n\nQuestion: {question}"
@@ -454,6 +457,26 @@ def _ask_litellm(system: str, prompt: str, web: bool, settings: dict[str, Any]) 
     if response.choices[0].finish_reason == "content_filter" and not answer:
         raise UiError(422, "the model declined to answer this one")
     return answer, _litellm_cost(litellm, response)
+
+
+def _litellm_can_search(model: str) -> bool:
+    """False only when LiteLLM knows the model and says it has no web search.
+
+    A proxy alias (litellm_proxy/...) or a model missing from LiteLLM's map is
+    unknown client-side, so web search stays on for it, best effort.
+    """
+    if not model or model.startswith("litellm_proxy/"):
+        return True
+    try:
+        import litellm
+
+        litellm.get_model_info(model=model)
+    except Exception:
+        return True
+    try:
+        return bool(litellm.supports_web_search(model=model))
+    except Exception:
+        return True
 
 
 def _litellm_cost(litellm: Any, response: Any) -> float | None:

@@ -203,3 +203,34 @@ def test_ask_routes_to_litellm(fake_litellm, settings_dir, tmp_path, monkeypatch
     assert result["pages"] == [{"path": "concepts/a.md", "title": "A"}]
     sent = fake_litellm.completion.call_args.kwargs["messages"][1]["content"]
     assert sent.startswith("PACK") and sent.endswith("Question: What do I know about A?")
+
+
+@pytest.mark.parametrize(
+    "model, known, searches, expect_web",
+    [
+        ("ollama/qwen3", True, False, False),  # known, no web search
+        ("gemini/gemini-2.5-flash", True, True, True),  # known, searches
+        ("litellm_proxy/team-model", True, False, True),  # proxy alias: unknown client-side
+        ("custom/new-model", False, False, True),  # not in LiteLLM's map
+    ],
+)
+def test_web_search_is_only_promised_to_models_that_can_search(
+    fake_litellm, settings_dir, tmp_path, monkeypatch, model, known, searches, expect_web
+):
+    def model_info(model):
+        if not known:
+            raise Exception("This model isn't mapped yet.")
+        return {}
+
+    fake_litellm.get_model_info = mock.MagicMock(side_effect=model_info)
+    fake_litellm.supports_web_search = mock.MagicMock(return_value=searches)
+    ui_tools.save_settings({"provider": "litellm", "model": model, "web": True})
+    monkeypatch.setattr(ui_tools, "_context", lambda vault, q: ("PACK", []))
+
+    result = ui_tools.ask(tmp_path, "What changed this week?")
+
+    kwargs = fake_litellm.completion.call_args.kwargs
+    system = kwargs["messages"][0]["content"]
+    assert result["web"] is expect_web
+    assert ("web_search_options" in kwargs) is expect_web
+    assert ("Search the web" in system) is expect_web
