@@ -58,7 +58,7 @@ def test_the_opt_in_recall_hook_installs_only_when_named(home: Path) -> None:
     assert result["added"] == ["wiki-prompt-recall.sh"]
     assert set(_settings(home)["hooks"]) == {"UserPromptSubmit"}
     hk.install(home)
-    assert set(_settings(home)["hooks"]) == {"SessionStart", "UserPromptSubmit", "Stop"}
+    assert set(_settings(home)["hooks"]) == {event for event, _ in hk.HOOKS}
     assert sorted(hk.uninstall(home)["removed"]) == sorted(name for _, name in hk.HOOKS)
 
 
@@ -134,12 +134,12 @@ def test_malformed_settings_are_refused_not_overwritten(home: Path) -> None:
 
 
 def test_status_reports_each_hook(home: Path) -> None:
-    assert [e.registered for e in hk.status(home)] == [False, False, False]
+    assert [e.registered for e in hk.status(home)] == [False, False, False, False]
     hk.install(home)
     entries = hk.status(home)
-    assert [e.event for e in entries] == ["SessionStart", "UserPromptSubmit", "Stop"]
+    assert [e.event for e in entries] == ["SessionStart", "UserPromptSubmit", "PreCompact", "Stop"]
     assert all(e.bundled and e.executable for e in entries)
-    assert [e.registered for e in entries] == [True, False, True]
+    assert [e.registered for e in entries] == [True, False, True, True]
 
 
 def test_reachability_reports_a_path_the_hook_can_use() -> None:
@@ -292,3 +292,18 @@ def test_install_rewrites_a_backslash_registration(home: Path) -> None:
     assert "echo mine" in commands
     recap = [c for c in commands if "wiki-session-recap" in c]
     assert len(recap) == 1 and "\\" not in recap[0]
+
+
+def test_precompact_hook_asks_the_summary_to_keep_capture_candidates() -> None:
+    """Compaction drops findings before Stop can capture them; the hook's
+    stdout is summary instructions, so it must ask for them and never block."""
+    script = hk.hook_script("wiki-precompact-capture.sh")
+    run = lambda env: subprocess.run(  # noqa: E731
+        ["bash", str(script)], input='{"trigger": "auto"}', capture_output=True,
+        text=True, env={**os.environ, **env},
+    )
+    on = run({"WIKI_PRECOMPACT_CAPTURE": ""})
+    assert on.returncode == 0
+    assert "Wiki capture candidates" in on.stdout
+    off = run({"WIKI_PRECOMPACT_CAPTURE": "off"})
+    assert off.returncode == 0 and off.stdout == ""

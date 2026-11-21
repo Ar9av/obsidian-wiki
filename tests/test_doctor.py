@@ -543,3 +543,18 @@ def test_doctor_passes_the_hooks_check_once_installed(tmp_path: Path) -> None:
     assert check["status"] in ("pass", "warn")  # warn only if this box cannot reach the package
     if check["status"] == "warn":
         assert "reach" in check["detail"]
+
+
+def test_doctor_reports_what_session_start_injects(tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    vault = tmp_path / "vault"
+    _make_vault(vault)
+    _write_config(home, vault)
+    _install_all_skills(home)
+
+    proc = _run(home, "doctor", "--json", "--strict")
+
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["name"] == "session-context")
+    assert check["status"] == "info"
+    assert "tokens" in check["detail"]

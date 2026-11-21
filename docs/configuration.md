@@ -74,7 +74,7 @@ Two keys sit in the frontmatter of the root `index.md` rather than in a config f
 
 ![Session lifecycle](images/memory-session-lifecycle.png)
 
-Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks install`; check them with `hooks status` or `doctor`. `wiki-session-recap.sh` runs at SessionStart and injects the owner profile, open threads, and recent vault activity. `wiki-stop-capture.sh` runs at Stop and nudges a quick capture when the session changed anything. `wiki-prompt-recall.sh` is opt-in (`hooks install --only UserPromptSubmit`): it adds the few notes relevant to each prompt, or nothing.
+Two Claude Code hooks bracket a session. Register them with `obsidian-wiki hooks install`; check them with `hooks status` or `doctor`. `wiki-session-recap.sh` runs at SessionStart and injects the owner profile, open threads, and recent vault activity. `wiki-stop-capture.sh` runs at Stop and nudges a quick capture when the session changed anything. `wiki-precompact-capture.sh` runs at PreCompact and asks the compaction summary to keep capture candidates (`WIKI_PRECOMPACT_CAPTURE=off` disables it). `wiki-prompt-recall.sh` is opt-in (`hooks install --only UserPromptSubmit`): it adds the few notes relevant to each prompt, or nothing.
 
 | Variable | What it does | Default |
 |---|---|---|

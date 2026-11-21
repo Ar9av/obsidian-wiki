@@ -19,7 +19,7 @@ Running `obsidian-wiki` with no subcommand defaults to `setup`.
 | `info` | Show install paths, version, and resolved config |
 | `update-check` | Print one line if a newer release is on PyPI (cached; checks at most once a day) |
 | `list` | List the bundled skills |
-| `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section |
+| `doctor` | Health-check config, vault shape, bootstrap assets, and installed skills; with `--project`, also reports the code-understanding capability section. The `session-context` line estimates how many tokens the SessionStart hook injects |
 | `serve` | Self-host the vault: REST API, MCP over streamable HTTP at `/mcp/`, and the viewer at `/ui`; loopback unless `--host`, optional two-way git sync with `--sync-interval`. Needs the `[server]` extra and `WIKI_API_KEY` (see [Deployment](deployment.md)) |
 | `mcp` | Serve the vault's memory tools over stdio for an agent to launch; needs the `[server]` extra (see [Deployment](deployment.md#connect-an-agent-mcp)) |
 | `ui` | Open a local web viewer for the vault (pages, graph, insights, activity, memory, health, an inbox that feeds `_raw/`, AI answers over the vault, one-click skill runs, a vault switcher, and copy-paste MCP configs to connect any agent) on `127.0.0.1:3114`; needs the `[server]` extra (see [Deployment](deployment.md#web-viewer)) |
@@ -53,7 +53,7 @@ config separately, and rejects `--project`, `--project-only`, and `--remote`.
 
 ### Session hooks
 
-Two Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture.
+Claude Code hooks bracket a session: `wiki-session-recap.sh` at SessionStart injects the vault's memory, `wiki-stop-capture.sh` at Stop nudges a capture. `wiki-precompact-capture.sh` at PreCompact asks the compaction summary to keep a "Wiki capture candidates" list, so findings from before a compaction are still there when Stop nudges. It never blocks compaction; turn it off with `WIKI_PRECOMPACT_CAPTURE=off`.
 
 A third, `wiki-prompt-recall.sh` at UserPromptSubmit, is opt-in: it adds up to 4 relevant note links with their summaries (about 900 characters) to a prompt, and nothing when no note clearly matches. It runs `obsidian-wiki recall --hook`. `hooks install` never adds it; register it by name.
 
@@ -61,7 +61,7 @@ A third, `wiki-prompt-recall.sh` at UserPromptSubmit, is opt-in: it adds up to 4
 
 | Command | What it does |
 |---|---|
-| `hooks install` | Register both hooks; idempotent, appends without touching your other hooks |
+| `hooks install` | Register the SessionStart, PreCompact and Stop hooks; idempotent, appends without touching your other hooks |
 | `hooks install --only UserPromptSubmit` | Register the opt-in per-prompt recall hook |
 | `hooks uninstall` | Remove our entries and nothing else |
 | `hooks status` | Registered? Bundled? Executable? Can the hook reach the package? Exit 1 if not |

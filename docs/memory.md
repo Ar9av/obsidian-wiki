@@ -139,6 +139,10 @@ obsidian-wiki hooks install
 
 `wiki-stop-capture.sh` runs at Stop and nudges a `/wiki-capture --quick` when the session changed anything.
 
+`wiki-precompact-capture.sh` runs at PreCompact. Claude Code uses its output as instructions for the compaction summary, so the summary keeps a "Wiki capture candidates" list and the Stop capture still sees findings from before the compaction. It never blocks compaction. `WIKI_PRECOMPACT_CAPTURE=off` disables it.
+
+`doctor` reports a `session-context` line with the approximate token cost of what SessionStart injects.
+
 `wiki-prompt-recall.sh` is an opt-in third hook, at UserPromptSubmit. On each prompt it adds up to 4 note links with their summaries, or nothing when no note clearly matches, which is most of the time. A note counts only when at least two words of the prompt match its title, aliases, tags, or summary. It is not installed by default because it touches every turn:
 
 ```bash

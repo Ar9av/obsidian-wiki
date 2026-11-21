@@ -1057,12 +1057,33 @@ def run_doctor(*, vault_override: str | None = None, project_dir: str | None = N
                 else:
                     _doctor_add(
                         checks, name="session-hooks", status="pass",
-                        detail="SessionStart and Stop hooks registered and reachable", hint="",
+                        detail="session hooks registered and reachable", hint="",
                     )
             except Exception as exc:
                 _doctor_add(
                     checks, name="session-hooks", status="warn",
                     detail=f"could not inspect hooks: {exc}", hint="run: obsidian-wiki hooks status",
+                )
+
+            # What the SessionStart hook costs every session, so a growing
+            # profile or thread list shows up before it crowds the context.
+            try:
+                recap_words = int(os.environ.get("WIKI_RECAP_MAX_WORDS") or 350)
+                recap = _mem.build_recap(vault, max_words=recap_words)
+                # ponytail: chars/4 token estimate, no tokenizer dependency.
+                tokens = len(recap) // 4
+                _doctor_add(
+                    checks, name="session-context", status="info",
+                    detail=f"SessionStart injects ~{tokens} tokens "
+                           f"({len(recap.split())}/{recap_words} words) of vault memory",
+                    hint="trim with: obsidian-wiki memory profile forget / memory todo prune"
+                         if len(recap.split()) >= recap_words * 0.9 else "",
+                )
+            except Exception as exc:
+                _doctor_add(
+                    checks, name="session-context", status="warn",
+                    detail=f"could not render the session recap: {exc}",
+                    hint="run: obsidian-wiki memory recap",
                 )
 
             manifest_path = vault / ".manifest.json"
@@ -3991,12 +4012,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     hk = sub.add_parser(
         "hooks",
-        help="register the SessionStart (memory recap) and Stop (capture) hooks for Claude Code",
+        help="register the SessionStart (memory recap), PreCompact and Stop (capture) hooks for Claude Code",
     )
     hk.add_argument("hooks_action", choices=["install", "uninstall", "status"], help="what to do")
     hk.add_argument(
         "--only",
-        choices=["SessionStart", "Stop", "UserPromptSubmit"],
+        choices=["SessionStart", "Stop", "UserPromptSubmit", "PreCompact"],
         help="act on one hook only; UserPromptSubmit (per-prompt recall) is opt-in and installs only this way",
     )
     hk.add_argument("--json", action="store_true", help="emit machine-readable JSON")
