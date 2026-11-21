@@ -3,7 +3,8 @@
 Two hooks bracket a session: ``wiki-session-recap.sh`` at SessionStart injects
 the vault's memory, ``wiki-stop-capture.sh`` at Stop nudges a capture. An
 opt-in third, ``wiki-prompt-recall.sh`` at UserPromptSubmit, adds the few notes
-relevant to each prompt. They only take effect once registered in
+relevant to each prompt. ``wiki-precompact-capture.sh`` at PreCompact asks the
+compaction summary to keep capture-worthy findings, so Stop can still save them. They only take effect once registered in
 ``~/.claude/settings.json``.
 
 Until now that registration was a prose procedure in ``wiki-setup`` — locate
@@ -28,6 +29,7 @@ from typing import Optional
 HOOKS = (
     ("SessionStart", "wiki-session-recap.sh"),
     ("UserPromptSubmit", "wiki-prompt-recall.sh"),
+    ("PreCompact", "wiki-precompact-capture.sh"),
     ("Stop", "wiki-stop-capture.sh"),
 )
 #: Installed only when asked for by name (``--only``). Per-prompt recall adds
