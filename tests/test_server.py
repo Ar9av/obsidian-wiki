@@ -497,6 +497,16 @@ def test_settings_keep_the_key_out_of_the_browser(client, ui_config, monkeypatch
     assert not client.post("/v1/settings", json={"anthropic_api_key": ""}).json()["anthropic_key_set"]
 
 
+def test_litellm_settings_keep_the_key_out_of_the_browser(client, ui_config, monkeypatch):
+    saved = client.post("/v1/settings", json={
+        "provider": "litellm", "model": "gemini/gemini-2.5-flash",
+        "litellm_api_base": "http://localhost:4000", "litellm_api_key": "sk-proxy-secret-5678",
+    }).json()
+    assert saved["provider"] == "litellm" and saved["litellm_key_hint"] == "…5678"
+    assert saved["litellm_api_base"] == "http://localhost:4000"
+    assert "secret" not in json.dumps(client.get("/v1/settings").json())
+
+
 def test_ask_says_so_when_no_model_is_available(client, ui_config, monkeypatch):
     from obsidian_wiki import ui_tools
 

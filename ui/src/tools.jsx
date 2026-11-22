@@ -298,7 +298,7 @@ export function AskView({ params }) {
         <Stack spacing="4" maxW="4xl">
           {!s.active_provider && (
             <Alert status="warning" borderRadius="md"><AlertIcon />
-              <AlertDescription fontSize="sm">No model is set up. Install Claude Code to use your Claude subscription, or <Link href="#/settings" textDecoration="underline">add an Anthropic API key</Link>.</AlertDescription>
+              <AlertDescription fontSize="sm">No model is set up. Install Claude Code to use your Claude subscription, or <Link href="#/settings" textDecoration="underline">add an Anthropic API key or a LiteLLM model</Link>.</AlertDescription>
             </Alert>
           )}
           <form onSubmit={(e) => { e.preventDefault(); askIt(q) }}>
@@ -309,7 +309,7 @@ export function AskView({ params }) {
               </InputGroup>
               <HStack fontSize="sm" color="muted" spacing="4">
                 <HStack as="label" spacing="2"><Switch size="sm" colorScheme="purple" isChecked={useWeb} onChange={(e) => setWeb(e.target.checked)} /><Globe size={14} /><span>Search the web too</span></HStack>
-                <Text ms="auto" fontSize="xs">via {s.active_provider === 'claude-cli' ? 'Claude Code (your subscription)' : s.active_provider === 'anthropic' ? 'Anthropic API key' : '—'}</Text>
+                <Text ms="auto" fontSize="xs">via {s.active_provider === 'claude-cli' ? 'Claude Code (your subscription)' : s.active_provider === 'anthropic' ? 'Anthropic API key' : s.active_provider === 'litellm' ? `LiteLLM (${s.model})` : '—'}</Text>
               </HStack>
             </Stack>
           </form>
@@ -412,6 +412,7 @@ export function SettingsView() {
   const [tick, setTick] = useState(0)
   const st = useFetch('/v1/settings', [tick])
   const [key, setKey] = useState('')
+  const [litellmKey, setLitellmKey] = useState('')
   const toast = useToast()
   const save = async (patch, message = 'Saved') => {
     try { await api.post('/v1/settings', patch); setTick((t) => t + 1); toast({ status: 'success', title: message }) } catch (e) { toast({ status: 'error', title: 'Not saved', description: e.message }) }
@@ -433,12 +434,14 @@ export function SettingsView() {
                   <option value="auto">Automatic: Claude Code if installed, else the API key</option>
                   <option value="claude-cli">Claude Code CLI (your Claude subscription)</option>
                   <option value="anthropic">Anthropic API key</option>
+                  <option value="litellm">LiteLLM (OpenAI, Gemini, Bedrock, Ollama, a LiteLLM proxy, …)</option>
                 </Select>
-                <FormHelperText>In use now: <b>{s.active_provider === 'claude-cli' ? 'Claude Code' : s.active_provider === 'anthropic' ? 'Anthropic API' : 'none'}</b>. Agent jobs (ingest, lint, cross-link) always need Claude Code, because they edit files.</FormHelperText>
+                <FormHelperText>In use now: <b>{s.active_provider === 'claude-cli' ? 'Claude Code' : s.active_provider === 'anthropic' ? 'Anthropic API' : s.active_provider === 'litellm' ? 'LiteLLM' : 'none'}</b>. Agent jobs (ingest, lint, cross-link) always need Claude Code, because they edit files.</FormHelperText>
               </FormControl>
               <HStack fontSize="sm" spacing="6" wrap="wrap">
                 <HStack><Text>Claude Code</Text>{yes(s.claude_cli, 'installed')}</HStack>
                 <HStack><Text>Anthropic SDK</Text>{yes(s.sdk_installed, 'installed')}</HStack>
+                <HStack><Text>LiteLLM</Text>{yes(s.litellm_installed, 'installed')}</HStack>
               </HStack>
               <FormControl>
                 <FormLabel fontSize="sm">Anthropic API key</FormLabel>
@@ -455,8 +458,28 @@ export function SettingsView() {
                 <FormLabel fontSize="sm">Model</FormLabel>
                 <Input size="sm" defaultValue={s.model} placeholder={`Default: ${s.default_api_model} for the API, your Claude Code default for the CLI`}
                   onBlur={(e) => e.target.value !== s.model && save({ model: e.target.value })} />
-                <FormHelperText>Optional. A model ID such as claude-sonnet-5-5, or a Claude Code alias such as sonnet or opus.</FormHelperText>
+                <FormHelperText>{s.provider === 'litellm'
+                  ? <>Required for LiteLLM: a LiteLLM model ID such as gemini/gemini-2.5-flash, bedrock/…, or ollama/qwen3. Keys come from each provider's usual environment variables unless set below.</>
+                  : 'Optional. A model ID such as claude-sonnet-5-5, or a Claude Code alias such as sonnet or opus.'}</FormHelperText>
               </FormControl>
+              {s.provider === 'litellm' && (<>
+                <FormControl>
+                  <FormLabel fontSize="sm">LiteLLM proxy URL</FormLabel>
+                  <Input size="sm" defaultValue={s.litellm_api_base} placeholder="Optional, e.g. http://localhost:4000 (use litellm_proxy/<model> as the model)"
+                    onBlur={(e) => e.target.value !== s.litellm_api_base && save({ litellm_api_base: e.target.value })} />
+                  <FormHelperText>Leave empty to call providers directly.{!s.litellm_installed && ' Install the litellm extra: pip install "obsidian-wiki[litellm]".'}</FormHelperText>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm">LiteLLM API key</FormLabel>
+                  <form onSubmit={(e) => { e.preventDefault(); if (litellmKey.trim()) save({ litellm_api_key: litellmKey.trim() }, 'Key saved').then(() => setLitellmKey('')) }}>
+                    <HStack>
+                      <Input size="sm" type="password" autoComplete="off" placeholder={s.litellm_key_set ? `Saved (${s.litellm_key_hint || 'set'})` : 'Optional: a proxy key or a provider key'} value={litellmKey} onChange={(e) => setLitellmKey(e.target.value)} />
+                      <Button size="sm" type="submit" colorScheme="purple" isDisabled={!litellmKey.trim()}>Save</Button>
+                      {s.litellm_key_set && <Button size="sm" variant="ghost" colorScheme="red" onClick={() => save({ litellm_api_key: '' }, 'Key removed')}>Remove</Button>}
+                    </HStack>
+                  </form>
+                </FormControl>
+              </>)}
               <FormControl display="flex" alignItems="center" gap="3">
                 <Switch colorScheme="purple" isChecked={s.web} onChange={(e) => save({ web: e.target.checked })} />
                 <FormLabel fontSize="sm" m="0">Search the web from Ask by default</FormLabel>
