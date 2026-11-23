@@ -5,6 +5,7 @@ litellm and openai are stubbed, so these run without the optional extra.
 
 from __future__ import annotations
 
+import os
 import sys
 import types
 from types import SimpleNamespace
@@ -102,7 +103,8 @@ def test_settings_store_the_litellm_key_without_exposing_it(fake_litellm, settin
     assert shown["litellm_api_base"] == "http://localhost:4000"
     assert shown["litellm_key_set"] and shown["litellm_key_hint"] == "…9876"
     assert "secret" not in str(shown)
-    assert (settings_dir / "ui-settings.json").stat().st_mode & 0o077 == 0
+    if os.name != "nt":  # Windows has no group/other permission bits to check
+        assert (settings_dir / "ui-settings.json").stat().st_mode & 0o077 == 0
     assert not ui_tools.save_settings({"litellm_api_key": ""})["litellm_key_set"]
 
 

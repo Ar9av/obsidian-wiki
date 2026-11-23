@@ -9,6 +9,7 @@ profile and todo tables round-trip content containing table syntax.
 from __future__ import annotations
 
 import concurrent.futures
+import os
 import re
 import subprocess
 import sys
@@ -191,14 +192,18 @@ def test_index_round_trips_names_a_wikilink_cannot_carry(vault: Path) -> None:
     assert result.changed is False
 
 
+_NO_BACKSLASH_NAMES = pytest.mark.skipif(os.name == "nt", reason="a backslash is a path separator on Windows")
+
+
 @pytest.mark.parametrize(
     ("path", "link_format"),
     [
         ("references/[通用]绩效_协作(1-5月)_20260526.md", "wikilink"),
         ("references/[Z2]3.2.3--JL1-017-012(v0) 设计开发验证确认清单（天津Z2）0611.md", "wikilink"),
         ("references/report(1-5).md", "markdown"),
-        ("references/back\\slash.md", "markdown"),
-        ("references/a b\\c(1).md", "markdown"),
+        # A backslash is a path separator on Windows, so these names can't exist there.
+        pytest.param("references/back\\slash.md", "markdown", marks=_NO_BACKSLASH_NAMES),
+        pytest.param("references/a b\\c(1).md", "markdown", marks=_NO_BACKSLASH_NAMES),
     ],
 )
 def test_index_round_trips_parentheses_in_a_markdown_link_target(vault: Path, path: str, link_format: str) -> None:
