@@ -568,3 +568,5 @@ def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkey
     assert "memory_sync" in server.mcp.instructions
     assert "memory_recap" in server.mcp_read.instructions
     assert "memory_sync" not in server.mcp_read.instructions
+    assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
+    assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions
