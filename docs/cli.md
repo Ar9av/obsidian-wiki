@@ -556,7 +556,7 @@ Staleness is **reported, never enforced**. An open item untouched for 30 days is
 obsidian-wiki facts add "40 paying customers" --source stripe-dashboard --as-of 2026-11-01
 obsidian-wiki facts add "First SOC 2 certified agent firewall" --source "audit report 2026-10"
 obsidian-wiki facts list --stale-days 90          # flag claims last confirmed over 90 days ago
-obsidian-wiki facts retire f2 --reason "ARR passed $2M"
+obsidian-wiki facts retire f2 --reason 'ARR passed $2M'
 obsidian-wiki facts check _readouts/launch.md      # exit 2 on an unbacked claim
 cat draft.md | obsidian-wiki facts check - --json
 ```
