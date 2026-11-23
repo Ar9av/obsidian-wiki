@@ -560,6 +560,17 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     assert "--strict-mcp-config" in cmd
 
 
+def test_graph_lists_links_resting_on_inferred_or_ambiguous_claims(client, tmp_path):
+    _page(tmp_path, "concepts/a.md",
+          "---\ntitle: a\n---\nStated: [[b]].\n\n- Guess: [[c]] ^[inferred]\n- Dispute: [[d]] ^[ambiguous]\n")
+    for name in "bcd":
+        _page(tmp_path, f"concepts/{name}.md")
+    data = client.get("/v1/graph").json()
+    assert ["a", "c", "inferred"] in data["weak"] and ["a", "d", "ambiguous"] in data["weak"]
+    assert not any(w[1] == "b" for w in data["weak"])
+    assert ["a", "b"] in data["edges"]  # edges keep their shape; weak is additive
+
+
 def test_search_reports_its_scope_and_can_be_limited_to_a_folder(client, tmp_path):
     for rel, name in (("projects/acme/zebra-plan.md", "Zebra Plan"), ("concepts/zebra-facts.md", "Zebra Facts"),
                       ("projects/acmeish/zebra-other.md", "Zebra Other")):
