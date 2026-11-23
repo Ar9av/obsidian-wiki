@@ -186,8 +186,8 @@ Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
 obsidian-wiki memory sync HERMES_HISTORY_INGEST \
-  memories=<memories> sessions=<sessions> pages_updated=<pages_updated> \
-  pages_created=<pages_created> mode=<mode> \
+  memories='<memories>' sessions='<sessions>' pages_updated='<pages_updated>' \
+  pages_created='<pages_created>' mode='<mode>' \
   --takeaways "Ingested 42 Hermes memories and 7 sessions; dominant themes: reasoning strategies, tool use patterns." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

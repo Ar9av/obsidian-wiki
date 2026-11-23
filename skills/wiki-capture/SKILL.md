@@ -324,7 +324,7 @@ One locked call updates all three:
 
 ```bash
 obsidian-wiki memory sync CAPTURE \
-  type=<type> page='<path>' title='<title>' \
+  type='<type>' page='<path>' title='<title>' \
   --takeaways '<what this capture changes about the picture, if anything>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

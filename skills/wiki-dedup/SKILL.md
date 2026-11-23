@@ -259,9 +259,9 @@ One locked call writes the log line and reconciles the index and hot cache:
 
 ```bash
 obsidian-wiki memory sync DEDUP \
-  mode=<audit|merge|auto-merge> pages_scanned=<N> pairs_found=<M> \
-  merged=<X> kept_separate=<Y> needs_review=<Z> \
-  wikilinks_rewritten=<W> \
+  mode='<audit|merge|auto-merge>' pages_scanned='<N>' pairs_found='<M>' \
+  merged='<X>' kept_separate='<Y>' needs_review='<Z>' \
+  wikilinks_rewritten='<W>' \
   --takeaways "Merged N duplicate pairs; canonical pages updated." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
