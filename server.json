@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md",
-  "version": "2026.11.7",
+  "version": "2026.11.8",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "obsidian-wiki",
-      "version": "2026.11.7",
+      "version": "2026.11.8",
       "runtimeHint": "uvx",
       "transport": { "type": "stdio" },
       "runtimeArguments": [
@@ -35,7 +35,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/ar9av/obsidian-wiki:v2026.11.7",
+      "identifier": "ghcr.io/ar9av/obsidian-wiki:v2026.11.8",
       "transport": { "type": "stdio" },
       "runtimeArguments": [
         {
