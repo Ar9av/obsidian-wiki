@@ -558,3 +558,34 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     cmd = seen["cmd"]
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
+
+
+def _body(title, **kw):
+    return {"title": title, "category": "concepts", "content": f"about {title}", **kw}
+
+
+def test_bulk_write_writes_every_page(client, tmp_path):
+    out = client.post("/v1/pages/bulk", json=[_body("Alpha"), _body("Beta", category="references")]).json()
+    assert out["count"] == 2
+    assert (tmp_path / "concepts/alpha.md").is_file() and (tmp_path / "references/beta.md").is_file()
+    assert (tmp_path / "log.md").read_text().count("API_WRITE") == 2
+
+
+def test_bulk_write_rejects_the_whole_batch_before_writing_anything(client, tmp_path):
+    client.post("/v1/pages", json=_body("Taken"))
+    for batch, status in (
+        ([_body("Fresh"), _body("Taken", upsert=False)], 409),  # exists and upsert is off
+        ([_body("Same"), _body("Same")], 400),                   # duplicate in the batch
+        ([], 400),
+        ([_body(f"P{i}") for i in range(51)], 400),              # over the cap
+    ):
+        assert client.post("/v1/pages/bulk", json=batch).status_code == status
+    assert not (tmp_path / "concepts/fresh.md").exists() and not (tmp_path / "concepts/same.md").exists()
+
+
+def test_bulk_write_is_a_write_tool_only(client):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    names = lambda m: {t.name for t in anyio.run(m.list_tools)}
+    assert "memory_write_many" in names(server.mcp) and "memory_write_many" not in names(server.mcp_read)

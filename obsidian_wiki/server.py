@@ -247,6 +247,36 @@ class PageWrite(BaseModel):
     upsert: bool = True
 
 
+MAX_BULK_PAGES = 50
+
+
+def write_pages(pages: list[PageWrite]) -> dict[str, Any]:
+    """Write several pages in one call. Everything is checked before anything is written.
+
+    A bad path, a duplicate in the batch, or an `upsert=false` page that already
+    exists rejects the whole batch with nothing written. Run `memory_sync` once after.
+    """
+    if not pages or len(pages) > MAX_BULK_PAGES:
+        raise HTTPException(400, f"send 1 to {MAX_BULK_PAGES} pages per call")
+    plan, seen = [], set()
+    for page in pages:
+        rel = f"{_category_slug(page.category)}/{_slug(page.title)}.md"
+        target = _resolve(rel)
+        if rel in seen:
+            raise HTTPException(400, f"two pages in this batch write {rel}")
+        seen.add(rel)
+        if target.exists() and not page.upsert:
+            raise HTTPException(409, f"page already exists: {rel}")
+        plan.append((rel, target, page))
+    with _VAULT_WRITE_LOCK:
+        written = [
+            _write_page_locked(rel, target, page.title, page.category, page.content,
+                               tags=page.tags, sources=page.sources, summary=page.summary, upsert=page.upsert)
+            for rel, target, page in plan
+        ]
+    return {"written": written, "count": len(written)}
+
+
 class PackRequest(BaseModel):
     topic: str = ""
     budget: int = 8000
@@ -381,6 +411,7 @@ _TOOLS = (
     ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
+    ("memory_write_many", write_pages, "Write up to 50 pages in one call; all are checked first, so a bad one rejects the batch. Run memory_sync once after.", _OVERWRITES, False),
     ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
     ("memory_recap", memory_recap, "Owner profile, open threads, and recent activity — call at session start.", _READS, True),
     ("memory_profile", memory_profile, "Read or update durable facts about a person (list|set|forget); user_id scopes them.", _OVERWRITES, False),
@@ -582,6 +613,11 @@ def http_write(body: PageWrite) -> dict[str, Any]:
         body.title, body.category, body.content,
         tags=body.tags, sources=body.sources, summary=body.summary, upsert=body.upsert,
     )
+
+
+@app.post("/v1/pages/bulk", dependencies=[Depends(require_write_key)])
+def http_write_bulk(body: list[PageWrite]) -> dict[str, Any]:
+    return write_pages(body)
 
 
 @app.post("/v1/context-pack", dependencies=[Depends(require_key)])

@@ -313,7 +313,9 @@ server only your machine can reach, bridge it into `claude_desktop_config.json` 
     "env": { "WIKI_AUTH": "Bearer <your key>" } } } }
 ```
 
-Eight tools. Four for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+Nine tools. Five for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_write_many`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+
+`memory_write_many` (also `POST /v1/pages/bulk`) takes up to 50 pages in one call, for an agent saving a whole ingest at once. It checks every page first — bad path, two pages with the same target, or an `upsert: false` page that already exists — and rejects the whole batch with nothing written. Call `memory_sync` once afterward instead of once per page.
 
 `memory_recap` is the one to call at session start: it returns the owner profile, open threads, and recent activity as a single block, optionally scoped to a `project`.
 
