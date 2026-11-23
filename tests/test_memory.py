@@ -197,6 +197,8 @@ def test_index_round_trips_names_a_wikilink_cannot_carry(vault: Path) -> None:
         ("references/[通用]绩效_协作(1-5月)_20260526.md", "wikilink"),
         ("references/[Z2]3.2.3--JL1-017-012(v0) 设计开发验证确认清单（天津Z2）0611.md", "wikilink"),
         ("references/report(1-5).md", "markdown"),
+        ("references/back\\slash.md", "markdown"),
+        ("references/a b\\c(1).md", "markdown"),
     ],
 )
 def test_index_round_trips_parentheses_in_a_markdown_link_target(vault: Path, path: str, link_format: str) -> None:
@@ -205,7 +207,7 @@ def test_index_round_trips_parentheses_in_a_markdown_link_target(vault: Path, pa
     _page(vault, path, title="Merged report")
     mem.rebuild_index(vault, link_format=link_format)
 
-    assert f"[Merged report](<{path}>)" in (vault / "index.md").read_text(encoding="utf-8")
+    assert f"[Merged report]({mem._markdown_link_target(path)})" in (vault / "index.md").read_text(encoding="utf-8")
     result = mem.rebuild_index(vault, link_format=link_format, write=False)
 
     assert result.added == ()

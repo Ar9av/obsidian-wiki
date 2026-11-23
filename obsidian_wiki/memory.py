@@ -506,9 +506,10 @@ def _markdown_link_target(path: str) -> str:
     space, so such paths go in ``<...>``. Plain paths stay bare, so existing
     indexes don't churn.
     """
+    escaped = path.replace("\\", "\\\\")
     if not any(c in path for c in " ()<>"):
-        return path
-    return "<" + path.replace("<", r"\<").replace(">", r"\>") + ">"
+        return escaped
+    return "<" + escaped.replace("<", r"\<").replace(">", r"\>") + ">"
 
 
 def _index_entry(page: PageInfo, link_format: str, *, hub_pages: Optional[int] = None) -> str:
