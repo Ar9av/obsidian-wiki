@@ -1460,7 +1460,10 @@ def cmd_graph_analyse(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
 
-    if args.path or args.around:
+    if args.links:
+        from obsidian_wiki.link_provenance import link_provenance, summarize
+        result = summarize(link_provenance(vault), args.links)
+    elif args.path or args.around:
         # Query modes: no full analysis, just the graph walk.
         outgoing, _ = ga.parse_vault_graph(vault)
         if args.path:
@@ -3584,6 +3587,8 @@ def build_parser() -> argparse.ArgumentParser:
     ga.add_argument("--depth", type=int, default=2, help="hops for --around (default: 2)")
     ga.add_argument("--direction", choices=["both", "in", "out"], default="both",
                     help="link direction for --around / --path (default: both)")
+    ga.add_argument("--links", nargs="?", const="all", choices=["all", "extracted", "inferred", "ambiguous"],
+                    help="list page links by provenance (from the ^[inferred]/^[ambiguous] markers; query mode)")
     ga.add_argument("--diff-against", metavar="FILE",
                     help="previous _insights.md (GRAPH_SNAPSHOT comment) or snapshot JSON to diff against")
     ga.add_argument("--snapshot", action="store_true",

@@ -110,7 +110,7 @@ but not edit it (a CI job, a shared team bot, a hosted product you're trying out
 Set `WIKI_READ_KEY` without `WIKI_API_KEY` and the whole server is read-only.
 
 Every tool also carries MCP annotations: `readOnlyHint` on the reads, and `destructiveHint` on
-`memory_write` and `memory_profile`, which can overwrite or forget. A client can use them to
+`memory_write`, `memory_write_many` and `memory_profile`, which can overwrite or forget. A client can use them to
 auto-approve reads and ask before writes.
 
 ## Sign in with OAuth
@@ -209,7 +209,7 @@ and the image's `io.modelcontextprotocol.server.name` label.
 
 `obsidian-wiki ui` opens a browser viewer for the resolved vault on `http://127.0.0.1:3114/ui`: an overview, page browser with search, rendered pages with backlinks, the link graph, the activity log, profile facts and open threads (add, close, forget), the hot cache, and the health, staging and sources views. It binds to loopback only and needs no key unless `WIKI_API_KEY` is set. `--port` and `--vault` override the defaults; `--no-open` skips the browser tab.
 
-**Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The page also gives you instructions to paste into `AGENTS.md` or a system prompt, so the agent actually calls `memory_recap` at session start and saves findings back.
+**Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The server also sends usage instructions to every MCP client when it connects (the read-only server sends only the read half), so most agents call `memory_recap` at session start without any setup. For a client that ignores server instructions, the page gives you the same text to paste into `AGENTS.md` or a system prompt.
 
 ### Working from the viewer
 
@@ -333,7 +333,7 @@ For in-process use, `from obsidian_wiki import Memory` skips the server entirely
 
 ## REST
 
-Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not. With the read-only key, the `POST` routes that write (`/v1/pages`, `/v1/memory/*`) answer **403**; `/v1/context-pack` only reads and stays open to it.
+Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not. With the read-only key, the `POST` routes that write (`/v1/pages`, `/v1/pages/bulk`, `/v1/memory/*`) answer **403**; `/v1/context-pack` only reads and stays open to it.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -341,6 +341,7 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/search?q=&limit=` | Ranked pages with summaries, from the same GraphRAG index the `wiki-query` skill uses |
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
+| `POST` | `/v1/pages/bulk` | A JSON array of up to 50 of those objects; all are checked first, so one bad page rejects the batch with nothing written |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
 | `GET` | `/v1/memory/recap?project=&max_words=&user_id=` | Owner profile, open threads, recent activity |
 | `GET` | `/v1/memory/profile?user_id=` | Durable facts about a person |

@@ -589,3 +589,15 @@ def test_bulk_write_is_a_write_tool_only(client):
     server = sys.modules["obsidian_wiki.server"]
     names = lambda m: {t.name for t in anyio.run(m.list_tools)}
     assert "memory_write_many" in names(server.mcp) and "memory_write_many" not in names(server.mcp_read)
+
+
+def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkeypatch):
+    monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    assert "memory_recap" in server.mcp.instructions
+    assert "memory_sync" in server.mcp.instructions
+    assert "memory_recap" in server.mcp_read.instructions
+    assert "memory_sync" not in server.mcp_read.instructions
+    assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
+    assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions
