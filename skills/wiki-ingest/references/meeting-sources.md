@@ -157,7 +157,7 @@ the owner to accept:
 
 ```
 Candidate facts (not added; run the ones that are right):
-  obsidian-wiki facts add "Pilot pricing is $49 per seat per month" --source "meeting:wispr/<id>" --as-of 2026-11-10
+  obsidian-wiki facts add 'Pilot pricing is $49 per seat per month' --source 'meeting:wispr/<id>' --as-of 2026-11-10
 ```
 
 Skip this step if `obsidian-wiki facts` isn't available in this install.
@@ -173,7 +173,7 @@ obsidian-wiki snapshots set journal/meetings/2026-11-10-acme-discovery-call.md -
 obsidian-wiki cache-update "$OBSIDIAN_VAULT_PATH" "$ARCHIVED" --pages journal/meetings/2026-11-10-acme-discovery-call.md entities/acme.md
 obsidian-wiki cache-update "$OBSIDIAN_VAULT_PATH" "$ARCHIVED" --key "meeting:wispr/<meeting_id>" \
   --pages journal/meetings/2026-11-10-acme-discovery-call.md entities/acme.md
-obsidian-wiki memory sync INGEST_MEETING source="meeting:wispr/<meeting_id>" \
+obsidian-wiki memory sync INGEST_MEETING source='meeting:wispr/<meeting_id>' \
   pages_created=N pages_updated=M todos_added=T candidate_facts=F
 ```
 

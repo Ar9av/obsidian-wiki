@@ -120,7 +120,7 @@ After a narration attempt that reaches retrieval, append one `WIKI_NARRATE` even
 
 ```bash
 obsidian-wiki memory log WIKI_NARRATE \
-  topic="<topic>" voice=<voice> result_pages=<N> \
+  topic='<topic>' voice=<voice> result_pages=<N> \
   mode=<normal|filtered> saved=<true|false> \
   outcome=<success|no_match|write_failed>
 ```
@@ -131,7 +131,7 @@ This is the **only** write a narration without `--save` may perform. Do not touc
   do not create a readout or change `hot.md`.
 - After a successful `--save` write, append the event with `saved=true`, then refresh
   the hot cache with a one-line takeaway naming the topic, voice, cited-page count, and
-  saved readout path: `obsidian-wiki memory hot --takeaways "<line>"`. `hot.md` changes
+  saved readout path: `obsidian-wiki memory hot --takeaways '<line>'`. `hot.md` changes
   only after a successful save, and only through that command.
 - If the readout write fails after drafting, return the completed readout in
   conversation, report that saving failed, append a `WIKI_NARRATE` event with

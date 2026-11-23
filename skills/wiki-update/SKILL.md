@@ -230,7 +230,7 @@ If this project is an ongoing focus, record the thread so the next session picks
 it up:
 
 ```bash
-obsidian-wiki memory todo add "<the open thread>" --origin projects/<project-name>.md
+obsidian-wiki memory todo add '<the open thread>' --origin projects/<project-name>.md
 ```
 
 See `skills/llm-wiki/references/MEMORY.md` for the full procedure.
