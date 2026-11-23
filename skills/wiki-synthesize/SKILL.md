@@ -155,7 +155,7 @@ obsidian-wiki memory sync WIKI_SYNTHESIZE \
 ```
 
 Open questions the synthesis surfaced are threads, not takeaways — record each one:
-`obsidian-wiki memory todo add "<question>" --origin synthesis/<page>.md`.
+`obsidian-wiki memory todo add '<question>' --origin synthesis/<page>.md`.
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
 

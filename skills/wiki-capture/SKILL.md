@@ -275,7 +275,7 @@ about how the user works — their stack, their conventions, their constraints,
 their timezone — record it:
 
 ```bash
-obsidian-wiki memory profile set <key> "<value>" --confidence 0.85 --source "session:<date>"
+obsidian-wiki memory profile set <key> '<value>' --confidence 0.85 --source 'session:<date>'
 ```
 
 Apply the same KEEP/SKIP discipline as Step 1, and one extra rule that matters more:
@@ -299,7 +299,7 @@ Apply the same KEEP/SKIP discipline as Step 1, and one extra rule that matters m
 session picks it up:
 
 ```bash
-obsidian-wiki memory todo add "<the open thread>" --origin "<page or project>"
+obsidian-wiki memory todo add '<the open thread>' --origin '<page or project>'
 ```
 
 Re-adding an open thread with the same text touches it rather than duplicating,
@@ -324,8 +324,8 @@ One locked call updates all three:
 
 ```bash
 obsidian-wiki memory sync CAPTURE \
-  type=<type> page="<path>" title="<title>" \
-  --takeaways "<what this capture changes about the picture, if anything>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
+  type=<type> page='<path>' title='<title>' \
+  --takeaways '<what this capture changes about the picture, if anything>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — see
