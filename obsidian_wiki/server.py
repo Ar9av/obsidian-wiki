@@ -379,7 +379,7 @@ _EDITS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_worl
 
 #: (name, function, description, annotations, read-only?)
 _TOOLS = (
-    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
+    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries and a scope block; pass path_prefix (e.g. projects/acme) to search one folder.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
     ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
@@ -390,8 +390,27 @@ _TOOLS = (
 )
 
 
+# Same guidance as AGENT_INSTRUCTIONS in ui/src/lib.js (the paste-into-AGENTS.md text
+# the viewer shows): keep the two in step. Read-only gets only the read half.
+_INSTRUCTIONS_READ = (
+    "A markdown knowledge vault. At the start of a session call memory_recap (pass `project` when "
+    "working in a repo) and treat the result as background about the owner and their open work. "
+    "Before answering anything about past work, decisions, or notes, call memory_search, then "
+    "memory_read the pages you need, and cite page paths. memory_context_pack gives a token-bounded "
+    "bundle on one topic. Search is lexical, so try the words the page would use."
+)
+_INSTRUCTIONS_WRITE = (
+    _INSTRUCTIONS_READ
+    + " Before writing, search for an existing page and update it rather than adding a duplicate. "
+    "When a session produces a reusable finding (a fix, a gotcha, a decision and why), save it with "
+    "memory_write using category '_raw', then call memory_sync once to refresh index.md and hot.md. "
+    "Record stable facts about the owner with memory_profile (action set) only when they state them; "
+    "track unfinished work with memory_todo. Never write secrets or credentials to memory."
+)
+
+
 def _build_mcp(read_only: bool) -> MCPServer:
-    server = MCPServer("obsidian-wiki")
+    server = MCPServer("obsidian-wiki", instructions=_INSTRUCTIONS_READ if read_only else _INSTRUCTIONS_WRITE)
     for name, fn, description, annotations, reads in _TOOLS:
         if reads or not read_only:
             server.tool(name=name, description=description, annotations=annotations)(fn)

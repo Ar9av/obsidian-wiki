@@ -234,9 +234,9 @@ One locked call. The index is reconciled from the pages now on disk, so every cr
 
 ```bash
 obsidian-wiki memory sync IMPORT \
-  source="<bundle path>" \
+  source='<bundle path>' \
   pages_created=<N> pages_skipped=<K> pages_merged=<M> \
-  --takeaways "Imported <bundle>: <what it adds to the picture>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
+  --takeaways 'Imported <bundle>: <what it adds to the picture>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Omit `--takeaways` if the import does not shift the overall picture; the previous takeaways carry across. Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.

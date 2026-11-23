@@ -618,6 +618,10 @@ def query(
         }
 
     answer_type, terms = classify_query(question)
+    # Hubs, bridges, impact and path questions walk the whole graph, so with a folder
+    # scope they would hand back pages from outside it. Scoped queries are ranked search only.
+    if prefix and answer_type != "direct":
+        answer_type = "direct"
 
     # Event-time filter. Pages whose claims no longer hold drop out of
     # retrieval but stay in the graph, so nothing is lost and `--as-of` can
@@ -633,15 +637,17 @@ def query(
         except clock.TimezoneError:
             tz = None  # a typo'd `timezone:` is lint's to report; retrieval keeps answering on UTC
         when = parse_date(clock.today(tz))
-    retrievable = index if include_historical else current_pages(index, when)
-    if prefix:  # a folder, matched on a path boundary so `projects/a` never matches `projects/ab`
-        retrievable = {s: e for s, e in retrievable.items() if e["path"] == prefix or e["path"].startswith(prefix + "/")}
+    current = index if include_historical else current_pages(index, when)
+    # The temporal counts describe the whole vault; the folder scope narrows only what is ranked.
     temporal = {
         "as_of": as_of_date.isoformat() if as_of_date else None,
         "include_historical": include_historical,
-        "retrievable": len(retrievable),
-        "excluded_historical": len(index) - len(retrievable),
+        "retrievable": len(current),
+        "excluded_historical": len(index) - len(current),
     }
+    retrievable = current
+    if prefix:  # a folder, matched on a path boundary so `projects/a` never matches `projects/ab`
+        retrievable = {s: e for s, e in current.items() if e["path"] == prefix or e["path"].startswith(prefix + "/")}
 
     # God nodes relevant to the query. Degree comes from the whole graph (a
     # hub is a hub regardless of what is current), the emitted list does not.

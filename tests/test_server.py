@@ -574,3 +574,15 @@ def test_search_reports_its_scope_and_can_be_limited_to_a_folder(client, tmp_pat
 
     empty = client.get("/v1/search", params={"q": "zebra", "path_prefix": "nowhere"}).json()
     assert empty["candidates"] == [] and empty["scope"]["searched"] == 0
+
+
+def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkeypatch):
+    monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    assert "memory_recap" in server.mcp.instructions
+    assert "memory_sync" in server.mcp.instructions
+    assert "memory_recap" in server.mcp_read.instructions
+    assert "memory_sync" not in server.mcp_read.instructions
+    assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
+    assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions

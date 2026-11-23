@@ -484,3 +484,29 @@ def test_query_scope_empty_vault_and_prefix_boundary(tmp_path):
     out = query(tmp_path, "page", path_prefix="projects/a/")
     assert out["scope"] == {"path_prefix": "projects/a", "searched": 1, "indexed": 2}
     assert [c["page"] for c in out["candidates"]] == ["projects/a/page.md"]
+
+
+def _scoped_vault(root):
+    for rel, links in (("projects/acme/zebra.md", ""), ("other/hub.md", "[[other/x]] [[other/y]]"), ("other/x.md", ""), ("other/y.md", "")):
+        f = root / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(f"---\ntitle: {f.stem}\nsummary: {f.stem} page\n---\n{f.stem} {links}\n")
+
+
+def test_path_prefix_does_not_count_other_folders_as_historical(tmp_path):
+    from obsidian_wiki.graphrag import query
+
+    _scoped_vault(tmp_path)
+    out = query(tmp_path, "zebra", path_prefix="projects/acme")
+    assert out["scope"]["searched"] == 1
+    assert out["temporal"]["excluded_historical"] == 0 and out["temporal"]["retrievable"] == 4
+
+
+def test_path_prefix_keeps_structural_questions_inside_the_folder(tmp_path):
+    from obsidian_wiki.graphrag import query
+
+    _scoped_vault(tmp_path)
+    out = query(tmp_path, "what are my top hubs", path_prefix="projects/acme")
+    assert out["answer_type"] == "direct" and out["graph"] is None
+    assert all(c["page"].startswith("projects/acme/") for c in out["candidates"])
+    assert query(tmp_path, "what are my top hubs")["answer_type"] == "hubs"  # unscoped is unchanged

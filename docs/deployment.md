@@ -209,7 +209,7 @@ and the image's `io.modelcontextprotocol.server.name` label.
 
 `obsidian-wiki ui` opens a browser viewer for the resolved vault on `http://127.0.0.1:3114/ui`: an overview, page browser with search, rendered pages with backlinks, the link graph, the activity log, profile facts and open threads (add, close, forget), the hot cache, and the health, staging and sources views. It binds to loopback only and needs no key unless `WIKI_API_KEY` is set. `--port` and `--vault` override the defaults; `--no-open` skips the browser tab.
 
-**Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The page also gives you instructions to paste into `AGENTS.md` or a system prompt, so the agent actually calls `memory_recap` at session start and saves findings back.
+**Connect an agent** (in the viewer's sidebar) generates ready-to-paste MCP configs for Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code / Copilot, Windsurf, and any other MCP client, either over stdio or over HTTP to this server. The stdio configs launch `python -m obsidian_wiki mcp --vault <vault>` with the server's own interpreter, so they work in GUI apps that can't see your `PATH`. HTTP configs read the key from `WIKI_API_KEY` and never embed it. The server also sends usage instructions to every MCP client when it connects (the read-only server sends only the read half), so most agents call `memory_recap` at session start without any setup. For a client that ignores server instructions, the page gives you the same text to paste into `AGENTS.md` or a system prompt.
 
 ### Working from the viewer
 
@@ -336,7 +336,7 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/health` | Liveness; also reports whether the vault directory exists, and `git_sync_ok` when sync is on |
-| `GET` | `/v1/search?q=&limit=` | Ranked pages with summaries, from the same GraphRAG index the `wiki-query` skill uses |
+| `GET` | `/v1/search?q=&limit=&path_prefix=` | Ranked pages with summaries, (optionally one folder via `path_prefix`) from the same GraphRAG index the `wiki-query` skill uses |
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
