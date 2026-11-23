@@ -235,7 +235,7 @@ Ordinary mechanical sync omits --takeaways and carries the current section forwa
 ~~~bash
 obsidian-wiki memory status --json --vault "$OBSIDIAN_VAULT_PATH"
 # Save hot.takeaways_sha256 as TAKEAWAYS_REVISION after reviewing its section.
-obsidian-wiki memory sync INGEST source="papers/attention.pdf" --takeaways "<reviewed replacement>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION" --operation-id "<stable-operation-id>" --vault "$OBSIDIAN_VAULT_PATH"
+obsidian-wiki memory sync INGEST source='papers/attention.pdf' --takeaways '<reviewed replacement>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION" --operation-id '<stable-operation-id>' --vault "$OBSIDIAN_VAULT_PATH"
 ~~~
 
 The revision is the SHA-256 of the UTF-8 canonical section body (surrounding whitespace stripped by the existing section parser), not the whole cache. Generated activity alone causes no narrative conflict. Missing revisions raise takeaways_revision_required with migration instructions; stale revisions raise takeaways_conflict under the lock. Initial empty/placeholder seeding remains compatible. Clearing/repeating existing prose still requires a revision.

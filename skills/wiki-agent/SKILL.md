@@ -252,10 +252,10 @@ One locked call updates the log, the index, and the hot cache:
 
 ```bash
 obsidian-wiki memory sync WIKI-AGENT \
-  agent=<agent> query="<query>" \
+  agent=<agent> query='<query>' \
   sessions_searched=<N> sessions_ingested=<M> \
   pages_created=<X> pages_updated=<Y> \
-  --takeaways "<one line: what was pulled in and what it changes>" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
+  --takeaways '<one line: what was pulled in and what it changes>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
