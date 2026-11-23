@@ -110,7 +110,7 @@ but not edit it (a CI job, a shared team bot, a hosted product you're trying out
 Set `WIKI_READ_KEY` without `WIKI_API_KEY` and the whole server is read-only.
 
 Every tool also carries MCP annotations: `readOnlyHint` on the reads, and `destructiveHint` on
-`memory_write` and `memory_profile`, which can overwrite or forget. A client can use them to
+`memory_write`, `memory_write_many`, `memory_forget` and `memory_profile`, which can overwrite or forget. A client can use them to
 auto-approve reads and ask before writes.
 
 ## Sign in with OAuth
@@ -313,7 +313,9 @@ server only your machine can reach, bridge it into `claude_desktop_config.json` 
     "env": { "WIKI_AUTH": "Bearer <your key>" } } } }
 ```
 
-Nine tools. Five for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_forget`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+Ten tools. Six for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_write_many`, `memory_forget`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+
+`memory_write_many` (also `POST /v1/pages/bulk`) takes up to 50 pages in one call, for an agent saving a whole ingest at once. It checks every page first — bad path, two pages with the same target, or an `upsert: false` page that already exists — and rejects the whole batch with nothing written. Call `memory_sync` once afterward instead of once per page.
 
 `memory_forget` takes a page path and moves the page to `_archives/forgotten/<date>/<same path>` instead of deleting it. Search, the graph and lint skip that folder and git keeps it, so restoring is moving the file back. Links to a forgotten page become broken, so call `memory_sync` afterward. `index.md`, `log.md`, `hot.md` and anything under `_`- or `.`-prefixed folders are refused.
 
@@ -333,7 +335,7 @@ For in-process use, `from obsidian_wiki import Memory` skips the server entirely
 
 ## REST
 
-Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not. With the read-only key, the `POST` routes that write (`/v1/pages`, `/v1/memory/*`) answer **403**; `/v1/context-pack` only reads and stays open to it.
+Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not. With the read-only key, the `POST` routes that write (`/v1/pages`, `/v1/pages/bulk`, `/v1/memory/*`) answer **403**; `/v1/context-pack` only reads and stays open to it.
 
 | Method | Path | Notes |
 |---|---|---|
@@ -341,6 +343,7 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/v1/search?q=&limit=&path_prefix=` | Ranked pages with summaries, (optionally one folder via `path_prefix`) from the same GraphRAG index the `wiki-query` skill uses |
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
+| `POST` | `/v1/pages/bulk` | A JSON array of up to 50 of those objects; all are checked first, so one bad page rejects the batch with nothing written |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
 | `GET` | `/v1/memory/recap?project=&max_words=&user_id=` | Owner profile, open threads, recent activity |
 | `GET` | `/v1/memory/profile?user_id=` | Durable facts about a person |
