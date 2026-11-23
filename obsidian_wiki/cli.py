@@ -1382,6 +1382,18 @@ def cmd_sync_setup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_undo(args: argparse.Namespace) -> int:
+    from obsidian_wiki.sync import run_undo
+
+    vault_str = resolve_vault_path(args.vault)
+    if not vault_str:
+        print("error: no vault configured — pass --vault or run `obsidian-wiki setup` first", file=sys.stderr)
+        return 1
+    code, message = run_undo(Path(vault_str).expanduser(), pending=args.pending)
+    print(message)
+    return code
+
+
 def cmd_sync(args: argparse.Namespace) -> int:
     from obsidian_wiki.sync import run_sync
 
@@ -3506,6 +3518,11 @@ def build_parser() -> argparse.ArgumentParser:
     syp = sub.add_parser("sync", help="commit and push pending vault changes (git add -A, commit, push)")
     syp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
     syp.set_defaults(func=cmd_sync)
+
+    udp = sub.add_parser("undo", help="revert the vault's last git commit (or --pending changes); never pushes")
+    udp.add_argument("--vault", metavar="PATH", help="absolute path to your Obsidian vault")
+    udp.add_argument("--pending", action="store_true", help="undo uncommitted changes (checkpointed locally first, so recoverable)")
+    udp.set_defaults(func=cmd_undo)
 
     lp = sub.add_parser("list", help="list bundled skills")
     lp.set_defaults(func=cmd_list)

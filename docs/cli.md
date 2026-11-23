@@ -677,9 +677,11 @@ Jobs with no cost recorded show `-`; the report never estimates a figure. `wiki-
 |---|---|
 | `sync` | Stage, commit, and push pending vault changes |
 | `sync-setup <remote>` | Configure GitHub sync (git init, `.gitignore`, remote) |
+| `undo [--pending]` | `git revert` the vault's last commit; `--pending` undoes uncommitted changes (e.g. an ingest you have not synced). The undo is itself a commit, so it is recoverable, and it never pushes |
 
 ```bash
 obsidian-wiki sync
+obsidian-wiki undo --pending   # roll back what the last ingest wrote
 obsidian-wiki sync-setup https://github.com/you/my-wiki.git
 ```
 

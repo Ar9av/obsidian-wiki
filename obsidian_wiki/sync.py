@@ -246,3 +246,38 @@ def pull_and_push(vault_path: Path, lock=None) -> tuple[int, str]:
     if push.returncode != 0:
         return 1, f"wiki-sync: git push failed: {redact_remote(push.stderr.strip())}"
     return 0, f"wiki-sync: pushed to {redact_remote(get_remote(vault_path) or 'origin')}"
+
+
+def run_undo(vault_path: Path, pending: bool = False) -> tuple[int, str]:
+    """Undo the vault's last change with `git revert`. Returns (exit_code, message).
+
+    Default reverts the latest commit. With `pending`, uncommitted changes are
+    first committed locally and that checkpoint is reverted instead — so an
+    ingest you have not synced yet can be rolled back. Either way history is
+    kept (the undo is itself a commit, revertable) and nothing is pushed.
+    """
+    if not (vault_path / ".git").is_dir():
+        return 1, "wiki-undo: vault is not a git repo — run `obsidian-wiki sync-setup <remote>` first"
+
+    dirty = bool(_git(vault_path, "status", "--porcelain").stdout.strip())
+    if dirty and not pending:
+        return 1, "wiki-undo: uncommitted changes — pass --pending to undo them, or `obsidian-wiki sync` to keep them"
+    if pending and not dirty:
+        return 1, "wiki-undo: no pending changes to undo"
+
+    # Check before committing so a refusal never leaves a checkpoint behind.
+    if _git(vault_path, "rev-parse", "--verify", "-q", "HEAD" if pending else "HEAD~1").returncode != 0:
+        return 1, "wiki-undo: nothing earlier to go back to"
+
+    if pending:
+        _git(vault_path, "add", "-A")
+        commit = _git(vault_path, "commit", "-m", f"checkpoint before undo {datetime.now():%Y-%m-%d %H:%M}")
+        if commit.returncode != 0:
+            return 1, f"wiki-undo: git commit failed: {commit.stderr.strip()}"
+
+    subject = _git(vault_path, "log", "-1", "--format=%h %s").stdout.strip()
+    revert = _git(vault_path, "revert", "--no-edit", "HEAD")
+    if revert.returncode != 0:
+        _git(vault_path, "revert", "--abort")
+        return 1, f"wiki-undo: git revert failed: {revert.stderr.strip()}"
+    return 0, f"wiki-undo: reverted {subject} (run `obsidian-wiki undo` again to go back further)"
