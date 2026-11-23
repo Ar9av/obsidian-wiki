@@ -135,7 +135,7 @@ Same vault, same files, four ways in:
 
 - **Python** — this page.
 - **CLI** — [`obsidian-wiki memory`](cli.md#memory-surface), what the skills call.
-- **MCP** — `memory_recap`, `memory_profile`, `memory_todo`, `memory_sync`, plus search/read/write, all taking `user_id`. See [Deployment](deployment.md).
+- **MCP** — `memory_recap`, `memory_profile`, `memory_todo`, `memory_sync`, plus search/read/write/forget, all taking `user_id`. See [Deployment](deployment.md).
 - **REST** — `/v1/memory/*` on the same server.
 
 ## Related
