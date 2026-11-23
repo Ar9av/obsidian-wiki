@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from obsidian_wiki.sync import configure_sync, get_remote, run_sync
+from obsidian_wiki.sync import configure_sync, get_remote, run_sync, run_undo
 
 
 def _git(repo_dir: Path, *args: str) -> subprocess.CompletedProcess:
@@ -135,3 +135,52 @@ class TestRunSync:
         code, message = run_sync(vault)
         assert code == 0
         assert "nothing to commit" in message
+
+
+class TestRunUndo:
+    @pytest.fixture
+    def repo(self, vault):
+        _git(vault, "init", "-q")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        (vault / "a.md").write_text("one")
+        _git(vault, "add", "-A")
+        _git(vault, "commit", "-qm", "first")
+        return vault
+
+    def test_not_a_git_repo(self, vault):
+        assert run_undo(vault)[0] == 1
+
+    def test_reverts_last_commit_and_keeps_history(self, repo):
+        (repo / "b.md").write_text("two")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-qm", "second")
+        code, message = run_undo(repo)
+        assert code == 0 and "second" in message
+        assert not (repo / "b.md").exists()
+        assert _git(repo, "rev-list", "--count", "HEAD").stdout.strip() == "3"
+
+    def test_dirty_tree_refused_without_pending(self, repo):
+        (repo / "b.md").write_text("two")
+        code, message = run_undo(repo)
+        assert code == 1 and "--pending" in message
+        assert (repo / "b.md").exists()
+
+    def test_pending_rolls_back_uncommitted_ingest(self, repo):
+        (repo / "a.md").write_text("changed")
+        (repo / "new.md").write_text("new")
+        assert run_undo(repo, pending=True)[0] == 0
+        assert (repo / "a.md").read_text() == "one"
+        assert not (repo / "new.md").exists()
+
+    def test_pending_with_clean_tree(self, repo):
+        assert run_undo(repo, pending=True)[0] == 1
+
+    def test_root_commit_cannot_be_undone(self, repo):
+        assert run_undo(repo)[0] == 1
+
+    def test_pending_without_history_leaves_no_checkpoint(self, vault):
+        _git(vault, "init", "-q")
+        (vault / "a.md").write_text("one")
+        assert run_undo(vault, pending=True)[0] == 1
+        assert _git(vault, "rev-list", "--all", "--count").stdout.strip() == "0"
