@@ -558,3 +558,16 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     cmd = seen["cmd"]
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
+
+
+def test_graph_lists_links_resting_on_inferred_or_ambiguous_claims(client, tmp_path):
+    _page(tmp_path, "concepts/a.md")
+    (tmp_path / "concepts" / "a.md").write_text(
+        "---\ntitle: a\n---\nStated: [[b]].\n\n- Guess: [[c]] ^[inferred]\n- Dispute: [[d]] ^[ambiguous]\n"
+    )
+    for name in "bcd":
+        _page(tmp_path, f"concepts/{name}.md")
+    data = client.get("/v1/graph").json()
+    assert ["a", "c", "inferred"] in data["weak"] and ["a", "d", "ambiguous"] in data["weak"]
+    assert not any(w[1] == "b" for w in data["weak"])
+    assert ["a", "b"] in data["edges"]  # edges keep their shape; weak is additive

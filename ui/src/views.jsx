@@ -239,14 +239,20 @@ export function Pages({ params }) {
   )
 }
 
-function LinkList({ title, ids }) {
+function LinkList({ title, ids, edgeKey }) {
   const { index } = useVault()
   return (
     <Box>
       <Text fontSize="xs" fontWeight="semibold" textTransform="uppercase" color="muted" mb="2">{title} · {ids.length}</Text>
       {ids.length ? <Stack spacing="1">{[...new Set(ids)].map((id) => {
         const n = index.byId.get(id)
-        return n && <Link key={id} href={pageHref(n.path)} fontSize="sm" noOfLines={1} title={n.path}>{n.title || titleOf(n.path)}</Link>
+        const state = index.weak.get(edgeKey(id))
+        return n && (
+          <HStack key={id} spacing="2">
+            <Link href={pageHref(n.path)} fontSize="sm" noOfLines={1} title={n.path}>{n.title || titleOf(n.path)}</Link>
+            {state && <Tag size="sm" flexShrink="0" colorScheme={state === 'ambiguous' ? 'orange' : 'yellow'} title={`This link rests on an ^[${state}] claim`}>{state}</Tag>}
+          </HStack>
+        )
       })}</Stack> : <Text fontSize="sm" color="muted">None</Text>}
     </Box>
   )
@@ -284,7 +290,7 @@ export function PageView({ path }) {
               : <Text fontSize="sm" wordBreak="break-word" noOfLines={4} title={v}>{/^\d{4}-\d\d-\d\dT/.test(v) ? v.slice(0, 10) : v || '—'}</Text>} />)}</PropertyList>
           </Section>
         )}
-        {node && <><LinkList title="Backlinks" ids={index.inbound.get(node.id)} /><Divider /><LinkList title="Links to" ids={index.outbound.get(node.id)} /></>}
+        {node && <><LinkList title="Backlinks" ids={index.inbound.get(node.id)} edgeKey={(id) => `${id}>${node.id}`} /><Divider /><LinkList title="Links to" ids={index.outbound.get(node.id)} edgeKey={(id) => `${node.id}>${id}`} /></>}
       </Stack>
     </Flex>
   )
@@ -318,8 +324,8 @@ export function GraphView() {
   }, [graph])
   const data = useMemo(() => graph && ({
     nodes: graph.nodes.map((n) => ({ ...n })),
-    links: graph.edges.map(([source, target]) => ({ source, target })),
-  }), [graph])
+    links: graph.edges.map(([source, target]) => ({ source, target, weak: index.weak.has(`${source}>${target}`) })),
+  }), [graph, index])
   if (!graph) return <Loading />
   if (!graph.nodes.length) return <EmptyState title="No pages yet" description="Ingest something with wiki-ingest and the link graph shows up here." py="16" />
   const color = (c) => colors[Math.max(0, cats.findIndex(([k]) => k === c)) % colors.length]
@@ -327,7 +333,7 @@ export function GraphView() {
   const match = (n) => q && n.path.toLowerCase().includes(q)
   return (
     <Flex direction="column" h="100vh">
-      <Header title="Graph" description={`${graph.nodes.length} pages · ${graph.edges.length} links. Click a node to open it; scroll to zoom.`}>
+      <Header title="Graph" description={`${graph.nodes.length} pages · ${graph.edges.length} links${graph.weak?.length ? ` (${graph.weak.length} dashed: inferred or ambiguous)` : ''}. Click a node to open it; scroll to zoom.`}>
         <Input size="sm" maxW="56" placeholder="Highlight pages" value={hl} onChange={(e) => setHl(e.target.value)} />
       </Header>
       <Wrap px="8" pb="3" spacing="3">{cats.map(([c, n]) => (
@@ -337,7 +343,7 @@ export function GraphView() {
         <ForceGraph2D
           ref={fg2d} onEngineStop={() => { if (!fg2d.fitted) { fg2d.fitted = true; fg2d.current?.zoomToFit(400, 40) } }}
           graphData={data} width={size.w} height={size.h} backgroundColor="rgba(0,0,0,0)"
-          nodeLabel={(n) => esc(n.path)} linkColor={() => edge} cooldownTicks={120}
+          nodeLabel={(n) => esc(n.path)} linkColor={() => edge} linkLineDash={(l) => (l.weak ? [3, 2] : null)} cooldownTicks={120}
           onNodeClick={(n) => go(`/page/${encodeURIComponent(n.path)}`)}
           nodeCanvasObject={(n, ctx, scale) => {
             const deg = index.inbound.get(n.id).length

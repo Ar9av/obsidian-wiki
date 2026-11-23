@@ -779,6 +779,7 @@ def graph() -> dict[str, Any]:
     matches the hub/bridge numbers.
     """
     from obsidian_wiki.graph_analysis import iter_pages, parse_vault_graph
+    from obsidian_wiki.link_provenance import link_provenance
     from obsidian_wiki.links import PageIndex
     from obsidian_wiki.lint import _parse_frontmatter_values
     from obsidian_wiki.vault import split_frontmatter
@@ -810,7 +811,9 @@ def graph() -> dict[str, Any]:
             "tags": tags.get(node_id, []),
         })
     edges = sorted({(src, dst) for src, dsts in outgoing.items() for dst in dsts})
-    return {"nodes": nodes, "edges": [list(e) for e in edges]}
+    # Links resting on an ^[inferred]/^[ambiguous] claim; every other edge is extracted.
+    weak = [[r["from"], r["to"], r["state"]] for r in link_provenance(VAULT) if r["state"] != "extracted"]
+    return {"nodes": nodes, "edges": [list(e) for e in edges], "weak": weak}
 
 
 # The viewer is a prebuilt React bundle (source in ui/, `npm run build` writes here).
