@@ -4190,7 +4190,7 @@ need quoting: query="how do transformers work".""",
         epilog="""examples:
   facts add "40 paying customers" --source stripe-dashboard --as-of 2026-11-01
   facts list --stale-days 90                     flag claims older than 90 days
-  facts retire f3 --reason "ARR passed $2M"
+  facts retire f3 --reason 'ARR passed $2M'
   facts check _readouts/launch-post.md           exit 2 on an unbacked claim
   cat draft.md | facts check -""",
         formatter_class=argparse.RawDescriptionHelpFormatter,

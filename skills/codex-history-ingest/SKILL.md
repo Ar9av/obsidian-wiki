@@ -195,8 +195,8 @@ Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
 obsidian-wiki memory sync CODEX_HISTORY_INGEST \
-  sessions=<sessions> pages_updated=<pages_updated> \
-  pages_created=<pages_created> mode=<mode> \
+  sessions='<sessions>' pages_updated='<pages_updated>' \
+  pages_created='<pages_created>' mode='<mode>' \
   --takeaways "Ingested 12 Codex sessions; surfaced recurring patterns in CLI tooling and shell scripting." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

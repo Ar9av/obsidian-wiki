@@ -84,7 +84,9 @@ function useVaultData() {
       return graph.nodes.find((n) => slug(n.path).endsWith('/' + k)) ?? null
     }
     const byPath = new Map(graph.nodes.map((n) => [n.path, n]))
-    return { byId, byPath, inbound, outbound, resolve }
+    // `from>to` -> 'inferred' | 'ambiguous' for links resting on a marked claim.
+    const weak = new Map((graph.weak ?? []).map(([s, t, state]) => [`${s}>${t}`, state]))
+    return { byId, byPath, inbound, outbound, resolve, weak }
   }, [graph])
 
   return { status, graph, index, todos, setTodos, vaults, switchVault, error, reload: load }
