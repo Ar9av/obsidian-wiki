@@ -63,6 +63,15 @@ ALLOWED_RELATIONSHIP_TYPES = frozenset(
 
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
+# `[[page#Heading]]` / `[[page#^block-id]]`: the page target and the anchor after the first `#`.
+_ANCHOR_LINK_RE = re.compile(r"\[\[([^\]|#]*?)#([^\]|]+?)(?:\|[^\]]*)?\]\]")
+_HEADING_TEXT_RE = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", re.MULTILINE)
+_BLOCK_ID_RE = re.compile(r"\s\^([\w-]+)[ \t]*$", re.MULTILINE)
+
+
+def _norm_anchor(text: str) -> str:
+    """Obsidian matches headings ignoring case, spacing and punctuation."""
+    return " ".join(re.sub(r"[^\w\s-]", "", text).lower().split())
 # Local `.md` targets only: skip URLs (any `scheme:`) and require `.md` to end
 # the path, before an optional `#anchor` or `"title"`.
 _MD_LINK_RE = re.compile(
@@ -348,7 +357,19 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
             continue
         links.append(href)
 
+    anchors = [
+        # A table cell escapes the alias pipe (`[[p#^id\|alias]]`), so drop that backslash.
+        # An empty page part (`[[#Section]]`) points at this same page.
+        (raw.strip().rstrip("\\"), anchor.strip().rstrip("\\"))
+        for raw, anchor in _ANCHOR_LINK_RE.findall(text)
+        if not raw.strip() or (_wikilink_page_target(raw) and archive_wikilink_relpath(vault, raw) is None)
+    ]
+    stripped_body = strip_code(body)
+
     return {
+        "anchors": anchors,
+        "headings": {_norm_anchor(h) for h in _HEADING_TEXT_RE.findall(stripped_body)},
+        "block_ids": set(_BLOCK_ID_RE.findall(stripped_body)),
         "path": relative.as_posix(),
         "node_id": _normalise_node_id(relative.with_suffix("").as_posix()),
         "slug": _slug(path.stem),
@@ -414,6 +435,24 @@ def lint_vault(
             elif target != page["id"]:
                 incoming[target] += 1
         broken_links.extend(page.get("archive_broken", []))
+
+    # A link to an existing page whose `#Heading` / `#^block` is gone opens the page
+    # at the top, silently. Only checked once the page itself resolves.
+    by_id = {page["id"]: page for page in pages}
+    broken_heading_anchors: list[dict[str, str]] = []
+    for page in pages:
+        for raw, anchor in page["anchors"]:
+            target = page if not raw else by_id.get(page_index.resolve(raw, page["path"]) or "")
+            if target is None:
+                continue
+            if anchor.startswith("^"):
+                found = anchor[1:] in target["block_ids"]
+            else:  # `#H1#H2` nests; the last segment is the heading that must exist
+                found = _norm_anchor(anchor.split("#")[-1]) in target["headings"]
+            if not found:
+                broken_heading_anchors.append(
+                    {"page": page["path"], "target": _display_target(raw) if raw else page["path"], "anchor": anchor}
+                )
 
     missing_frontmatter = []
     confidence_missing_fields = []
@@ -716,6 +755,7 @@ def lint_vault(
 
     findings = {
         "broken_links": broken_links,
+        "broken_heading_anchors": broken_heading_anchors,
         "missing_frontmatter": missing_frontmatter,
         "duplicate_titles": duplicate_titles,
         "duplicate_stems": duplicate_stems,
@@ -786,6 +826,7 @@ def lint_vault(
                 "uncovered_sources",
                 "orphan_pages",
                 "oversized_pages",
+                "broken_heading_anchors",
                 "undated_claims",
                 "typed_relationship_issues",
                 "superseded_dangling",
