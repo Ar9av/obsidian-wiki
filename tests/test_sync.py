@@ -63,6 +63,8 @@ class TestConfigureSync:
 
     def test_does_not_reinit_existing_repo(self, vault):
         _git(vault, "init", "-q")
+        _git(vault, "config", "user.email", "test@example.com")  # a bare machine has no identity
+        _git(vault, "config", "user.name", "Test")
         (vault / "existing.md").write_text("keep me")
         _git(vault, "add", "-A")
         _git(vault, "commit", "-q", "-m", "seed")
