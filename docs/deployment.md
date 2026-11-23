@@ -338,7 +338,7 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | Method | Path | Notes |
 |---|---|---|
 | `GET` | `/health` | Liveness; also reports whether the vault directory exists, and `git_sync_ok` when sync is on |
-| `GET` | `/v1/search?q=&limit=` | Ranked pages with summaries, from the same GraphRAG index the `wiki-query` skill uses |
+| `GET` | `/v1/search?q=&limit=&path_prefix=` | Ranked pages with summaries, (optionally one folder via `path_prefix`) from the same GraphRAG index the `wiki-query` skill uses |
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |

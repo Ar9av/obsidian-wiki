@@ -596,6 +596,33 @@ def test_read_only_server_does_not_expose_memory_forget(client):
     assert "memory_forget" not in names(server.mcp_read)
 
 
+def test_graph_lists_links_resting_on_inferred_or_ambiguous_claims(client, tmp_path):
+    _page(tmp_path, "concepts/a.md",
+          "---\ntitle: a\n---\nStated: [[b]].\n\n- Guess: [[c]] ^[inferred]\n- Dispute: [[d]] ^[ambiguous]\n")
+    for name in "bcd":
+        _page(tmp_path, f"concepts/{name}.md")
+    data = client.get("/v1/graph").json()
+    assert ["a", "c", "inferred"] in data["weak"] and ["a", "d", "ambiguous"] in data["weak"]
+    assert not any(w[1] == "b" for w in data["weak"])
+    assert ["a", "b"] in data["edges"]  # edges keep their shape; weak is additive
+
+
+def test_search_reports_its_scope_and_can_be_limited_to_a_folder(client, tmp_path):
+    for rel, name in (("projects/acme/zebra-plan.md", "Zebra Plan"), ("concepts/zebra-facts.md", "Zebra Facts"),
+                      ("projects/acmeish/zebra-other.md", "Zebra Other")):
+        _page(tmp_path, rel, f"---\ntitle: {name}\nsummary: zebra stripes\n---\nzebra stripes\n")
+    everything = client.get("/v1/search", params={"q": "zebra"}).json()
+    assert everything["scope"] == {"path_prefix": None, "searched": 3, "indexed": 3}
+    assert len(everything["candidates"]) == 3
+
+    scoped = client.get("/v1/search", params={"q": "zebra", "path_prefix": "/projects/acme/"}).json()
+    assert scoped["scope"] == {"path_prefix": "projects/acme", "searched": 1, "indexed": 3}
+    assert [c["page"] for c in scoped["candidates"]] == ["projects/acme/zebra-plan.md"]  # not projects/acmeish
+
+    empty = client.get("/v1/search", params={"q": "zebra", "path_prefix": "nowhere"}).json()
+    assert empty["candidates"] == [] and empty["scope"]["searched"] == 0
+
+
 def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkeypatch):
     monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
     sys.modules.pop("obsidian_wiki.server", None)

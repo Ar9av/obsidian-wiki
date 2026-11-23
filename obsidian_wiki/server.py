@@ -99,8 +99,9 @@ def _category_slug(category: str) -> str:
     return f"_{slug}" if category.lower().startswith("_") else slug
 
 
-def search(q: str, limit: int = 8) -> dict[str, Any]:
-    return graph_query(VAULT, q, top_n=limit)
+def search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    """Search the wiki, optionally inside one folder; the reply's `scope` says what was searched."""
+    return graph_query(VAULT, q, top_n=limit, path_prefix=path_prefix)
 
 
 def read_page(path: str) -> dict[str, Any]:
@@ -415,7 +416,7 @@ _EDITS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_worl
 
 #: (name, function, description, annotations, read-only?)
 _TOOLS = (
-    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
+    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries and a scope block; pass path_prefix (e.g. projects/acme) to search one folder.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
     ("memory_forget", forget_page, "Archive a wiki page (recoverable, not deleted) so it leaves search and the graph. Run memory_sync afterward.", _OVERWRITES, False),
@@ -624,8 +625,8 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/v1/search", dependencies=[Depends(require_key)])
-def http_search(q: str, limit: int = 8) -> dict[str, Any]:
-    return search(q, limit)
+def http_search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    return search(q, limit, path_prefix)
 
 
 @app.get("/v1/pages/{path:path}", dependencies=[Depends(require_key)])
@@ -836,6 +837,7 @@ def graph() -> dict[str, Any]:
     matches the hub/bridge numbers.
     """
     from obsidian_wiki.graph_analysis import iter_pages, parse_vault_graph
+    from obsidian_wiki.link_provenance import link_provenance
     from obsidian_wiki.links import PageIndex
     from obsidian_wiki.lint import _parse_frontmatter_values
     from obsidian_wiki.vault import split_frontmatter
@@ -867,7 +869,9 @@ def graph() -> dict[str, Any]:
             "tags": tags.get(node_id, []),
         })
     edges = sorted({(src, dst) for src, dsts in outgoing.items() for dst in dsts})
-    return {"nodes": nodes, "edges": [list(e) for e in edges]}
+    # Links resting on an ^[inferred]/^[ambiguous] claim; every other edge is extracted.
+    weak = [[r["from"], r["to"], r["state"]] for r in link_provenance(VAULT) if r["state"] != "extracted"]
+    return {"nodes": nodes, "edges": [list(e) for e in edges], "weak": weak}
 
 
 # The viewer is a prebuilt React bundle (source in ui/, `npm run build` writes here).
