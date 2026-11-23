@@ -1422,3 +1422,15 @@ def test_valid_anchors_alone_only_pass(tmp_path: Path) -> None:
     _page(vault, "concepts/alpha.md", links=["beta#beta"])
     _page(vault, "concepts/beta.md", links=["alpha"])
     assert lint_vault(vault, require_trust_ledger=False)["findings"]["broken_heading_anchors"] == []
+
+
+def test_anchor_checks_table_escaped_pipes_and_same_page_links(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    alpha = _page(vault, "concepts/alpha.md", links=["beta#^kept\\|alias", "beta#^gone\\|alias"])
+    alpha.write_text(alpha.read_text() + "[[#Alpha]] [[#Missing Section]]\n", encoding="utf-8")
+    beta = _page(vault, "concepts/beta.md", links=["alpha"])
+    beta.write_text(beta.read_text() + "A claim. ^kept\n", encoding="utf-8")
+
+    found = lint_vault(vault, require_trust_ledger=False)["findings"]["broken_heading_anchors"]
+
+    assert [(f["target"], f["anchor"]) for f in found] == [("beta", "^gone"), ("concepts/alpha.md", "Missing Section")]

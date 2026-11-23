@@ -64,7 +64,7 @@ ALLOWED_RELATIONSHIP_TYPES = frozenset(
 _FIELD_RE = re.compile(r"^([A-Za-z_][\w-]*):", re.MULTILINE)
 _WIKILINK_RE = re.compile(r"\[\[([^\]|#]+?)(?:[|#][^\]]*?)?\]\]")
 # `[[page#Heading]]` / `[[page#^block-id]]`: the page target and the anchor after the first `#`.
-_ANCHOR_LINK_RE = re.compile(r"\[\[([^\]|#]+?)#([^\]|]+?)(?:\|[^\]]*)?\]\]")
+_ANCHOR_LINK_RE = re.compile(r"\[\[([^\]|#]*?)#([^\]|]+?)(?:\|[^\]]*)?\]\]")
 _HEADING_TEXT_RE = re.compile(r"^ {0,3}#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*$", re.MULTILINE)
 _BLOCK_ID_RE = re.compile(r"\s\^([\w-]+)[ \t]*$", re.MULTILINE)
 
@@ -358,9 +358,11 @@ def _parse_page(path: Path, vault: Path) -> dict[str, Any]:
         links.append(href)
 
     anchors = [
-        (raw.strip().rstrip("\\"), anchor.strip())
+        # A table cell escapes the alias pipe (`[[p#^id\|alias]]`), so drop that backslash.
+        # An empty page part (`[[#Section]]`) points at this same page.
+        (raw.strip().rstrip("\\"), anchor.strip().rstrip("\\"))
         for raw, anchor in _ANCHOR_LINK_RE.findall(text)
-        if _wikilink_page_target(raw) and raw.strip() and archive_wikilink_relpath(vault, raw) is None
+        if not raw.strip() or (_wikilink_page_target(raw) and archive_wikilink_relpath(vault, raw) is None)
     ]
     stripped_body = strip_code(body)
 
@@ -440,7 +442,7 @@ def lint_vault(
     broken_heading_anchors: list[dict[str, str]] = []
     for page in pages:
         for raw, anchor in page["anchors"]:
-            target = by_id.get(page_index.resolve(raw, page["path"]) or "")
+            target = page if not raw else by_id.get(page_index.resolve(raw, page["path"]) or "")
             if target is None:
                 continue
             if anchor.startswith("^"):
@@ -449,7 +451,7 @@ def lint_vault(
                 found = _norm_anchor(anchor.split("#")[-1]) in target["headings"]
             if not found:
                 broken_heading_anchors.append(
-                    {"page": page["path"], "target": _display_target(raw), "anchor": anchor}
+                    {"page": page["path"], "target": _display_target(raw) if raw else page["path"], "anchor": anchor}
                 )
 
     missing_frontmatter = []
