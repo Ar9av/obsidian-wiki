@@ -24,6 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
     monkeypatch.setenv("WIKI_API_KEY", KEY)
     monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
+    monkeypatch.delenv("WIKI_WRITE_HOOK", raising=False)
     sys.modules.pop("obsidian_wiki.server", None)
     server = importlib.import_module("obsidian_wiki.server")
     with TestClient(server.app) as c:
@@ -560,6 +561,69 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     assert "--strict-mcp-config" in cmd
 
 
+def _hook(tmp_path, monkeypatch, body: str) -> None:
+    script = tmp_path.parent / f"{tmp_path.name}-hook.py"
+    script.write_text("import json, sys\npage = json.load(sys.stdin)\n" + body)
+    monkeypatch.setenv("WIKI_WRITE_HOOK", f"{sys.executable} {script}")
+
+
+def _write(client, content="hello", **kw):
+    return client.post("/v1/pages", json={"title": "Note", "category": "concepts", "content": content, **kw})
+
+
+def test_write_hook_can_veto_a_page(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "sys.stderr.write('no secrets please') if 'sk-' in page['content'] else None\n"
+                                 "sys.exit(1 if 'sk-' in page['content'] else 0)\n")
+    bad = _write(client, "key sk-123")
+    assert bad.status_code == 422 and "no secrets please" in bad.json()["detail"]
+    assert not (tmp_path / "concepts/note.md").exists()
+    assert _write(client, "fine").status_code == 200
+
+
+def test_write_hook_can_rewrite_the_body(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].replace('555-1234', '[phone]')}))\n")
+    assert _write(client, "call 555-1234").status_code == 200
+    assert "call [phone]" in (tmp_path / "concepts/note.md").read_text()
+
+
+def test_write_hook_sees_the_page_and_silent_success_changes_nothing(client, tmp_path, monkeypatch):
+    seen = tmp_path.parent / f"{tmp_path.name}-seen.json"
+    _hook(tmp_path, monkeypatch, f"open({str(seen)!r}, 'w').write(json.dumps(page))\n")
+    assert _write(client, "unchanged", tags=["x"]).status_code == 200
+    got = json.loads(seen.read_text())
+    assert got["path"] == "concepts/note.md" and got["tags"] == ["x"] and got["op"] == "write"
+    assert "unchanged" in (tmp_path / "concepts/note.md").read_text()
+
+
+def test_broken_write_hook_fails_closed(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("WIKI_WRITE_HOOK", "/no/such/hook")
+    assert _write(client).status_code == 502
+    _hook(tmp_path, monkeypatch, "print('not json')\n")
+    assert _write(client).status_code == 502
+    for output in ('{"contnet": "x"}', '{"content": null}', "{}", "[]"):  # typo'd or empty replies must not accept
+        _hook(tmp_path, monkeypatch, f"print({output!r})\n")
+        assert _write(client).status_code == 502, output
+    assert not (tmp_path / "concepts/note.md").exists()
+
+
+def test_no_hook_means_no_change(client, tmp_path, monkeypatch):
+    monkeypatch.delenv("WIKI_WRITE_HOOK", raising=False)
+    assert _write(client).status_code == 200
+
+
+def test_mcp_tool_shows_the_hook_reason_to_the_agent(client, tmp_path, monkeypatch):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    _hook(tmp_path, monkeypatch, "sys.stderr.write('no secrets please')\nsys.exit(1)\n")
+
+    async def call():
+        return await server.mcp.call_tool("memory_write", {"title": "N", "category": "concepts", "content": "x"})
+
+    with pytest.raises(Exception, match="no secrets please"):
+        anyio.run(call)
+
+
 def _body(title, **kw):
     return {"title": title, "category": "concepts", "content": f"about {title}", **kw}
 
@@ -664,3 +728,14 @@ def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkey
     assert "memory_sync" not in server.mcp_read.instructions
     assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
     assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions
+
+
+def test_write_hook_covers_bulk_writes_and_a_veto_rejects_the_whole_batch(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "sys.exit(1 if 'sk-' in page['content'] else 0)\n")
+    ok = {"title": "Fine", "category": "concepts", "content": "fine"}
+    bad = {"title": "Leaky", "category": "concepts", "content": "key sk-123"}
+    assert client.post("/v1/pages/bulk", json=[ok, bad]).status_code == 422
+    assert not (tmp_path / "concepts/fine.md").exists()
+    _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].upper()}))\n")
+    assert client.post("/v1/pages/bulk", json=[ok]).status_code == 200
+    assert "FINE" in (tmp_path / "concepts/fine.md").read_text()

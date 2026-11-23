@@ -27,7 +27,7 @@ CALLBACK = "http://127.0.0.1:9999/callback"
 MCP_HEADERS = {"accept": "application/json, text/event-stream", "host": "localhost:8080"}
 _ENV = ("WIKI_API_KEY", "WIKI_READ_KEY", "WIKI_ALLOW_ANONYMOUS", "WIKI_OAUTH", "WIKI_PUBLIC_URL",
         "WIKI_GIT_REMOTE", "WIKI_GIT_SYNC_INTERVAL", "WIKI_HOST", "WIKI_RATE_LIMIT",
-        "WIKI_AUTH_LOCKOUT", "WIKI_AUTH_LOCKOUT_SECONDS", "WIKI_PORT", "PORT", "WIKI_TRUSTED_PROXIES")
+        "WIKI_AUTH_LOCKOUT", "WIKI_AUTH_LOCKOUT_SECONDS", "WIKI_PORT", "PORT", "WIKI_TRUSTED_PROXIES", "WIKI_WRITE_HOOK")
 
 
 def _load(monkeypatch, vault, **env):

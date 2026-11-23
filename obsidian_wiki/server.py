@@ -13,10 +13,13 @@ Run it with ``obsidian-wiki serve`` or ``python -m obsidian_wiki.server``.
 from __future__ import annotations
 
 import difflib
+import functools
 import hmac
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -29,6 +32,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
@@ -159,6 +163,43 @@ def _folded(key: str, value: str) -> str:
     return f"{key}: >-\n  " + " ".join(str(value).split())
 
 
+WRITE_HOOK_TIMEOUT = 10
+
+
+def _write_hook(rel: str, title: str, category: str, content: str,
+                tags: list[str], sources: list[str], summary: str) -> str:
+    """Run the operator's `WIKI_WRITE_HOOK` on a page about to be written.
+
+    The command (no shell) gets the page as JSON on stdin. Exit 0 accepts it; a
+    stdout JSON object with a `content` key replaces the body (redaction, cleanup).
+    Any other exit — or a crash, timeout or missing command — rejects the write,
+    so a broken hook fails closed. Returns the content to write.
+    """
+    command = os.environ.get("WIKI_WRITE_HOOK", "").strip()
+    if not command:
+        return content
+    payload = json.dumps({"op": "write", "path": rel, "title": title, "category": category,
+                          "content": content, "tags": tags, "sources": sources, "summary": summary})
+    try:
+        proc = subprocess.run(shlex.split(command), input=payload, capture_output=True, text=True,
+                              timeout=WRITE_HOOK_TIMEOUT, cwd=VAULT)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(502, f"write hook failed ({type(exc).__name__}); nothing written") from exc
+    if proc.returncode != 0:
+        raise HTTPException(422, f"write hook rejected {rel}: {(proc.stderr or proc.stdout).strip()[:300]}")
+    if proc.stdout.strip():
+        try:
+            replaced = json.loads(proc.stdout)["content"]
+        except (ValueError, TypeError, KeyError):
+            replaced = None
+        # Anything printed must be {"content": "<string>"}: a typo'd key or a null
+        # would otherwise silently write the unredacted page.
+        if not isinstance(replaced, str):
+            raise HTTPException(502, 'write hook output must be {"content": "<text>"}, or nothing; nothing written')
+        return replaced
+    return content
+
+
 def write_page(
     title: str,
     category: str,
@@ -171,6 +212,7 @@ def write_page(
 ) -> dict[str, Any]:
     rel = f"{_category_slug(category)}/{_slug(title)}.md"
     target = _resolve(rel)
+    content = _write_hook(rel, title, category, content, tags or [], sources or [], summary)
     with _VAULT_WRITE_LOCK:
         return _write_page_locked(rel, target, title, category, content,
                                   tags=tags, sources=sources, summary=summary, upsert=upsert)
@@ -296,6 +338,15 @@ def write_pages(pages: list[PageWrite]) -> dict[str, Any]:
     """
     if not pages or len(pages) > MAX_BULK_PAGES:
         raise HTTPException(400, f"send 1 to {MAX_BULK_PAGES} pages per call")
+    # Hooks run first and outside the lock (each may take seconds); one rejection or failure
+    # rejects the whole batch before anything is written, like every other check here.
+    hooked = []
+    for page in pages:
+        rel = f"{_category_slug(page.category)}/{_slug(page.title)}.md"
+        _resolve(rel)
+        content = _write_hook(rel, page.title, page.category, page.content, page.tags, page.sources, page.summary)
+        hooked.append(page.model_copy(update={"content": content}))
+    pages = hooked
     plan, seen = [], set()
     # Checked under the same lock as the writes, so no in-process writer can slip a page in
     # between the check and the write and abort the batch halfway. (An editor outside the
@@ -462,6 +513,21 @@ _TOOLS = (
 )
 
 
+def _surface_errors(fn):
+    """Over MCP, show an HTTPException's message (a hook veto, a bad path) to the agent.
+
+    The tool layer otherwise reports every exception as a bare "Error executing tool",
+    so the agent could not tell a policy rejection from a crash.
+    """
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except HTTPException as exc:
+            raise ToolError(str(exc.detail)) from exc
+    return run
+
+
 # Same guidance as AGENT_INSTRUCTIONS in ui/src/lib.js (the paste-into-AGENTS.md text
 # the viewer shows): keep the two in step. Read-only gets only the read half.
 _INSTRUCTIONS_READ = (
@@ -485,7 +551,7 @@ def _build_mcp(read_only: bool) -> MCPServer:
     server = MCPServer("obsidian-wiki", instructions=_INSTRUCTIONS_READ if read_only else _INSTRUCTIONS_WRITE)
     for name, fn, description, annotations, reads in _TOOLS:
         if reads or not read_only:
-            server.tool(name=name, description=description, annotations=annotations)(fn)
+            server.tool(name=name, description=description, annotations=annotations)(_surface_errors(fn))
     return server
 
 
