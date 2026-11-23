@@ -560,6 +560,42 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     assert "--strict-mcp-config" in cmd
 
 
+def test_memory_forget_archives_a_page_recoverably(client, tmp_path):
+    from fastapi import HTTPException
+
+    server = sys.modules["obsidian_wiki.server"]
+    path = client.post("/v1/pages", json={"title": "Old Idea", "category": "concepts", "content": "zebra stripes"}).json()["path"]
+    found = lambda: any("old-idea" in c["page"] for c in client.get("/v1/search", params={"q": "old idea"}).json()["candidates"])
+    assert found()
+
+    out = server.forget_page(path)
+
+    assert not (tmp_path / path).exists()
+    assert "API_FORGET" in (tmp_path / "log.md").read_text() and path in (tmp_path / "log.md").read_text()
+    archived = tmp_path / out["archived_to"]
+    assert out["archived_to"].startswith("_archives/forgotten/") and archived.read_text().endswith("zebra stripes\n")
+    assert not found()
+    # Same page forgotten again the same day keeps both copies.
+    (tmp_path / path).write_text("second life")
+    assert server.forget_page(path)["archived_to"] != out["archived_to"]
+
+    (tmp_path / "AGENTS.md").write_text("rules")
+    (tmp_path / "concepts" / "node_modules").mkdir()
+    (tmp_path / "concepts" / "node_modules" / "x.md").write_text("x")
+    for bad in ("index.md", "_meta/profile.md", "../outside.md", "concepts/missing.md", "AGENTS.md", "concepts/node_modules/x.md"):
+        with pytest.raises(HTTPException):
+            server.forget_page(bad)
+
+
+def test_read_only_server_does_not_expose_memory_forget(client):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    names = lambda m: {t.name for t in anyio.run(m.list_tools)}
+    assert "memory_forget" in names(server.mcp)
+    assert "memory_forget" not in names(server.mcp_read)
+
+
 def test_graph_lists_links_resting_on_inferred_or_ambiguous_claims(client, tmp_path):
     _page(tmp_path, "concepts/a.md",
           "---\ntitle: a\n---\nStated: [[b]].\n\n- Guess: [[c]] ^[inferred]\n- Dispute: [[d]] ^[ambiguous]\n")
