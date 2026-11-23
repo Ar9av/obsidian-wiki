@@ -471,3 +471,16 @@ class TestStructuralAnswers:
             r = query(simple_vault, q)
             assert r["index_only"] is True, q
             assert r["should_read"] == [], q
+
+
+def test_query_scope_empty_vault_and_prefix_boundary(tmp_path):
+    from obsidian_wiki.graphrag import query
+
+    assert query(tmp_path, "x", path_prefix="a")["scope"] == {"path_prefix": "a", "searched": 0, "indexed": 0}
+    for rel in ("projects/a/page.md", "projects/ab/page.md"):
+        f = tmp_path / rel
+        f.parent.mkdir(parents=True)
+        f.write_text("---\ntitle: Page\nsummary: page\n---\npage\n")
+    out = query(tmp_path, "page", path_prefix="projects/a/")
+    assert out["scope"] == {"path_prefix": "projects/a", "searched": 1, "indexed": 2}
+    assert [c["page"] for c in out["candidates"]] == ["projects/a/page.md"]

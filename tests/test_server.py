@@ -558,3 +558,19 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     cmd = seen["cmd"]
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
+
+
+def test_search_reports_its_scope_and_can_be_limited_to_a_folder(client, tmp_path):
+    for rel, name in (("projects/acme/zebra-plan.md", "Zebra Plan"), ("concepts/zebra-facts.md", "Zebra Facts"),
+                      ("projects/acmeish/zebra-other.md", "Zebra Other")):
+        _page(tmp_path, rel, f"---\ntitle: {name}\nsummary: zebra stripes\n---\nzebra stripes\n")
+    everything = client.get("/v1/search", params={"q": "zebra"}).json()
+    assert everything["scope"] == {"path_prefix": None, "searched": 3, "indexed": 3}
+    assert len(everything["candidates"]) == 3
+
+    scoped = client.get("/v1/search", params={"q": "zebra", "path_prefix": "/projects/acme/"}).json()
+    assert scoped["scope"] == {"path_prefix": "projects/acme", "searched": 1, "indexed": 3}
+    assert [c["page"] for c in scoped["candidates"]] == ["projects/acme/zebra-plan.md"]  # not projects/acmeish
+
+    empty = client.get("/v1/search", params={"q": "zebra", "path_prefix": "nowhere"}).json()
+    assert empty["candidates"] == [] and empty["scope"]["searched"] == 0

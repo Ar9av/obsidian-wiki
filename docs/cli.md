@@ -242,9 +242,10 @@ obsidian-wiki query "which api gateway do we run?" --include-historical
 |---|---|
 | `--as-of DATE` | Retrieve what was true on `DATE` (`YYYY-MM-DD`) instead of today |
 | `--include-historical` | Also rank pages whose `valid_until` has passed |
+| `--path-prefix DIR` | Only search pages under this vault folder (`projects/acme`); folder-boundary match, so `projects/a` never matches `projects/ab` |
 
 Both flags work on `query` and `graph-query`. The JSON response gains a `temporal`
-block (`as_of`, `retrievable`, `excluded_historical`), and any candidate that opted
+block (`as_of`, `retrievable`, `excluded_historical`) and a `scope` block (`path_prefix`, `searched`, `indexed`: how many pages this answer looked at out of how many exist, so an empty result can be told from a wrong folder; the MCP `memory_search` tool and `GET /v1/search` take `path_prefix` too), and any candidate that opted
 in carries its own `valid_from` / `valid_until` / `superseded_by` so an agent can
 follow the pointer to the replacement. Pages that don't use the fields are
 unaffected — they are current, always, and their JSON is byte-identical to before.

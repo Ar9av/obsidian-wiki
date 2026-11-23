@@ -595,10 +595,13 @@ def query(
     max_should_read: int = 3,
     as_of: Any = None,
     include_historical: bool = False,
+    path_prefix: str = "",
 ) -> dict[str, Any]:
     index = build_index(vault)
+    prefix = path_prefix.strip().strip("/")
     if not index:
         return {
+            "scope": {"path_prefix": prefix or None, "searched": 0, "indexed": 0},
             "answer_type": "direct",
             "candidates": [],
             "path": [],
@@ -631,6 +634,8 @@ def query(
             tz = None  # a typo'd `timezone:` is lint's to report; retrieval keeps answering on UTC
         when = parse_date(clock.today(tz))
     retrievable = index if include_historical else current_pages(index, when)
+    if prefix:  # a folder, matched on a path boundary so `projects/a` never matches `projects/ab`
+        retrievable = {s: e for s, e in retrievable.items() if e["path"] == prefix or e["path"].startswith(prefix + "/")}
     temporal = {
         "as_of": as_of_date.isoformat() if as_of_date else None,
         "include_historical": include_historical,
@@ -699,6 +704,8 @@ def query(
         should_read = should_read[:max_should_read + 2]
 
     return {
+        # What this answer searched, so an agent can tell "nothing there" from "looked in the wrong place".
+        "scope": {"path_prefix": prefix or None, "searched": len(retrievable), "indexed": len(index)},
         "answer_type": answer_type,
         "candidates": [
             {
