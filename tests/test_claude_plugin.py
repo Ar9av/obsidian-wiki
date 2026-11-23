@@ -51,6 +51,8 @@ class ClaudePluginTest(unittest.TestCase):
 
     def test_old_skills_path_still_resolves(self) -> None:
         # Global installs made before the rename hold absolute links into .skills/.
+        if not (ROOT / ".skills").is_symlink():
+            self.skipTest("this checkout has no symlinks (git core.symlinks=false, common on Windows)")
         self.assertEqual(os.readlink(ROOT / ".skills"), "skills")
 
     def test_version_is_pinned_to_releases(self) -> None:

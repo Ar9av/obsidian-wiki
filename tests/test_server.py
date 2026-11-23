@@ -493,7 +493,8 @@ def test_settings_keep_the_key_out_of_the_browser(client, ui_config, monkeypatch
     saved = client.post("/v1/settings", json={"anthropic_api_key": "sk-ant-secret-1234", "provider": "anthropic"}).json()
     assert saved["anthropic_key_set"] and saved["anthropic_key_hint"] == "…1234"
     assert "secret" not in json.dumps(client.get("/v1/settings").json())
-    assert (cfg / "ui-settings.json").stat().st_mode & 0o077 == 0
+    if os.name != "nt":  # Windows has no group/other permission bits to check
+        assert (cfg / "ui-settings.json").stat().st_mode & 0o077 == 0
     assert client.post("/v1/settings", json={"provider": "nope"}).status_code == 400
     assert not client.post("/v1/settings", json={"anthropic_api_key": ""}).json()["anthropic_key_set"]
 

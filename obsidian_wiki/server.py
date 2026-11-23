@@ -181,7 +181,9 @@ def _write_hook(rel: str, title: str, category: str, content: str,
     payload = json.dumps({"op": "write", "path": rel, "title": title, "category": category,
                           "content": content, "tags": tags, "sources": sources, "summary": summary})
     try:
-        proc = subprocess.run(shlex.split(command), input=payload, capture_output=True, text=True,
+        # POSIX shlex would eat the backslashes in `C:\tools\hook.exe`; Windows parses the string itself.
+        argv = command if os.name == "nt" else shlex.split(command)
+        proc = subprocess.run(argv, input=payload, capture_output=True, text=True,
                               timeout=WRITE_HOOK_TIMEOUT, cwd=VAULT)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise HTTPException(502, f"write hook failed ({type(exc).__name__}); nothing written") from exc

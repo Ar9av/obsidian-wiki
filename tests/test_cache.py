@@ -534,3 +534,38 @@ class TestAtomicWrite:
         update_source(vault, src_file)
         # A complete, parseable JSON document — never a truncated prefix.
         json.loads(_manifest_path(vault).read_text(encoding="utf-8"))
+
+
+def test_advisory_lock_retries_windows_eacces_but_surfaces_it_on_posix(tmp_path, monkeypatch):
+    """Windows answers O_EXCL with EACCES while another holder is deleting the lock file."""
+    from obsidian_wiki import cache
+
+    real_open, calls = os.open, {"n": 0}
+
+    def flaky_open(path, flags, *a, **kw):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise PermissionError(13, "Permission denied")
+        return real_open(path, flags, *a, **kw)
+
+    monkeypatch.setattr(cache.os, "open", flaky_open)
+    monkeypatch.setattr(cache, "_IS_WINDOWS", True)
+    with cache.advisory_lock(tmp_path / ".l"):
+        assert (tmp_path / ".l").exists()
+    assert calls["n"] == 3
+
+    calls["n"] = 0
+    monkeypatch.setattr(cache, "_IS_WINDOWS", False)
+    with pytest.raises(PermissionError):
+        with cache.advisory_lock(tmp_path / ".l2"):
+            pass
+
+
+def test_advisory_lock_gives_up_on_persistent_windows_eacces(tmp_path, monkeypatch):
+    from obsidian_wiki import cache
+
+    monkeypatch.setattr(cache.os, "open", lambda *a, **kw: (_ for _ in ()).throw(PermissionError(13, "x")))
+    monkeypatch.setattr(cache, "_IS_WINDOWS", True)
+    with pytest.raises(cache.AdvisoryLockTimeout):
+        with cache.advisory_lock(tmp_path / ".l", timeout=0.05):
+            pass

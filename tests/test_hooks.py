@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -294,12 +295,24 @@ def test_install_rewrites_a_backslash_registration(home: Path) -> None:
     assert len(recap) == 1 and "\\" not in recap[0]
 
 
+def _bash() -> str:
+    """The bash that runs hooks. On Windows a bare `bash` can be WSL's launcher, which
+    cannot run a hook script, so use the Git Bash next to `git` (the shell Claude Code uses)."""
+    if os.name != "nt":
+        return "bash"
+    git = shutil.which("git")
+    candidate = Path(git).parents[1] / "bin" / "bash.exe" if git else None
+    if candidate is None or not candidate.is_file():
+        pytest.skip("Git Bash not found")
+    return str(candidate)
+
+
 def test_precompact_hook_asks_the_summary_to_keep_capture_candidates() -> None:
     """Compaction drops findings before Stop can capture them; the hook's
     stdout is summary instructions, so it must ask for them and never block."""
     script = hk.hook_script("wiki-precompact-capture.sh")
     run = lambda env: subprocess.run(  # noqa: E731
-        ["bash", str(script)], input='{"trigger": "auto"}', capture_output=True,
+        [_bash(), hk._git_bash_path(script)], input='{"trigger": "auto"}', capture_output=True,
         text=True, env={**os.environ, **env},
     )
     on = run({"WIKI_PRECOMPACT_CAPTURE": ""})

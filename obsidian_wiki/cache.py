@@ -91,6 +91,9 @@ class ManifestLockTimeout(AdvisoryLockTimeout):
     """Raised when the manifest lock could not be acquired within the timeout."""
 
 
+_IS_WINDOWS = os.name == "nt"
+
+
 @contextmanager
 def advisory_lock(
     lock: Path,
@@ -114,6 +117,15 @@ def advisory_lock(
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
+        except PermissionError as exc:
+            # Windows refuses O_EXCL creation with EACCES while another holder is
+            # deleting the file, which is contention, not a real permission problem.
+            # On POSIX it is a real one and must surface.
+            if not _IS_WINDOWS:
+                raise
+            if time.monotonic() >= deadline:
+                raise error_cls(f"could not acquire {lock} within {timeout}s ({exc})") from exc
+            time.sleep(0.01)
         except FileExistsError:
             try:
                 age = time.time() - lock.stat().st_mtime
