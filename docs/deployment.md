@@ -313,7 +313,9 @@ server only your machine can reach, bridge it into `claude_desktop_config.json` 
     "env": { "WIKI_AUTH": "Bearer <your key>" } } } }
 ```
 
-Eight tools. Four for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+Nine tools. Five for knowledge — `memory_search`, `memory_read`, `memory_write`, `memory_forget`, `memory_context_pack` — and four for memory proper: `memory_recap`, `memory_profile`, `memory_todo`, and `memory_sync`. A [read-only key](#read-only-access) sees four of them.
+
+`memory_forget` takes a page path and moves the page to `_archives/forgotten/<date>/<same path>` instead of deleting it. Search, the graph and lint skip that folder and git keeps it, so restoring is moving the file back. Links to a forgotten page become broken, so call `memory_sync` afterward. `index.md`, `log.md`, `hot.md` and anything under `_`- or `.`-prefixed folders are refused.
 
 `memory_recap` is the one to call at session start: it returns the owner profile, open threads, and recent activity as a single block, optionally scoped to a `project`.
 

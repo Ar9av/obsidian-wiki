@@ -110,6 +110,34 @@ def read_page(path: str) -> dict[str, Any]:
     return {"path": path, "markdown": target.read_text(encoding="utf-8")}
 
 
+_RESERVED_ROOT_FILES = frozenset({"index.md", "log.md", "hot.md"})
+
+
+def forget_page(path: str) -> dict[str, Any]:
+    """Take a page out of the wiki without deleting it.
+
+    The page moves to `_archives/forgotten/<date>/<same path>`, which search, the
+    graph and lint skip, and which git keeps. Restore it by moving it back.
+    Links to it become broken, so run `memory_sync` afterward and fix them.
+    """
+    target = _resolve(path)
+    rel = target.relative_to(VAULT.resolve()).as_posix()
+    if target.suffix != ".md" or rel in _RESERVED_ROOT_FILES or rel.startswith(("_", ".")):
+        raise HTTPException(400, f"not a wiki page that can be forgotten: {path}")
+    if not target.is_file():
+        raise HTTPException(404, f"no such page: {path}")
+    day = clock.today(clock.wiki_timezone(VAULT))
+    dest = VAULT / "_archives" / "forgotten" / day / rel
+    with _VAULT_WRITE_LOCK:
+        n = 1
+        while dest.exists():  # forgotten twice in a day: keep both
+            n += 1
+            dest = dest.with_name(f"{Path(rel).stem}-{n}.md")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        target.replace(dest)
+    return {"forgotten": rel, "archived_to": dest.relative_to(VAULT).as_posix()}
+
+
 def _folded(key: str, value: str) -> str:
     """Emit a free-text scalar as a YAML folded block (`key: >-`).
 
@@ -381,6 +409,7 @@ _TOOLS = (
     ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
+    ("memory_forget", forget_page, "Archive a wiki page (recoverable, not deleted) so it leaves search and the graph. Run memory_sync afterward.", _OVERWRITES, False),
     ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
     ("memory_recap", memory_recap, "Owner profile, open threads, and recent activity — call at session start.", _READS, True),
     ("memory_profile", memory_profile, "Read or update durable facts about a person (list|set|forget); user_id scopes them.", _OVERWRITES, False),
