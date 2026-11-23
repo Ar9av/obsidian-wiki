@@ -13,6 +13,7 @@ Run it with ``obsidian-wiki serve`` or ``python -m obsidian_wiki.server``.
 from __future__ import annotations
 
 import difflib
+import functools
 import hmac
 import json
 import os
@@ -31,6 +32,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 from pydantic import BaseModel, Field
 
@@ -149,11 +151,14 @@ def _write_hook(rel: str, title: str, category: str, content: str,
         raise HTTPException(422, f"write hook rejected {rel}: {(proc.stderr or proc.stdout).strip()[:300]}")
     if proc.stdout.strip():
         try:
-            replaced = json.loads(proc.stdout).get("content")
-        except (ValueError, AttributeError):
-            raise HTTPException(502, "write hook printed output that is not a JSON object; nothing written")
-        if isinstance(replaced, str):
-            return replaced
+            replaced = json.loads(proc.stdout)["content"]
+        except (ValueError, TypeError, KeyError):
+            replaced = None
+        # Anything printed must be {"content": "<string>"}: a typo'd key or a null
+        # would otherwise silently write the unredacted page.
+        if not isinstance(replaced, str):
+            raise HTTPException(502, 'write hook output must be {"content": "<text>"}, or nothing; nothing written')
+        return replaced
     return content
 
 
@@ -426,11 +431,26 @@ _TOOLS = (
 )
 
 
+def _surface_errors(fn):
+    """Over MCP, show an HTTPException's message (a hook veto, a bad path) to the agent.
+
+    The tool layer otherwise reports every exception as a bare "Error executing tool",
+    so the agent could not tell a policy rejection from a crash.
+    """
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except HTTPException as exc:
+            raise ToolError(str(exc.detail)) from exc
+    return run
+
+
 def _build_mcp(read_only: bool) -> MCPServer:
     server = MCPServer("obsidian-wiki")
     for name, fn, description, annotations, reads in _TOOLS:
         if reads or not read_only:
-            server.tool(name=name, description=description, annotations=annotations)(fn)
+            server.tool(name=name, description=description, annotations=annotations)(_surface_errors(fn))
     return server
 
 

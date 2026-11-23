@@ -265,17 +265,19 @@ Read only by `docker-compose.yml`: `WIKI_VERSION` (image tag, default `latest`),
 
 ## Write hook
 
-Set `WIKI_WRITE_HOOK` to a command and the server runs it before every page write, so you can keep secrets or PII out of the vault, enforce a house rule, or clean up text, without patching the server. The command is split like a shell would but run **without a shell**, in the vault directory, with a 10-second limit.
+Set `WIKI_WRITE_HOOK` to a command and `obsidian-wiki serve` runs it before every page write, so you can keep secrets or PII out of the vault, enforce a house rule, or clean up text, without patching the server. The command is split like a shell would but run **without a shell**, in the vault directory, with a 10-second limit.
 
 It receives the page as JSON on stdin: `{"op": "write", "path", "title", "category", "content", "tags", "sources", "summary"}`.
 
 - **Exit 0** accepts the page. If it prints a JSON object with a `content` string, that replaces the body (for example, redaction); no output leaves the page unchanged.
 - **Any other exit** rejects the write with **422**, and the first 300 characters of its stderr come back as the reason.
-- **A crash, a timeout, a missing command, or output that isn't a JSON object** rejects with **502**. A broken hook fails closed: nothing is written.
+- **A crash, a timeout, a missing command, or any output other than `{"content": "<text>"}`** (a typo'd key, `null`, `{}`) rejects with **502**. A broken hook fails closed: nothing is written.
 
 ```bash
 WIKI_WRITE_HOOK="python3 /etc/wiki/no_secrets.py" obsidian-wiki serve
 ```
+
+Over MCP the agent sees the rejection reason too, not a generic tool error. In Docker, `docker-compose.yml` forwards `WIKI_WRITE_HOOK`, but the script has to exist in the container, so bake it into a custom image or mount it; the released image ships none.
 
 The hook covers writes that go through the server. Pages an agent writes straight to disk with its own file tools don't pass through it; use your agent's own hook (for example a Claude Code `PreToolUse` hook) for those.
 ## Connect an agent (MCP)

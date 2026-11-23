@@ -24,6 +24,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
     monkeypatch.setenv("WIKI_API_KEY", KEY)
     monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
+    monkeypatch.delenv("WIKI_WRITE_HOOK", raising=False)
     sys.modules.pop("obsidian_wiki.server", None)
     server = importlib.import_module("obsidian_wiki.server")
     with TestClient(server.app) as c:
@@ -599,9 +600,25 @@ def test_broken_write_hook_fails_closed(client, tmp_path, monkeypatch):
     assert _write(client).status_code == 502
     _hook(tmp_path, monkeypatch, "print('not json')\n")
     assert _write(client).status_code == 502
+    for output in ('{"contnet": "x"}', '{"content": null}', "{}", "[]"):  # typo'd or empty replies must not accept
+        _hook(tmp_path, monkeypatch, f"print({output!r})\n")
+        assert _write(client).status_code == 502, output
     assert not (tmp_path / "concepts/note.md").exists()
 
 
 def test_no_hook_means_no_change(client, tmp_path, monkeypatch):
     monkeypatch.delenv("WIKI_WRITE_HOOK", raising=False)
     assert _write(client).status_code == 200
+
+
+def test_mcp_tool_shows_the_hook_reason_to_the_agent(client, tmp_path, monkeypatch):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    _hook(tmp_path, monkeypatch, "sys.stderr.write('no secrets please')\nsys.exit(1)\n")
+
+    async def call():
+        return await server.mcp.call_tool("memory_write", {"title": "N", "category": "concepts", "content": "x"})
+
+    with pytest.raises(Exception, match="no secrets please"):
+        anyio.run(call)

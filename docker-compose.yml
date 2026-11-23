@@ -12,6 +12,9 @@ services:
     environment:
       WIKI_API_KEY: ${WIKI_API_KEY:-}
       WIKI_READ_KEY: ${WIKI_READ_KEY:-}
+      # Command run on every page write (see docs/deployment.md#write-hook); the script
+      # must exist inside the image, so this needs a custom image or a mounted file.
+      WIKI_WRITE_HOOK: ${WIKI_WRITE_HOOK:-}
       # Two-way git sync with the vault your laptop's Obsidian opens (off unless set).
       WIKI_GIT_REMOTE: ${WIKI_GIT_REMOTE:-}
       WIKI_GIT_SYNC_INTERVAL: ${WIKI_GIT_SYNC_INTERVAL:-0}
