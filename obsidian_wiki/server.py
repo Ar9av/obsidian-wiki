@@ -17,6 +17,8 @@ import hmac
 import json
 import os
 import re
+import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -121,6 +123,40 @@ def _folded(key: str, value: str) -> str:
     return f"{key}: >-\n  " + " ".join(str(value).split())
 
 
+WRITE_HOOK_TIMEOUT = 10
+
+
+def _write_hook(rel: str, title: str, category: str, content: str,
+                tags: list[str], sources: list[str], summary: str) -> str:
+    """Run the operator's `WIKI_WRITE_HOOK` on a page about to be written.
+
+    The command (no shell) gets the page as JSON on stdin. Exit 0 accepts it; a
+    stdout JSON object with a `content` key replaces the body (redaction, cleanup).
+    Any other exit — or a crash, timeout or missing command — rejects the write,
+    so a broken hook fails closed. Returns the content to write.
+    """
+    command = os.environ.get("WIKI_WRITE_HOOK", "").strip()
+    if not command:
+        return content
+    payload = json.dumps({"op": "write", "path": rel, "title": title, "category": category,
+                          "content": content, "tags": tags, "sources": sources, "summary": summary})
+    try:
+        proc = subprocess.run(shlex.split(command), input=payload, capture_output=True, text=True,
+                              timeout=WRITE_HOOK_TIMEOUT, cwd=VAULT)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        raise HTTPException(502, f"write hook failed ({type(exc).__name__}); nothing written") from exc
+    if proc.returncode != 0:
+        raise HTTPException(422, f"write hook rejected {rel}: {(proc.stderr or proc.stdout).strip()[:300]}")
+    if proc.stdout.strip():
+        try:
+            replaced = json.loads(proc.stdout).get("content")
+        except (ValueError, AttributeError):
+            raise HTTPException(502, "write hook printed output that is not a JSON object; nothing written")
+        if isinstance(replaced, str):
+            return replaced
+    return content
+
+
 def write_page(
     title: str,
     category: str,
@@ -133,6 +169,7 @@ def write_page(
 ) -> dict[str, Any]:
     rel = f"{_category_slug(category)}/{_slug(title)}.md"
     target = _resolve(rel)
+    content = _write_hook(rel, title, category, content, tags or [], sources or [], summary)
     with _VAULT_WRITE_LOCK:
         return _write_page_locked(rel, target, title, category, content,
                                   tags=tags, sources=sources, summary=summary, upsert=upsert)
