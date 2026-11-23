@@ -389,8 +389,21 @@ _TOOLS = (
 )
 
 
+_INSTRUCTIONS_READ = (
+    "A markdown knowledge vault. Call memory_recap once at session start for the owner's profile "
+    "and open threads. Use memory_search first, then memory_read on the best hits; "
+    "memory_context_pack gives a token-bounded bundle on one topic. Search is lexical, "
+    "so try the words the page would use."
+)
+_INSTRUCTIONS_WRITE = (
+    _INSTRUCTIONS_READ
+    + " Before writing, search for an existing page and update it rather than adding a duplicate. "
+    "Use category '_raw' for rough captures. After writes, call memory_sync once to refresh index.md and hot.md."
+)
+
+
 def _build_mcp(read_only: bool) -> MCPServer:
-    server = MCPServer("obsidian-wiki")
+    server = MCPServer("obsidian-wiki", instructions=_INSTRUCTIONS_READ if read_only else _INSTRUCTIONS_WRITE)
     for name, fn, description, annotations, reads in _TOOLS:
         if reads or not read_only:
             server.tool(name=name, description=description, annotations=annotations)(fn)
