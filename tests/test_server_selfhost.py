@@ -40,7 +40,7 @@ def _load_server(monkeypatch, vault: Path, **env: str):
     pytest.importorskip("mcp")
     monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(vault))
     for var in ("WIKI_API_KEY", "WIKI_READ_KEY", "WIKI_ALLOW_ANONYMOUS",
-                "WIKI_GIT_REMOTE", "WIKI_GIT_SYNC_INTERVAL", "WIKI_HOST"):
+                "WIKI_GIT_REMOTE", "WIKI_GIT_SYNC_INTERVAL", "WIKI_HOST", "WIKI_WRITE_HOOK"):
         monkeypatch.delenv(var, raising=False)
     for var, value in env.items():
         monkeypatch.setenv(var, value)
@@ -145,7 +145,7 @@ def _serve(monkeypatch, tmp_path, *argv: str, **env: str):
     from obsidian_wiki import cli
 
     for var in ("WIKI_API_KEY", "WIKI_READ_KEY", "WIKI_ALLOW_ANONYMOUS", "WIKI_HOST",
-                "WIKI_PORT", "WIKI_GIT_REMOTE", "WIKI_GIT_SYNC_INTERVAL"):
+                "WIKI_PORT", "WIKI_GIT_REMOTE", "WIKI_GIT_SYNC_INTERVAL", "WIKI_WRITE_HOOK"):
         monkeypatch.delenv(var, raising=False)
     for var, value in env.items():
         monkeypatch.setenv(var, value)
