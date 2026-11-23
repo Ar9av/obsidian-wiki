@@ -256,9 +256,9 @@ One locked call updates the log and the hot cache (the index is unaffected — n
 
 ```bash
 obsidian-wiki memory sync CROSS_LINK \
-  pages_scanned=<N> links_added=<M> typed_relations_written=<T> \
-  pages_modified=<P> orphans_remaining=<Q> \
-  misc_affinity_updated=<R> promotion_candidates=<S> \
+  pages_scanned='<N>' links_added='<M>' typed_relations_written='<T>' \
+  pages_modified='<P>' orphans_remaining='<Q>' \
+  misc_affinity_updated='<R>' promotion_candidates='<S>' \
   --takeaways "Cross-linked 23 mentions across 12 pages; 2 orphans remain." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

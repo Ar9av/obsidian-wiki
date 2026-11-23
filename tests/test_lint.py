@@ -1394,3 +1394,43 @@ def test_oversized_pages_reports_markdown_obsidian_cannot_open(tmp_path: Path) -
         "oversized_pages"
     ]
     assert report["status"] == "warn"
+
+
+def test_broken_heading_and_block_anchors_are_warned(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=[
+        "beta#BETA", "beta#Details|see more", "beta#^kept", "beta#Missing", "beta#^gone", "beta#Beta#Nope",
+        "ghost#Anything",
+    ])
+    beta = _page(vault, "concepts/beta.md", links=["alpha"])
+    beta.write_text(beta.read_text() + "## Details\nA claim. ^kept\n```\n## Fake\n```\n", encoding="utf-8")
+
+    report = lint_vault(vault, require_trust_ledger=False)
+
+    assert report["findings"]["broken_heading_anchors"] == [
+        {"page": "concepts/alpha.md", "target": "beta", "anchor": "Missing"},
+        {"page": "concepts/alpha.md", "target": "beta", "anchor": "^gone"},
+        {"page": "concepts/alpha.md", "target": "beta", "anchor": "Beta#Nope"},
+    ]
+    # An unresolved page is a broken link, not also a broken anchor.
+    assert [b["target"] for b in report["findings"]["broken_links"]] == ["ghost"]
+    assert report["findings"]["broken_links"] and report["status"] == "fail"
+
+
+def test_valid_anchors_alone_only_pass(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    _page(vault, "concepts/alpha.md", links=["beta#beta"])
+    _page(vault, "concepts/beta.md", links=["alpha"])
+    assert lint_vault(vault, require_trust_ledger=False)["findings"]["broken_heading_anchors"] == []
+
+
+def test_anchor_checks_table_escaped_pipes_and_same_page_links(tmp_path: Path) -> None:
+    vault = tmp_path / "vault"
+    alpha = _page(vault, "concepts/alpha.md", links=["beta#^kept\\|alias", "beta#^gone\\|alias"])
+    alpha.write_text(alpha.read_text() + "[[#Alpha]] [[#Missing Section]]\n", encoding="utf-8")
+    beta = _page(vault, "concepts/beta.md", links=["alpha"])
+    beta.write_text(beta.read_text() + "A claim. ^kept\n", encoding="utf-8")
+
+    found = lint_vault(vault, require_trust_ledger=False)["findings"]["broken_heading_anchors"]
+
+    assert [(f["target"], f["anchor"]) for f in found] == [("beta", "^gone"), ("concepts/alpha.md", "Missing Section")]

@@ -319,9 +319,9 @@ Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
 obsidian-wiki memory sync COPILOT_HISTORY_INGEST \
-  projects=<projects> sessions=<sessions> checkpoints=<checkpoints> \
-  pages_updated=<pages_updated> pages_created=<pages_created> \
-  mode=<mode> \
+  projects='<projects>' sessions='<sessions>' checkpoints='<checkpoints>' \
+  pages_updated='<pages_updated>' pages_created='<pages_created>' \
+  mode='<mode>' \
   --takeaways "Ingested 5 Copilot sessions across 2 projects; surfaced patterns in API design and testing strategy." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

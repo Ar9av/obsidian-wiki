@@ -53,3 +53,15 @@ def test_cli_links_flag(vault):
     )
     data = json.loads(proc.stdout)
     assert [(r["from"], r["to"]) for r in data["links"]] == [("a", "d")]
+
+
+def test_table_rows_footnotes_and_callouts_do_not_share_a_marker():
+    from obsidian_wiki.link_provenance import _blocks
+
+    table = "| a | b |\n|---|---|\n| [[x]] | plain |\n| [[y]] | guess ^[inferred] |"
+    states = {raw: st for b in _blocks(table) for raw, st in classify_links(b)}
+    assert states == {"x": "extracted", "y": "inferred"}
+    notes = "[^1]: see [[p]]\n[^2]: a guess about [[q]] ^[inferred]"
+    assert {raw: st for b in _blocks(notes) for raw, st in classify_links(b)} == {"p": "extracted", "q": "inferred"}
+    callout = "> [!note]\n> Stated: [[m]]\n>\n> Guess: [[n]] ^[inferred]"
+    assert {raw: st for b in _blocks(callout) for raw, st in classify_links(b)} == {"m": "extracted", "n": "inferred"}

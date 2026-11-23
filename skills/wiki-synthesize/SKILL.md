@@ -150,7 +150,7 @@ One locked call updates the index, the log, and the hot cache:
 
 ```bash
 obsidian-wiki memory sync WIKI_SYNTHESIZE \
-  pages_scanned=<N> synthesis_created=<M> candidates_skipped=<K> \
+  pages_scanned='<N>' synthesis_created='<M>' candidates_skipped='<K>' \
   --takeaways "Synthesized 5 cross-cutting pages: Caching × Consistency, Testing × Observability, …" --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

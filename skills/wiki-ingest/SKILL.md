@@ -442,7 +442,7 @@ For each page in your plan:
   - Only part of the page is stale → rewrite the claim to the new value and move the old one under a `## History` section as `- <old claim> (valid <from> – <day before new source date>)`.
   - The whole page is stale → set `valid_until:` to the day before the new source's date and `superseded_by: "[[new-page]]"` on the old page, and link the new page back to it. The old page stays in the vault as history.
   - The new source is older, or either date is unknown → keep the current claim, and flag the conflict with `^[ambiguous]` instead of picking a winner.
-  - Log each invalidation: `obsidian-wiki memory log INVALIDATE page=<path> by=<source>`.
+  - Log each invalidation: `obsidian-wiki memory log INVALIDATE page='<path>' by='<source>'`.
 - If the page already has `valid_from:` and this source's own date is earlier, lower it to that date. Never add `valid_from:` to a page that has none, and never raise one.
 
 **Keep every page well under 1 MB.** Obsidian can't open a Markdown file of roughly 1–2 MB: the window goes blank, and since Obsidian loads every file in the vault, the whole vault becomes unusable. A wiki page is distilled knowledge, so one that grows past ~100 KB has usually swallowed its source whole. Plan large sources as several pages in Step 4: one per subtopic, each in its own category, each answering one question, with a parent page that links to them. Never paste a whole converted document (PDF, export, transcript) into a page. When a page you're updating would cross that size, split it the same way rather than appending. `obsidian-wiki lint` reports anything over 1,000,000 bytes as `oversized_pages`.

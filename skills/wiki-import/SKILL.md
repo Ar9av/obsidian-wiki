@@ -235,7 +235,7 @@ One locked call. The index is reconciled from the pages now on disk, so every cr
 ```bash
 obsidian-wiki memory sync IMPORT \
   source='<bundle path>' \
-  pages_created=<N> pages_skipped=<K> pages_merged=<M> \
+  pages_created='<N>' pages_skipped='<K>' pages_merged='<M>' \
   --takeaways 'Imported <bundle>: <what it adds to the picture>' --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 
