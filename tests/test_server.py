@@ -740,3 +740,95 @@ def test_write_hook_covers_bulk_writes_and_a_veto_rejects_the_whole_batch(client
     _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].upper()}))\n")
     assert client.post("/v1/pages/bulk", json=[ok]).status_code == 200
     assert "FINE" in (tmp_path / "concepts/fine.md").read_text()
+
+
+# --- vault images in the viewer ---------------------------------------------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+
+
+def test_assets_serve_vault_images_behind_the_key(client, tmp_path):
+    (tmp_path / "attachments").mkdir()
+    (tmp_path / "attachments" / "example.png").write_bytes(PNG)
+    res = client.get("/v1/assets/attachments/example.png")
+    assert res.status_code == 200 and res.content == PNG
+    assert res.headers["content-type"] == "image/png"
+    assert res.headers["x-content-type-options"] == "nosniff"
+    client.headers.pop("authorization")
+    assert client.get("/v1/assets/attachments/example.png").status_code == 401
+
+
+def test_assets_accept_the_read_only_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
+    monkeypatch.setenv("WIKI_READ_KEY", "reader")
+    monkeypatch.delenv("WIKI_API_KEY", raising=False)
+    monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    (tmp_path / "a.png").write_bytes(PNG)
+    with TestClient(server.app) as c:
+        assert c.get("/v1/assets/a.png", headers={"authorization": "Bearer reader"}).status_code == 200
+
+
+def test_svg_is_served_sandboxed_so_a_direct_visit_cannot_run_script(client, tmp_path):
+    (tmp_path / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
+    res = client.get("/v1/assets/logo.svg")
+    assert res.headers["content-type"].startswith("image/svg+xml")
+    assert "sandbox" in res.headers["content-security-policy"]
+
+
+def test_assets_serve_images_only_never_notes_or_secrets(client, tmp_path):
+    (tmp_path / ".env").write_text("WIKI_API_KEY=hunter2\n")
+    (tmp_path / "concepts").mkdir()
+    (tmp_path / "concepts" / "a.md").write_text("# A\n")
+    (tmp_path / ".obsidian").mkdir()
+    (tmp_path / ".obsidian" / "hidden.png").write_bytes(PNG)
+    assert client.get("/v1/assets/.env").status_code == 415
+    assert client.get("/v1/assets/concepts/a.md").status_code == 415
+    assert client.get("/v1/assets/.obsidian/hidden.png").status_code == 404
+    assert client.get("/v1/assets/nothing.png").status_code == 404
+    assert client.get("/v1/assets/concepts").status_code == 415
+
+
+@pytest.mark.parametrize("path", ["../outside.png", "attachments/../../outside.png", "%2e%2e/outside.png"])
+def test_assets_cannot_escape_the_vault(client, tmp_path, path):
+    (tmp_path.parent / "outside.png").write_bytes(PNG)
+    assert client.get(f"/v1/assets/{path}").status_code in (400, 404)
+
+
+def test_assets_refuse_a_symlink_out_of_the_vault(client, tmp_path):
+    outside = tmp_path.parent / "secret.png"
+    outside.write_bytes(PNG)
+    try:
+        (tmp_path / "link.png").symlink_to(outside)
+        (tmp_path / "docs").mkdir()
+        (tmp_path / "docs" / "linked.png").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlinks unavailable")
+    assert client.get("/v1/assets/link.png").status_code == 400
+    # An Obsidian bare-name embed finds it by name; it must be refused the same way.
+    assert client.get("/v1/assets/linked.png").status_code == 400
+
+
+def test_bare_names_resolve_like_obsidian_embeds(client, tmp_path):
+    (tmp_path / "attachments").mkdir()
+    (tmp_path / "attachments" / "Shot.PNG").write_bytes(PNG)
+    deeper = tmp_path / "projects" / "x" / "assets"
+    deeper.mkdir(parents=True)
+    (deeper / "Shot.PNG").write_bytes(PNG + b"deeper")
+    # Shallowest match wins; the case of the name does not matter.
+    assert client.get("/v1/assets/shot.png").content == PNG
+    # A path is never searched for: an exact miss stays a miss.
+    assert client.get("/v1/assets/elsewhere/Shot.PNG").status_code == 404
+
+
+def test_assets_follow_the_vault_switcher(client, tmp_path, monkeypatch):
+    other = tmp_path.parent / "other-vault"
+    other.mkdir()
+    (other / "only-there.png").write_bytes(PNG)
+    (tmp_path / "only-here.png").write_bytes(PNG)
+    server = sys.modules["obsidian_wiki.server"]
+    assert client.get("/v1/assets/only-here.png").status_code == 200
+    monkeypatch.setattr(server, "VAULT", other)
+    assert client.get("/v1/assets/only-here.png").status_code == 404
+    assert client.get("/v1/assets/only-there.png").status_code == 200

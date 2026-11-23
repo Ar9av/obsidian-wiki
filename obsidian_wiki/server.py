@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
@@ -734,6 +734,68 @@ def http_search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]
 @app.get("/v1/pages/{path:path}", dependencies=[Depends(require_key)])
 def http_read(path: str) -> dict[str, Any]:
     return read_page(path)
+
+
+# Images a page can embed, with the type each is served as. An explicit table, not
+# the platform's mimetypes registry, so the answer is the same on every OS.
+_ASSET_TYPES = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+    ".webp": "image/webp", ".avif": "image/avif", ".bmp": "image/bmp", ".ico": "image/x-icon",
+    ".svg": "image/svg+xml",
+}
+# An SVG can carry script, and this endpoint is same-origin with the viewer. The
+# viewer shows it through a blob: <img>, where script never runs; this covers
+# anyone who opens the URL directly (WIKI_ALLOW_ANONYMOUS, or a key in a proxy).
+_ASSET_HEADERS = {
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+    "X-Content-Type-Options": "nosniff",
+    "Cache-Control": "private, no-cache",
+}
+
+
+def _find_asset(name: str) -> Path | None:
+    """Obsidian's ``![[name.png]]``: a bare file name matches anywhere in the vault.
+
+    The shallowest match wins, then the alphabetically first, so the answer is
+    stable. Hidden folders (.git, .obsidian, .trash) are never searched.
+    """
+    root = VAULT.resolve()
+    wanted = name.casefold()
+    best: tuple[int, str, Path] | None = None
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for filename in filenames:
+            if filename.casefold() == wanted:
+                found = Path(dirpath) / filename
+                key = (len(found.relative_to(root).parts), found.relative_to(root).as_posix())
+                if best is None or key < best[:2]:
+                    best = (*key, found)
+    return best[2] if best else None
+
+
+@app.get("/v1/assets/{path:path}", dependencies=[Depends(require_key)])
+def http_asset(path: str) -> FileResponse:
+    """One image from the vault, for the viewer to show inside a rendered page.
+
+    Read-only and behind the same key as everything else; the viewer fetches it
+    with the bearer header and shows the bytes, because an <img src> cannot send
+    one. Only image types are served, never a hidden folder, and the path goes
+    through the same vault check as pages, so it follows the vault switcher.
+    """
+    suffix = Path(path).suffix.lower()
+    if suffix not in _ASSET_TYPES:
+        raise HTTPException(415, f"not an image type the viewer serves: {path}")
+    if any(part.startswith(".") for part in Path(path).parts):
+        raise HTTPException(404, f"no such file: {path}")
+    target = _resolve(path)
+    if not target.is_file() and "/" not in path:
+        found = _find_asset(path)
+        if found is not None:
+            # A symlinked file can match by name yet live outside the vault.
+            target = _resolve(found.relative_to(VAULT.resolve()).as_posix())
+    if not target.is_file():
+        raise HTTPException(404, f"no such file: {path}")
+    return FileResponse(target, media_type=_ASSET_TYPES[suffix], headers=_ASSET_HEADERS)
 
 
 @app.post("/v1/pages", dependencies=[Depends(require_write_key)])

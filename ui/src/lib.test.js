@@ -1,7 +1,7 @@
 // npm test — node:test, no dependencies
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { parseLog, slug, splitFrontmatter, withLinks } from './lib.js'
+import { assetUrl, parseEmbed, parseLog, resolveAsset, slug, splitFrontmatter, withLinks } from './lib.js'
 
 test('slug matches links._key, keeping Unicode', () => {
   assert.equal(slug('concepts/Café Ünïcode.md'), 'concepts/café-ünïcode')
@@ -16,6 +16,37 @@ test('wikilinks become internal links, but not inside code', () => {
   assert.equal(withLinks('```\n[[c]]\n```\n[[d]]'), '```\n[[c]]\n```\n[d](#/wl/d)')
   assert.equal(withLinks('~~~py\n[[c]]\n~~~'), '~~~py\n[[c]]\n~~~')
   assert.equal(withLinks('a claim ^[inferred] `^[kept]`'), 'a claim [inferred](#/prov/) `^[kept]`')
+})
+
+test('image embeds become asset links; other embeds stay wikilinks; code is left alone', () => {
+  assert.equal(withLinks('![[pic.png]]'), '![](#/asset/pic.png)')
+  assert.equal(withLinks('![[My Folder/Shot 1.JPG|300]]'), '![](#/asset/My%20Folder%2FShot%201.JPG?w=300)')
+  assert.equal(withLinks('![[a.png|300x200]]'), '![](#/asset/a.png?w=300)')
+  assert.equal(withLinks('![[a.svg|a fine chart]]'), '![a fine chart](#/asset/a.svg)')
+  assert.equal(withLinks('![[note]] and [[pic.png]]'), '[note](#/wl/note) and [pic.png](#/wl/pic.png)')
+  assert.equal(withLinks('`![[pic.png]]`'), '`![[pic.png]]`')
+  assert.deepEqual(parseEmbed('#/asset/My%20Folder%2FShot%201.JPG?w=300'), { path: 'My Folder/Shot 1.JPG', width: 300 })
+  assert.deepEqual(parseEmbed('#/asset/pic.png'), { path: 'pic.png', width: undefined })
+  assert.equal(parseEmbed('../pic.png'), null)
+})
+
+test('image paths resolve against the page that holds them', () => {
+  assert.equal(resolveAsset('concepts/my-note.md', '../attachments/example.jpg'), 'attachments/example.jpg')
+  assert.equal(resolveAsset('concepts/my-note.md', './img.png'), 'concepts/img.png')
+  assert.equal(resolveAsset('concepts/my-note.md', 'img.png'), 'concepts/img.png')
+  assert.equal(resolveAsset('a/b/c.md', '../../x.png'), 'x.png')
+  assert.equal(resolveAsset('index.md', 'attachments/x.png'), 'attachments/x.png')
+  assert.equal(resolveAsset('concepts/n.md', '/attachments/x.png'), 'attachments/x.png')
+  assert.equal(resolveAsset('concepts/n.md', 'My%20Pic.png?raw=1#top'), 'concepts/My Pic.png')
+  assert.equal(resolveAsset(undefined, 'x.png'), 'x.png')
+  // Not vault files, or not reachable: left to the browser / refused.
+  assert.equal(resolveAsset('concepts/n.md', '../../x.png'), null)
+  assert.equal(resolveAsset('concepts/n.md', 'https://example.com/x.png'), null)
+  assert.equal(resolveAsset('concepts/n.md', '//example.com/x.png'), null)
+  assert.equal(resolveAsset('concepts/n.md', 'data:image/png;base64,AAAA'), null)
+  assert.equal(resolveAsset('concepts/n.md', ''), null)
+  assert.equal(resolveAsset('concepts/n.md', '%E0%A4%A.png'), 'concepts/%E0%A4%A.png')
+  assert.equal(assetUrl('attachments/My Pic #1.png'), '/v1/assets/attachments/My%20Pic%20%231.png')
 })
 
 test('frontmatter: scalars, folded text, lists, CRLF, none', () => {

@@ -22,22 +22,24 @@ const KEY = 'obsidian-wiki-key'
 // Views fire several requests at once; only the first 401 prompts. The rest see
 // the key changed while they were in flight and retry, or stop if it was declined.
 let declined = false
-async function call(path, init = {}) {
+async function call(path, init = {}, as = 'json') {
   const sent = sessionStorage.getItem(KEY) ?? ''
   const headers = { authorization: `Bearer ${sent}`, ...(init.body ? { 'content-type': 'application/json' } : {}) }
   const res = await fetch(path, { ...init, headers })
   if (res.status === 401) {
-    if ((sessionStorage.getItem(KEY) ?? '') !== sent) return call(path, init)
+    if ((sessionStorage.getItem(KEY) ?? '') !== sent) return call(path, init, as)
     const key = declined ? null : window.prompt('WIKI_API_KEY for this server')
-    if (key) { sessionStorage.setItem(KEY, key); return call(path, init) }
+    if (key) { sessionStorage.setItem(KEY, key); return call(path, init, as) }
     declined = true
     throw new Error('bad or missing API key — refresh to try again')
   }
   if (!res.ok) throw new Error(`${path}: ${res.status} ${await res.text()}`)
-  return res.json()
+  return res[as]()
 }
 export const api = {
   get: (path) => call(path),
+  // Bytes, for files an <img src> can't fetch because it can't send the bearer header.
+  blob: (path) => call(path, {}, 'blob'),
   post: (path, body) => call(path, { method: 'POST', body: JSON.stringify(body) }),
 }
 

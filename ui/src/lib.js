@@ -20,9 +20,46 @@ export function splitFrontmatter(text) {
 }
 
 const WIKILINK = /!?\[\[([^\]|#]+)(#[^\]|]*)?(?:\|([^\]]+))?\]\]/g
+// Images a page can show; mirrors the types GET /v1/assets serves.
+const IMAGE_EXT = 'png|jpe?g|gif|webp|avif|bmp|ico|svg'
+// Obsidian's ![[pic.png]] / ![[pic.png|300]] / ![[pic.png|alt text]]. Other embeds (![[note]]) stay wikilinks.
+const IMAGE_EMBED = new RegExp(`!\\[\\[([^\\]|#]+\\.(?:${IMAGE_EXT}))(?:\\|([^\\]]+))?\\]\\]`, 'gi')
+const embed = (_, target, size = '') => {
+  const t = target.trim()
+  const width = size.match(/^(\d+)(?:x\d+)?$/)?.[1]
+  return `![${width ? '' : size.replace(/[[\]]/g, '')}](#/asset/${encodeURIComponent(t)}${width ? `?w=${width}` : ''})`
+}
+
+// Where an <img src> points inside the vault: a path relative to the vault root,
+// or null when it is not a vault file (http(s):, data:, protocol-relative, or a
+// path that climbs out of the vault). `page` is the vault path of the page that
+// holds the image, which relative paths like ../attachments/x.png start from.
+export const isRemote = (src) => /^([a-z][a-z0-9+.-]*:|\/\/)/i.test(src)
+
+export function resolveAsset(page, src) {
+  if (!src || isRemote(src)) return null
+  let ref = src.replace(/[?#].*$/, '')
+  try { ref = decodeURIComponent(ref) } catch { /* keep it as written */ }
+  const parts = ref.startsWith('/') ? [] : (page ?? '').split('/').slice(0, -1)
+  for (const seg of ref.split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') { if (!parts.length) return null; parts.pop() } else parts.push(seg)
+  }
+  return parts.length ? parts.join('/') : null
+}
+
+export const assetUrl = (path) => `/v1/assets/${path.split('/').map(encodeURIComponent).join('/')}`
+
+// The `#/asset/<target>?w=300` link an image embed becomes, taken apart again.
+export function parseEmbed(src) {
+  if (!src.startsWith('#/asset/')) return null
+  const [target, query = ''] = src.slice(8).split('?')
+  return { path: decodeURIComponent(target), width: Number(new URLSearchParams(query).get('w')) || undefined }
+}
+
 // Like Obsidian (and links.strip_code), a [[link]] inside code is literal text.
 // `^[inferred]`-style provenance markers become #/prov/ links, drawn as quiet badges.
-const linkify = (md) => md.replace(/\^\[([^\]]+)\]/g, '[$1](#/prov/)').replace(WIKILINK, (_, target, anchor, label) => `[${(label ?? target).replace(/[[\]]/g, '')}](#/wl/${encodeURIComponent(target.trim())})`)
+const linkify = (md) => md.replace(/\^\[([^\]]+)\]/g, '[$1](#/prov/)').replace(IMAGE_EMBED, embed).replace(WIKILINK, (_, target, anchor, label) => `[${(label ?? target).replace(/[[\]]/g, '')}](#/wl/${encodeURIComponent(target.trim())})`)
 export const withLinks = (md) => md.split(/(^ {0,3}(?:```|~~~)[\s\S]*?^ {0,3}(?:```|~~~)[^\n]*$|`[^`\n]+`)/m).map((part, i) => (i % 2 ? part : linkify(part))).join('')
 
 export function parseLog(md) {
