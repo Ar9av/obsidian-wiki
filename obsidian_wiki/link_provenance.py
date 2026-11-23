@@ -2,10 +2,10 @@
 
 Pages mark claims with a trailing `^[inferred]` or `^[ambiguous]` (llm-wiki,
 Provenance Markers). A link is the claim it sits in, so it takes the nearest
-marker at or after it within the same paragraph or list item; with no marker it is
+marker at or after it within the same paragraph, list item, table row or footnote; with no marker it is
 `extracted`. No new syntax and no schema change — existing pages already carry this.
 
-ponytail: paragraph-granular. A marker is read as covering the links before it in
+ponytail: paragraph-granular (a table row or list item is its own block). A marker is read as covering the links before it in
 its block, so an unmarked link earlier in a marked paragraph reads as inferred.
 Split the paragraph, or put the link in its own bullet, to be precise.
 """
@@ -22,16 +22,22 @@ from obsidian_wiki.vault import split_frontmatter
 
 STATES = ("extracted", "inferred", "ambiguous")
 _MARKER_RE = re.compile(r"\^\[(inferred|ambiguous)\]")
-_LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
+_QUOTE_RE = re.compile(r"^(?:\s*>)+ ?")
+# Each of these starts its own block: a list item, a table row, a footnote definition.
+_BLOCK_START_RE = re.compile(r"^\s*(?:(?:[-*+]|\d+[.)])\s|\||\[\^[^\]]+\]:)")
 
 
 def _blocks(body: str) -> list[str]:
-    """Paragraphs, with each list item its own block."""
+    """Paragraphs, with each list item, table row and footnote definition its own block.
+
+    Blockquote/callout markers (`>`) are peeled off first, so a `>` blank line ends a paragraph.
+    """
     blocks: list[list[str]] = [[]]
     for line in body.splitlines():
+        line = _QUOTE_RE.sub("", line)
         if not line.strip():
             blocks.append([])
-        elif _LIST_ITEM_RE.match(line):
+        elif _BLOCK_START_RE.match(line):
             blocks.append([line])
         else:
             blocks[-1].append(line)

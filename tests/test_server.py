@@ -624,6 +624,100 @@ def test_mcp_tool_shows_the_hook_reason_to_the_agent(client, tmp_path, monkeypat
         anyio.run(call)
 
 
+def _body(title, **kw):
+    return {"title": title, "category": "concepts", "content": f"about {title}", **kw}
+
+
+def test_bulk_write_writes_every_page(client, tmp_path):
+    out = client.post("/v1/pages/bulk", json=[_body("Alpha"), _body("Beta", category="references")]).json()
+    assert out["count"] == 2
+    assert (tmp_path / "concepts/alpha.md").is_file() and (tmp_path / "references/beta.md").is_file()
+    assert (tmp_path / "log.md").read_text().count("API_WRITE") == 2
+
+
+def test_bulk_write_rejects_the_whole_batch_before_writing_anything(client, tmp_path):
+    client.post("/v1/pages", json=_body("Taken"))
+    for batch, status in (
+        ([_body("Fresh"), _body("Taken", upsert=False)], 409),  # exists and upsert is off
+        ([_body("Same"), _body("Same")], 400),                   # duplicate in the batch
+        ([], 400),
+        ([_body(f"P{i}") for i in range(51)], 400),              # over the cap
+    ):
+        assert client.post("/v1/pages/bulk", json=batch).status_code == status
+    assert not (tmp_path / "concepts/fresh.md").exists() and not (tmp_path / "concepts/same.md").exists()
+
+
+def test_bulk_write_is_a_write_tool_only(client):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    names = lambda m: {t.name for t in anyio.run(m.list_tools)}
+    assert "memory_write_many" in names(server.mcp) and "memory_write_many" not in names(server.mcp_read)
+
+
+def test_memory_forget_archives_a_page_recoverably(client, tmp_path):
+    from fastapi import HTTPException
+
+    server = sys.modules["obsidian_wiki.server"]
+    path = client.post("/v1/pages", json={"title": "Old Idea", "category": "concepts", "content": "zebra stripes"}).json()["path"]
+    found = lambda: any("old-idea" in c["page"] for c in client.get("/v1/search", params={"q": "old idea"}).json()["candidates"])
+    assert found()
+
+    out = server.forget_page(path)
+
+    assert not (tmp_path / path).exists()
+    assert "API_FORGET" in (tmp_path / "log.md").read_text() and path in (tmp_path / "log.md").read_text()
+    archived = tmp_path / out["archived_to"]
+    assert out["archived_to"].startswith("_archives/forgotten/") and archived.read_text().endswith("zebra stripes\n")
+    assert not found()
+    # Same page forgotten again the same day keeps both copies.
+    (tmp_path / path).write_text("second life")
+    assert server.forget_page(path)["archived_to"] != out["archived_to"]
+
+    (tmp_path / "AGENTS.md").write_text("rules")
+    (tmp_path / "concepts" / "node_modules").mkdir()
+    (tmp_path / "concepts" / "node_modules" / "x.md").write_text("x")
+    for bad in ("index.md", "_meta/profile.md", "../outside.md", "concepts/missing.md", "AGENTS.md", "concepts/node_modules/x.md"):
+        with pytest.raises(HTTPException):
+            server.forget_page(bad)
+
+
+def test_read_only_server_does_not_expose_memory_forget(client):
+    import anyio
+
+    server = sys.modules["obsidian_wiki.server"]
+    names = lambda m: {t.name for t in anyio.run(m.list_tools)}
+    assert "memory_forget" in names(server.mcp)
+    assert "memory_forget" not in names(server.mcp_read)
+
+
+def test_graph_lists_links_resting_on_inferred_or_ambiguous_claims(client, tmp_path):
+    _page(tmp_path, "concepts/a.md",
+          "---\ntitle: a\n---\nStated: [[b]].\n\n- Guess: [[c]] ^[inferred]\n- Dispute: [[d]] ^[ambiguous]\n")
+    for name in "bcd":
+        _page(tmp_path, f"concepts/{name}.md")
+    data = client.get("/v1/graph").json()
+    assert ["a", "c", "inferred"] in data["weak"] and ["a", "d", "ambiguous"] in data["weak"]
+    assert not any(w[1] == "b" for w in data["weak"])
+    assert ["a", "b"] in data["edges"]  # edges keep their shape; weak is additive
+
+
+def test_search_reports_its_scope_and_can_be_limited_to_a_folder(client, tmp_path):
+    for rel, name in (("projects/acme/zebra-plan.md", "Zebra Plan"), ("concepts/zebra-facts.md", "Zebra Facts"),
+                      ("projects/acmeish/zebra-other.md", "Zebra Other")):
+        _page(tmp_path, rel, f"---\ntitle: {name}\nsummary: zebra stripes\n---\nzebra stripes\n")
+    everything = client.get("/v1/search", params={"q": "zebra"}).json()
+    assert everything["scope"] == {"path_prefix": None, "searched": 3, "indexed": 3}
+    assert len(everything["candidates"]) == 3
+
+    scoped = client.get("/v1/search", params={"q": "zebra", "path_prefix": "/projects/acme/"}).json()
+    assert scoped["scope"] == {"path_prefix": "projects/acme", "searched": 1, "indexed": 3}
+    assert [c["page"] for c in scoped["candidates"]] == ["projects/acme/zebra-plan.md"]  # not projects/acmeish
+
+    empty = client.get("/v1/search", params={"q": "zebra", "path_prefix": "nowhere"}).json()
+    assert empty["candidates"] == [] and empty["scope"]["searched"] == 0
+
+
 def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkeypatch):
     monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
     sys.modules.pop("obsidian_wiki.server", None)
@@ -634,3 +728,14 @@ def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkey
     assert "memory_sync" not in server.mcp_read.instructions
     assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
     assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions
+
+
+def test_write_hook_covers_bulk_writes_and_a_veto_rejects_the_whole_batch(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "sys.exit(1 if 'sk-' in page['content'] else 0)\n")
+    ok = {"title": "Fine", "category": "concepts", "content": "fine"}
+    bad = {"title": "Leaky", "category": "concepts", "content": "key sk-123"}
+    assert client.post("/v1/pages/bulk", json=[ok, bad]).status_code == 422
+    assert not (tmp_path / "concepts/fine.md").exists()
+    _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].upper()}))\n")
+    assert client.post("/v1/pages/bulk", json=[ok]).status_code == 200
+    assert "FINE" in (tmp_path / "concepts/fine.md").read_text()

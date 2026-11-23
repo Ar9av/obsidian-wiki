@@ -44,7 +44,7 @@ from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki import sync as vault_sync
 from obsidian_wiki.sync import _git
-from obsidian_wiki.vault import iter_md, iter_md_under, okignore_patterns, okignored
+from obsidian_wiki.vault import is_instruction_file, iter_md, iter_md_under, okignore_patterns, okignored, skipped_dir
 
 VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")).expanduser()
 API_KEY = os.environ.get("WIKI_API_KEY", "")
@@ -103,8 +103,9 @@ def _category_slug(category: str) -> str:
     return f"_{slug}" if category.lower().startswith("_") else slug
 
 
-def search(q: str, limit: int = 8) -> dict[str, Any]:
-    return graph_query(VAULT, q, top_n=limit)
+def search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    """Search the wiki, optionally inside one folder; the reply's `scope` says what was searched."""
+    return graph_query(VAULT, q, top_n=limit, path_prefix=path_prefix)
 
 
 def read_page(path: str) -> dict[str, Any]:
@@ -112,6 +113,43 @@ def read_page(path: str) -> dict[str, Any]:
     if not target.is_file():
         raise HTTPException(404, f"no such page: {path}")
     return {"path": path, "markdown": target.read_text(encoding="utf-8")}
+
+
+_RESERVED_ROOT_FILES = frozenset({"index.md", "log.md", "hot.md"})
+
+
+def forget_page(path: str) -> dict[str, Any]:
+    """Take a page out of the wiki without deleting it.
+
+    The page moves to `_archives/forgotten/<date>/<same path>`, which search, the
+    graph and lint skip, and which git keeps. Restore it by moving it back.
+    Links to it become broken, so run `memory_sync` afterward and fix them.
+    """
+    target = _resolve(path)
+    rel = target.relative_to(VAULT.resolve()).as_posix()
+    # Same notion of "a page" as the walkers: not instruction files, nothing under a hidden
+    # or skipped folder at any depth, and no `_`-prefixed folder (`_meta`, `_readouts`, ...).
+    parts = Path(rel).parts
+    if (target.suffix != ".md" or rel in _RESERVED_ROOT_FILES or is_instruction_file(Path(rel))
+            or skipped_dir(Path(rel)) or any(part.startswith("_") for part in parts)):
+        raise HTTPException(400, f"not a wiki page that can be forgotten: {path}")
+    if not target.is_file():
+        raise HTTPException(404, f"no such page: {path}")
+    day = clock.today(clock.wiki_timezone(VAULT))
+    dest = VAULT / "_archives" / "forgotten" / day / rel
+    with _VAULT_WRITE_LOCK:
+        n = 1
+        while dest.exists():  # forgotten twice in a day: keep both
+            n += 1
+            dest = dest.with_name(f"{Path(rel).stem}-{n}.md")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        target.replace(dest)
+        archived_to = dest.relative_to(VAULT).as_posix()
+        # So the vault's own log can answer "what happened to this page, and where is it now?"
+        from obsidian_wiki import memory as mem
+
+        mem.append_log(VAULT, "API_FORGET", {"page": rel, "archived_to": archived_to})
+    return {"forgotten": rel, "archived_to": archived_to}
 
 
 def _folded(key: str, value: str) -> str:
@@ -289,6 +327,48 @@ class PageWrite(BaseModel):
     upsert: bool = True
 
 
+MAX_BULK_PAGES = 50
+
+
+def write_pages(pages: list[PageWrite]) -> dict[str, Any]:
+    """Write several pages in one call. Everything is checked before anything is written.
+
+    A bad path, a duplicate in the batch, or an `upsert=false` page that already
+    exists rejects the whole batch with nothing written. Run `memory_sync` once after.
+    """
+    if not pages or len(pages) > MAX_BULK_PAGES:
+        raise HTTPException(400, f"send 1 to {MAX_BULK_PAGES} pages per call")
+    # Hooks run first and outside the lock (each may take seconds); one rejection or failure
+    # rejects the whole batch before anything is written, like every other check here.
+    hooked = []
+    for page in pages:
+        rel = f"{_category_slug(page.category)}/{_slug(page.title)}.md"
+        _resolve(rel)
+        content = _write_hook(rel, page.title, page.category, page.content, page.tags, page.sources, page.summary)
+        hooked.append(page.model_copy(update={"content": content}))
+    pages = hooked
+    plan, seen = [], set()
+    # Checked under the same lock as the writes, so no in-process writer can slip a page in
+    # between the check and the write and abort the batch halfway. (An editor outside the
+    # server still can; that one is unavoidable.)
+    with _VAULT_WRITE_LOCK:
+        for page in pages:
+            rel = f"{_category_slug(page.category)}/{_slug(page.title)}.md"
+            target = _resolve(rel)
+            if rel in seen:
+                raise HTTPException(400, f"two pages in this batch write {rel}")
+            seen.add(rel)
+            if target.exists() and not page.upsert:
+                raise HTTPException(409, f"page already exists: {rel}")
+            plan.append((rel, target, page))
+        written = [
+            _write_page_locked(rel, target, page.title, page.category, page.content,
+                               tags=page.tags, sources=page.sources, summary=page.summary, upsert=page.upsert)
+            for rel, target, page in plan
+        ]
+    return {"written": written, "count": len(written)}
+
+
 class PackRequest(BaseModel):
     topic: str = ""
     budget: int = 8000
@@ -420,9 +500,11 @@ _EDITS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_worl
 
 #: (name, function, description, annotations, read-only?)
 _TOOLS = (
-    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
+    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries and a scope block; pass path_prefix (e.g. projects/acme) to search one folder.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
+    ("memory_write_many", write_pages, "Write up to 50 pages in one call; all are checked first, so a bad one rejects the batch. Run memory_sync once after.", _OVERWRITES, False),
+    ("memory_forget", forget_page, "Archive a wiki page (recoverable, not deleted) so it leaves search and the graph. Run memory_sync afterward.", _OVERWRITES, False),
     ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
     ("memory_recap", memory_recap, "Owner profile, open threads, and recent activity — call at session start.", _READS, True),
     ("memory_profile", memory_profile, "Read or update durable facts about a person (list|set|forget); user_id scopes them.", _OVERWRITES, False),
@@ -643,8 +725,8 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/v1/search", dependencies=[Depends(require_key)])
-def http_search(q: str, limit: int = 8) -> dict[str, Any]:
-    return search(q, limit)
+def http_search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    return search(q, limit, path_prefix)
 
 
 @app.get("/v1/pages/{path:path}", dependencies=[Depends(require_key)])
@@ -658,6 +740,11 @@ def http_write(body: PageWrite) -> dict[str, Any]:
         body.title, body.category, body.content,
         tags=body.tags, sources=body.sources, summary=body.summary, upsert=body.upsert,
     )
+
+
+@app.post("/v1/pages/bulk", dependencies=[Depends(require_write_key)])
+def http_write_bulk(body: list[PageWrite]) -> dict[str, Any]:
+    return write_pages(body)
 
 
 @app.post("/v1/context-pack", dependencies=[Depends(require_key)])
@@ -855,6 +942,7 @@ def graph() -> dict[str, Any]:
     matches the hub/bridge numbers.
     """
     from obsidian_wiki.graph_analysis import iter_pages, parse_vault_graph
+    from obsidian_wiki.link_provenance import link_provenance
     from obsidian_wiki.links import PageIndex
     from obsidian_wiki.lint import _parse_frontmatter_values
     from obsidian_wiki.vault import split_frontmatter
@@ -886,7 +974,9 @@ def graph() -> dict[str, Any]:
             "tags": tags.get(node_id, []),
         })
     edges = sorted({(src, dst) for src, dsts in outgoing.items() for dst in dsts})
-    return {"nodes": nodes, "edges": [list(e) for e in edges]}
+    # Links resting on an ^[inferred]/^[ambiguous] claim; every other edge is extracted.
+    weak = [[r["from"], r["to"], r["state"]] for r in link_provenance(VAULT) if r["state"] != "extracted"]
+    return {"nodes": nodes, "edges": [list(e) for e in edges], "weak": weak}
 
 
 # The viewer is a prebuilt React bundle (source in ui/, `npm run build` writes here).

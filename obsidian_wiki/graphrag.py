@@ -595,10 +595,13 @@ def query(
     max_should_read: int = 3,
     as_of: Any = None,
     include_historical: bool = False,
+    path_prefix: str = "",
 ) -> dict[str, Any]:
     index = build_index(vault)
+    prefix = path_prefix.strip().strip("/")
     if not index:
         return {
+            "scope": {"path_prefix": prefix or None, "searched": 0, "indexed": 0},
             "answer_type": "direct",
             "candidates": [],
             "path": [],
@@ -615,6 +618,10 @@ def query(
         }
 
     answer_type, terms = classify_query(question)
+    # Hubs, bridges, impact and path questions walk the whole graph, so with a folder
+    # scope they would hand back pages from outside it. Scoped queries are ranked search only.
+    if prefix and answer_type != "direct":
+        answer_type = "direct"
 
     # Event-time filter. Pages whose claims no longer hold drop out of
     # retrieval but stay in the graph, so nothing is lost and `--as-of` can
@@ -630,13 +637,17 @@ def query(
         except clock.TimezoneError:
             tz = None  # a typo'd `timezone:` is lint's to report; retrieval keeps answering on UTC
         when = parse_date(clock.today(tz))
-    retrievable = index if include_historical else current_pages(index, when)
+    current = index if include_historical else current_pages(index, when)
+    # The temporal counts describe the whole vault; the folder scope narrows only what is ranked.
     temporal = {
         "as_of": as_of_date.isoformat() if as_of_date else None,
         "include_historical": include_historical,
-        "retrievable": len(retrievable),
-        "excluded_historical": len(index) - len(retrievable),
+        "retrievable": len(current),
+        "excluded_historical": len(index) - len(current),
     }
+    retrievable = current
+    if prefix:  # a folder, matched on a path boundary so `projects/a` never matches `projects/ab`
+        retrievable = {s: e for s, e in current.items() if e["path"] == prefix or e["path"].startswith(prefix + "/")}
 
     # God nodes relevant to the query. Degree comes from the whole graph (a
     # hub is a hub regardless of what is current), the emitted list does not.
@@ -699,6 +710,8 @@ def query(
         should_read = should_read[:max_should_read + 2]
 
     return {
+        # What this answer searched, so an agent can tell "nothing there" from "looked in the wrong place".
+        "scope": {"path_prefix": prefix or None, "searched": len(retrievable), "indexed": len(index)},
         "answer_type": answer_type,
         "candidates": [
             {

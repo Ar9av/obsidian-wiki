@@ -205,6 +205,7 @@ The Dockerized server exposes the same surface, so an agent that reaches the vau
 | `memory_profile` | `GET`/`POST /v1/memory/profile` | `list` / `set` / `forget` |
 | `memory_todo` | `GET`/`POST /v1/memory/todos` | `list` / `add` / `done` / `drop` |
 | `memory_sync` | `POST /v1/memory/sync` | Reconcile after writes, under one lock |
+| `memory_forget` | — (MCP only) | Archive a page to `_archives/forgotten/` (recoverable); no REST route on purpose, so removing pages stays a deliberate agent action |
 
 `memory_sync` returns **409** on an unmigrated vault rather than clobbering it, matching the CLI's refusal. Page writes through the API now go through the shared writer too, so they produce the same parseable log line as every other operation.
 

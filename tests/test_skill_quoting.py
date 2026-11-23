@@ -12,12 +12,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SINGLE = re.compile(r"'[^'\n]*'")
 DOUBLE = re.compile(r'"[^"\n]*"')
-RISKY = re.compile(r"<[^>\n]*>|\$\d")
+RISKY = re.compile(r"<[^>\n]*>|\$\d|\$\(|`")
+# An unquoted `key=<value>`: bash reads `<` as a redirect and `|` inside it as a pipe.
+BARE = re.compile(r"\w=<")
 
 
 def _risky(line: str) -> bool:
     # Drop single-quoted spans first so only real double-quoted strings are paired.
-    return any(RISKY.search(m.group()) for m in DOUBLE.finditer(SINGLE.sub("", line)))
+    rest = SINGLE.sub("", line)
+    return any(RISKY.search(m.group()) for m in DOUBLE.finditer(rest)) or bool(BARE.search(DOUBLE.sub("", rest)))
 
 
 def _risky_lines():

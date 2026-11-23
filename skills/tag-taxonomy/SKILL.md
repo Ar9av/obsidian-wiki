@@ -168,12 +168,12 @@ One locked call updates the log, the index (tags appear in index entries), and t
 ```bash
 # audit
 obsidian-wiki memory sync TAG_AUDIT \
-  tags_normalized=<N> unknown_tags=<M> pages_modified=<P> \
+  tags_normalized='<N>' unknown_tags='<M>' pages_modified='<P>' \
   --takeaways "Tag audit: normalized 14 tags across 28 pages; 2 new canonical tags added." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 
 # normalization
 obsidian-wiki memory sync TAG_NORMALIZE \
-  tags_renamed=<N> pages_modified=<M> new_tags_added=<P>
+  tags_renamed='<N>' pages_modified='<M>' new_tags_added='<P>'
 ```
 
 Never hand-edit `index.md`, `log.md`, or `hot.md` — the command takes the lock that keeps a parallel writer from dropping your update.
