@@ -99,8 +99,9 @@ def _category_slug(category: str) -> str:
     return f"_{slug}" if category.lower().startswith("_") else slug
 
 
-def search(q: str, limit: int = 8) -> dict[str, Any]:
-    return graph_query(VAULT, q, top_n=limit)
+def search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    """Search the wiki, optionally inside one folder; the reply's `scope` says what was searched."""
+    return graph_query(VAULT, q, top_n=limit, path_prefix=path_prefix)
 
 
 def read_page(path: str) -> dict[str, Any]:
@@ -378,7 +379,7 @@ _EDITS = ToolAnnotations(read_only_hint=False, destructive_hint=False, open_worl
 
 #: (name, function, description, annotations, read-only?)
 _TOOLS = (
-    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries.", _READS, True),
+    ("memory_search", search, "Search the wiki. Returns ranked pages with summaries and a scope block; pass path_prefix (e.g. projects/acme) to search one folder.", _READS, True),
     ("memory_read", read_page, "Read one wiki page as markdown, by vault-relative path.", _READS, True),
     ("memory_write", write_page, "Write a wiki page. Use category '_raw' for a rough capture.", _OVERWRITES, False),
     ("memory_context_pack", context_pack, "Compile a token-bounded context pack on a topic.", _READS, True),
@@ -586,8 +587,8 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/v1/search", dependencies=[Depends(require_key)])
-def http_search(q: str, limit: int = 8) -> dict[str, Any]:
-    return search(q, limit)
+def http_search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
+    return search(q, limit, path_prefix)
 
 
 @app.get("/v1/pages/{path:path}", dependencies=[Depends(require_key)])
