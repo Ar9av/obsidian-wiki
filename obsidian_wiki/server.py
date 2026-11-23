@@ -40,7 +40,7 @@ from obsidian_wiki.staging import StagingError, list_staged, resolve_in_vault
 from obsidian_wiki.lint import lint_vault
 from obsidian_wiki import sync as vault_sync
 from obsidian_wiki.sync import _git
-from obsidian_wiki.vault import iter_md, iter_md_under, okignore_patterns, okignored
+from obsidian_wiki.vault import is_instruction_file, iter_md, iter_md_under, okignore_patterns, okignored, skipped_dir
 
 VAULT = Path(os.environ.get("OBSIDIAN_VAULT_PATH", "/vault")).expanduser()
 API_KEY = os.environ.get("WIKI_API_KEY", "")
@@ -122,7 +122,11 @@ def forget_page(path: str) -> dict[str, Any]:
     """
     target = _resolve(path)
     rel = target.relative_to(VAULT.resolve()).as_posix()
-    if target.suffix != ".md" or rel in _RESERVED_ROOT_FILES or rel.startswith(("_", ".")):
+    # Same notion of "a page" as the walkers: not instruction files, nothing under a hidden
+    # or skipped folder at any depth, and no `_`-prefixed folder (`_meta`, `_readouts`, ...).
+    parts = Path(rel).parts
+    if (target.suffix != ".md" or rel in _RESERVED_ROOT_FILES or is_instruction_file(Path(rel))
+            or skipped_dir(Path(rel)) or any(part.startswith("_") for part in parts)):
         raise HTTPException(400, f"not a wiki page that can be forgotten: {path}")
     if not target.is_file():
         raise HTTPException(404, f"no such page: {path}")
@@ -135,7 +139,12 @@ def forget_page(path: str) -> dict[str, Any]:
             dest = dest.with_name(f"{Path(rel).stem}-{n}.md")
         dest.parent.mkdir(parents=True, exist_ok=True)
         target.replace(dest)
-    return {"forgotten": rel, "archived_to": dest.relative_to(VAULT).as_posix()}
+        archived_to = dest.relative_to(VAULT).as_posix()
+        # So the vault's own log can answer "what happened to this page, and where is it now?"
+        from obsidian_wiki import memory as mem
+
+        mem.append_log(VAULT, "API_FORGET", {"page": rel, "archived_to": archived_to})
+    return {"forgotten": rel, "archived_to": archived_to}
 
 
 def _folded(key: str, value: str) -> str:
@@ -418,8 +427,27 @@ _TOOLS = (
 )
 
 
+# Same guidance as AGENT_INSTRUCTIONS in ui/src/lib.js (the paste-into-AGENTS.md text
+# the viewer shows): keep the two in step. Read-only gets only the read half.
+_INSTRUCTIONS_READ = (
+    "A markdown knowledge vault. At the start of a session call memory_recap (pass `project` when "
+    "working in a repo) and treat the result as background about the owner and their open work. "
+    "Before answering anything about past work, decisions, or notes, call memory_search, then "
+    "memory_read the pages you need, and cite page paths. memory_context_pack gives a token-bounded "
+    "bundle on one topic. Search is lexical, so try the words the page would use."
+)
+_INSTRUCTIONS_WRITE = (
+    _INSTRUCTIONS_READ
+    + " Before writing, search for an existing page and update it rather than adding a duplicate. "
+    "When a session produces a reusable finding (a fix, a gotcha, a decision and why), save it with "
+    "memory_write using category '_raw', then call memory_sync once to refresh index.md and hot.md. "
+    "Record stable facts about the owner with memory_profile (action set) only when they state them; "
+    "track unfinished work with memory_todo. Never write secrets or credentials to memory."
+)
+
+
 def _build_mcp(read_only: bool) -> MCPServer:
-    server = MCPServer("obsidian-wiki")
+    server = MCPServer("obsidian-wiki", instructions=_INSTRUCTIONS_READ if read_only else _INSTRUCTIONS_WRITE)
     for name, fn, description, annotations, reads in _TOOLS:
         if reads or not read_only:
             server.tool(name=name, description=description, annotations=annotations)(fn)

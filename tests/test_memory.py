@@ -191,6 +191,30 @@ def test_index_round_trips_names_a_wikilink_cannot_carry(vault: Path) -> None:
     assert result.changed is False
 
 
+@pytest.mark.parametrize(
+    ("path", "link_format"),
+    [
+        ("references/[通用]绩效_协作(1-5月)_20260526.md", "wikilink"),
+        ("references/[Z2]3.2.3--JL1-017-012(v0) 设计开发验证确认清单（天津Z2）0611.md", "wikilink"),
+        ("references/report(1-5).md", "markdown"),
+        ("references/back\\slash.md", "markdown"),
+        ("references/a b\\c(1).md", "markdown"),
+    ],
+)
+def test_index_round_trips_parentheses_in_a_markdown_link_target(vault: Path, path: str, link_format: str) -> None:
+    """A bare link destination ends at `)` and cannot hold a space, so such
+    targets render as `<path>` and must read back as themselves (#351)."""
+    _page(vault, path, title="Merged report")
+    mem.rebuild_index(vault, link_format=link_format)
+
+    assert f"[Merged report]({mem._markdown_link_target(path)})" in (vault / "index.md").read_text(encoding="utf-8")
+    result = mem.rebuild_index(vault, link_format=link_format, write=False)
+
+    assert result.added == ()
+    assert result.removed == ()
+    assert result.changed is False
+
+
 def test_index_drops_a_deleted_page_but_keeps_a_human_section(vault: Path) -> None:
     mem.rebuild_index(vault)
     index = vault / "index.md"

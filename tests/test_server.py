@@ -571,6 +571,7 @@ def test_memory_forget_archives_a_page_recoverably(client, tmp_path):
     out = server.forget_page(path)
 
     assert not (tmp_path / path).exists()
+    assert "API_FORGET" in (tmp_path / "log.md").read_text() and path in (tmp_path / "log.md").read_text()
     archived = tmp_path / out["archived_to"]
     assert out["archived_to"].startswith("_archives/forgotten/") and archived.read_text().endswith("zebra stripes\n")
     assert not found()
@@ -578,7 +579,10 @@ def test_memory_forget_archives_a_page_recoverably(client, tmp_path):
     (tmp_path / path).write_text("second life")
     assert server.forget_page(path)["archived_to"] != out["archived_to"]
 
-    for bad in ("index.md", "_meta/profile.md", "../outside.md", "concepts/missing.md"):
+    (tmp_path / "AGENTS.md").write_text("rules")
+    (tmp_path / "concepts" / "node_modules").mkdir()
+    (tmp_path / "concepts" / "node_modules" / "x.md").write_text("x")
+    for bad in ("index.md", "_meta/profile.md", "../outside.md", "concepts/missing.md", "AGENTS.md", "concepts/node_modules/x.md"):
         with pytest.raises(HTTPException):
             server.forget_page(bad)
 
@@ -590,3 +594,15 @@ def test_read_only_server_does_not_expose_memory_forget(client):
     names = lambda m: {t.name for t in anyio.run(m.list_tools)}
     assert "memory_forget" in names(server.mcp)
     assert "memory_forget" not in names(server.mcp_read)
+
+
+def test_mcp_servers_carry_instructions_and_read_only_has_no_write_advice(monkeypatch):
+    monkeypatch.setenv("WIKI_ALLOW_ANONYMOUS", "1")
+    sys.modules.pop("obsidian_wiki.server", None)
+    server = importlib.import_module("obsidian_wiki.server")
+    assert "memory_recap" in server.mcp.instructions
+    assert "memory_sync" in server.mcp.instructions
+    assert "memory_recap" in server.mcp_read.instructions
+    assert "memory_sync" not in server.mcp_read.instructions
+    assert "memory_profile" in server.mcp.instructions and "memory_profile" not in server.mcp_read.instructions
+    assert "secrets" in server.mcp.instructions and "project" in server.mcp_read.instructions
