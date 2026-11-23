@@ -410,10 +410,10 @@ Update `index.md`, `log.md`, and `hot.md` with one locked call:
 
 ```bash
 obsidian-wiki memory sync CLAUDE_HISTORY_INGEST \
-  projects=<projects> conversations=<conversations> \
-  desktop_sessions=<desktop_sessions> audit_logs=<audit_logs> \
-  pages_updated=<pages_updated> pages_created=<pages_created> \
-  mode=<mode> \
+  projects='<projects>' conversations='<conversations>' \
+  desktop_sessions='<desktop_sessions>' audit_logs='<audit_logs>' \
+  pages_updated='<pages_updated>' pages_created='<pages_created>' \
+  mode='<mode>' \
   --takeaways "Ingested 5 Claude conversations across 2 projects; surfaced patterns in API design and testing strategy." --expect-takeaways-sha256 "$TAKEAWAYS_REVISION"
 ```
 

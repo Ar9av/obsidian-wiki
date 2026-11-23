@@ -310,9 +310,9 @@ This is the *only* write this skill performs — do not edit anything else, and 
 
 ```bash
 obsidian-wiki memory log QUERY \
-  query="the user's question" result_pages=<N> \
-  mode=<normal|index_only|filtered> escalated=<true|false> \
-  candidates_seen=<N> candidates_used=<N> dropped=<N>
+  query="the user's question" result_pages='<N>' \
+  mode='<normal|index_only|filtered>' escalated='<true|false>' \
+  candidates_seen='<N>' candidates_used='<N>' dropped='<N>'
 ```
 
 The command takes the memory lock and appends one parseable line; it never touches `index.md` or `hot.md`.
