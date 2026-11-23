@@ -156,7 +156,7 @@ obsidian-wiki ui                      # 開啟 http://127.0.0.1:3114/ui
 **把任何 agent 接上它。** 在側邊欄打開 **Connect an agent**：
 
 1. 選擇你的 agent（Claude Code、Codex、Cursor、Claude Desktop、Gemini CLI、VS Code、Windsurf 或任何 MCP client）並複製設定。stdio 不需要執行伺服器；HTTP 則連到託管的 vault。
-2. 把記憶使用說明貼進 agent 的 `AGENTS.md` / `CLAUDE.md`，讓它在 session 開始時真的去回顧，並把發現存回來。
+2. MCP 用戶端連線時會從伺服器收到使用說明。若用戶端忽略伺服器說明，再把記憶使用說明貼進 agent 的 `AGENTS.md` / `CLAUDE.md`，讓它在 session 開始時仍會去回顧，並把發現存回來。
 3. 驗證：請 agent 呼叫 `memory_recap`。
 
 <p align="center">

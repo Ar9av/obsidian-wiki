@@ -155,7 +155,7 @@ It listens on loopback only. Use `--vault` to choose a vault and `--port` to cha
 **Connect any agent to it.** Open **Connect an agent** in the sidebar:
 
 1. Pick your agent (Claude Code, Codex, Cursor, Claude Desktop, Gemini CLI, VS Code, Windsurf, or any MCP client) and copy the config. Stdio needs no server running. HTTP points at a hosted vault.
-2. Paste the memory instructions into the agent's `AGENTS.md` / `CLAUDE.md` so it actually recalls at session start and saves findings back.
+2. MCP clients receive usage instructions from the server when they connect. For a client that ignores server instructions, paste the memory instructions into the agent's `AGENTS.md` / `CLAUDE.md` so it still recalls at session start and saves findings back.
 3. Check it: ask the agent to call `memory_recap`.
 
 <p align="center">

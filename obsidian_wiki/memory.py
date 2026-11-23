@@ -499,13 +499,26 @@ def _markdown_link_text(title: str) -> str:
     return title.replace("]", r"\]")
 
 
+def _markdown_link_target(path: str) -> str:
+    """A link destination for ``path`` that CommonMark (and Obsidian) reads whole.
+
+    A bare destination ends at the first unbalanced ``)`` and cannot hold a
+    space, so such paths go in ``<...>``. Plain paths stay bare, so existing
+    indexes don't churn.
+    """
+    escaped = path.replace("\\", "\\\\")
+    if not any(c in path for c in " ()<>"):
+        return escaped
+    return "<" + escaped.replace("<", r"\<").replace(">", r"\>") + ">"
+
+
 def _index_entry(page: PageInfo, link_format: str, *, hub_pages: Optional[int] = None) -> str:
     node = page.path[:-3] if page.path.endswith(".md") else page.path
     if link_format == "markdown" or not _wikilink_target_is_valid(node):
         # A name a wikilink cannot express falls back to the markdown form so
         # ``rebuild_index`` can read its own output back (and hand the entry to
         # Obsidian in a form it can resolve).
-        link = f"[{_markdown_link_text(page.title)}]({page.path})"
+        link = f"[{_markdown_link_text(page.title)}]({_markdown_link_target(page.path)})"
     elif hub_pages is not None:
         # A hub's node ends in `/index`, which Obsidian would display as
         # "index"; the alias shows the folder's own title instead.
@@ -722,10 +735,15 @@ def rebuild_index(
                         listed.add(match.group(1).strip())
                     continue
                 # Link text may carry an escaped ``]`` (see _index_entry); the
-                # capture is the path, so the escape only has to be skipped.
-                md = re.match(r"^-\s*\[(?:\\.|[^\]])*\]\(([^)]+)\)", line.strip())
+                # target is ``<path>`` or a bare path (see _markdown_link_target),
+                # either of which may carry backslash escapes.
+                md = re.match(
+                    r"^-\s*\[(?:\\.|[^\]])*\]\((?:<((?:\\.|[^>\\\n])*)>|((?:\\.|[^)\\])+))\)",
+                    line.strip(),
+                )
                 if md:
-                    listed.add(md.group(1)[:-3] if md.group(1).endswith(".md") else md.group(1))
+                    target = re.sub(r"\\(.)", r"\1", md.group(1) if md.group(1) is not None else md.group(2))
+                    listed.add(target[:-3] if target.endswith(".md") else target)
 
     entries, hub_counts = (
         collapse_folder_hubs(vault, pages) if folder_hubs_enabled(existing) else (pages, {})
@@ -1153,7 +1171,7 @@ def _recent_activity_lines(vault: Path, limit: int) -> list:
 
 def _contradiction_lines(pages: Sequence, limit: int, link_format: str) -> list:
     def _link(node: str) -> str:
-        return f"[{node}]({node}.md)" if link_format == "markdown" else f"[[{node}]]"
+        return f"[{_markdown_link_text(node)}]({_markdown_link_target(node + '.md')})" if link_format == "markdown" else f"[[{node}]]"
 
     lines = []
     for page in sorted(pages, key=lambda p: p.updated, reverse=True):

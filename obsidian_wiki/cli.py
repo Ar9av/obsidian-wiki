@@ -1420,6 +1420,7 @@ def cmd_graph_query(args: argparse.Namespace) -> int:
             max_should_read=args.max_read,
             as_of=args.as_of,
             include_historical=args.include_historical,
+            path_prefix=args.path_prefix,
         )
     except ValueError as exc:
         print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
@@ -2496,6 +2497,9 @@ def _print_query(result: dict[str, object]) -> None:
             f"excluded {temporal['excluded_historical']} historical page(s) "
             "— --include-historical or --as-of DATE to see them"
         )
+    scope = result.get("scope") or {}
+    if scope.get("path_prefix"):
+        print(f"scope: {scope['path_prefix']}/ ({scope['searched']} of {scope['indexed']} pages)")
     candidates = result.get("candidates", [])
     if candidates:
         print("candidates:")
@@ -2538,6 +2542,7 @@ def cmd_query(args: argparse.Namespace) -> int:
             max_should_read=args.max_read,
             as_of=args.as_of,
             include_historical=args.include_historical,
+            path_prefix=args.path_prefix,
         )
     except ValueError as exc:
         print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
@@ -3552,6 +3557,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DATE",
         help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
     )
+    gq.add_argument("--path-prefix", default="", metavar="DIR",
+                    help="only search pages under this vault folder, e.g. projects/acme")
     gq.add_argument(
         "--include-historical",
         action="store_true",
@@ -3963,6 +3970,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DATE",
         help="retrieve what was true on DATE (YYYY-MM-DD) instead of today",
     )
+    qq.add_argument("--path-prefix", default="", metavar="DIR",
+                    help="only search pages under this vault folder, e.g. projects/acme")
     qq.add_argument(
         "--include-historical",
         action="store_true",

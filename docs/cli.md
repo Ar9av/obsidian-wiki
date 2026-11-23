@@ -242,12 +242,13 @@ obsidian-wiki query "which api gateway do we run?" --include-historical
 |---|---|
 | `--as-of DATE` | Retrieve what was true on `DATE` (`YYYY-MM-DD`) instead of today |
 | `--include-historical` | Also rank pages whose `valid_until` has passed |
+| `--path-prefix DIR` | Only search pages under this vault folder (`projects/acme`); folder-boundary match, so `projects/a` never matches `projects/ab` |
 
-Both flags work on `query` and `graph-query`. The JSON response gains a `temporal`
-block (`as_of`, `retrievable`, `excluded_historical`), and any candidate that opted
+These flags work on `query` and `graph-query`. With `--path-prefix`, hub, bridge, impact and path questions are answered as ranked search inside the folder, because those walk the whole graph. The JSON response gains a `temporal`
+block (`as_of`, `retrievable`, `excluded_historical`) and a `scope` block (`path_prefix`, `searched`, `indexed`: how many pages this answer looked at out of how many exist, so an empty result can be told from a wrong folder; the MCP `memory_search` tool and `GET /v1/search` take `path_prefix` too), and any candidate that opted
 in carries its own `valid_from` / `valid_until` / `superseded_by` so an agent can
 follow the pointer to the replacement. Pages that don't use the fields are
-unaffected — they are current, always, and their JSON is byte-identical to before.
+unaffected — they are current, always, and their `temporal` fields are unchanged (every response also gains the `scope` block).
 
 **The structural intents deliberately ignore the filter.** `what breaks if I delete
 X`, `bridges`, `hubs`, and `clusters` ask about the shape of the vault, and deleting
@@ -556,7 +557,7 @@ Staleness is **reported, never enforced**. An open item untouched for 30 days is
 obsidian-wiki facts add "40 paying customers" --source stripe-dashboard --as-of 2026-11-01
 obsidian-wiki facts add "First SOC 2 certified agent firewall" --source "audit report 2026-10"
 obsidian-wiki facts list --stale-days 90          # flag claims last confirmed over 90 days ago
-obsidian-wiki facts retire f2 --reason "ARR passed $2M"
+obsidian-wiki facts retire f2 --reason 'ARR passed $2M'
 obsidian-wiki facts check _readouts/launch.md      # exit 2 on an unbacked claim
 cat draft.md | obsidian-wiki facts check - --json
 ```
