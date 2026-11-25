@@ -70,6 +70,8 @@ You don't need exact arithmetic — make a confident judgement about degree of s
 | Tag overlap ≥ 2 shared tags | +0.05 |
 | Same first tag (dominant tag) | +0.05 |
 
+**Optional decision layer.** If the user enabled it, `obsidian-wiki decide triage <page> --vault "$OBSIDIAN_VAULT_PATH" --decide` labels the other pages `update`, `duplicate`, or `unrelated` relative to `<page>`, from their titles and summaries. Treat a `duplicate` in the act band as a MEDIUM candidate for Step 3, never as a merge. See `wiki-decisions`.
+
 ### 2c. Threshold
 
 Flag pairs with composite score ≥ **0.75** as **candidates**. Pairs scoring 0.90+ are **high-confidence**.

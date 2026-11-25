@@ -85,6 +85,8 @@ Report the `graph` payload directly — do **not** re-derive it by reading pages
 3. If `answer_type == "path"` and `path` is non-empty → the connection is in `path`. Read only those pages.
 4. Otherwise → open only `should_read` pages (not all candidates). This replaces the speculative 5–10 page reads the old flow required.
 
+**Optional decision layer.** Run it only if the user enabled it (`OBSIDIAN_WIKI_DECISIONS` is set, or they asked for it). Add `--decide` to the command above, and a decision model judges each candidate's title and summary before you open anything. Confident misses move to `dropped_candidates` and `should_read` is rebuilt. If `decision.failed_open` is `true`, the output is the plain result, so use the decision tree unchanged. See `wiki-decisions`.
+
 > The graph used here excludes vault bookkeeping files (`index.md`, `log.md`, `hot.md`, `_insights.md`). They link to nearly every page, so including them made any two pages look ~2 hops apart and produced meaningless `A → index → B` paths.
 
 **Event time.** Pages may carry `valid_from` / `valid_until` / `superseded_by`

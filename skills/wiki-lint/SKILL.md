@@ -107,6 +107,7 @@ Claims that conflict across pages.
 - This requires reading related pages and comparing claims
 - Focus on pages that share tags or are heavily cross-referenced
 - Look for phrases like "however", "in contrast", "despite" that may signal existing acknowledged contradictions vs. unacknowledged ones
+- **Optional decision layer.** If the user enabled it, `obsidian-wiki decide contradictions --vault "$OBSIDIAN_VAULT_PATH" --decide` pairs sections that mention the same entity and ranks them. Read `to_read` in `priority` order. You decide what counts as a contradiction, because the screen only orders your reading. See `wiki-decisions`.
 
 **How to fix:**
 - Add an "Open Questions" section noting the contradiction

@@ -1,0 +1,14 @@
+# Gold set for tools/bench_decisions.py on examples/demo-vault.
+# Same format as `obsidian-wiki eval` gold sets: q + expected pages.
+{"q": "which http status codes should a tool retry", "expect": ["references/http-status-codes-for-tool-errors.md", "skills/retry-and-backoff-for-tool-calls.md"]}
+{"q": "how do I write good tool descriptions", "expect": ["skills/writing-tool-schemas.md"]}
+{"q": "why did the agent keep calling the wrong search tool", "expect": ["journal/2026-05-14-tool-schema-debugging.md"]}
+{"q": "what is prompt caching and why does it cut cost", "expect": ["concepts/prompt-caching.md"]}
+{"q": "where should long-term agent memory be stored", "expect": ["synthesis/where-agent-memory-should-live.md"]}
+{"q": "difference between RAG and a compiled wiki", "expect": ["synthesis/rag-vs-compiled-wiki.md"]}
+{"q": "how do I catch regressions in an agent", "expect": ["skills/evaluating-agents-with-golden-sets.md"]}
+{"q": "what does the model context protocol connect", "expect": ["entities/model-context-protocol.md"]}
+{"q": "which json schema keywords matter for tool inputs", "expect": ["references/json-schema-basics.md"]}
+{"q": "why do models make things up", "expect": ["concepts/hallucination.md"]}
+{"q": "who wrote the llm wiki gist", "expect": ["entities/andrej-karpathy.md"]}
+{"q": "how much text fits in a single model call", "expect": ["concepts/context-window.md"]}

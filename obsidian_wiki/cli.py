@@ -1406,6 +1406,41 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return code
 
 
+def _add_decision_flags(parser: argparse.ArgumentParser) -> None:
+    """The opt-in decision layer's flags (see docs/decisions.md). Off unless asked."""
+    group = parser.add_argument_group("decision layer (optional, off by default)")
+    toggle = group.add_mutually_exclusive_group()
+    toggle.add_argument("--decide", dest="decide", action="store_const", const=True, default=None,
+                        help="hand small judgments to the decision backend (needs TYPESAFE_API_KEY); "
+                             "also enabled by OBSIDIAN_WIKI_DECISIONS=typesafe")
+    toggle.add_argument("--no-decide", dest="decide", action="store_const", const=False,
+                        help="force the decision layer off even when the env enables it")
+    group.add_argument("--decide-act", type=float, metavar="P",
+                       help="confidence at or above which a decision is acted on (default 0.9)")
+    group.add_argument("--decide-confirm", type=float, metavar="P",
+                       help="confidence at or above which a decision is flagged to confirm (default 0.5)")
+    group.add_argument("--decide-timeout", type=float, metavar="S", help="seconds per backend call (default 5)")
+    group.add_argument("--decide-model", metavar="ID", help="model id (default jev-1.14.0)")
+    group.add_argument("--no-order-check", dest="order_check", action="store_false", default=True,
+                       help="ask each choice once instead of twice with the options reversed")
+
+
+def _decision_config(args: argparse.Namespace):
+    from obsidian_wiki.decisions import DecisionConfig
+
+    cfg = DecisionConfig.from_env(
+        enabled=getattr(args, "decide", None),
+        act=getattr(args, "decide_act", None),
+        confirm=getattr(args, "decide_confirm", None),
+        timeout=getattr(args, "decide_timeout", None),
+        model=getattr(args, "decide_model", None),
+        order_check=getattr(args, "order_check", True),
+    )
+    for warning in cfg.warnings:
+        print(f"warning: decision layer: {warning}", file=sys.stderr)
+    return cfg
+
+
 def cmd_graph_query(args: argparse.Namespace) -> int:
     from obsidian_wiki.graphrag import query
     vault = Path(args.vault).expanduser().resolve()
@@ -1413,15 +1448,34 @@ def cmd_graph_query(args: argparse.Namespace) -> int:
         print(f"error: vault not found: {vault}", file=sys.stderr)
         return 1
     try:
-        result = query(
-            vault,
-            args.question,
-            top_n=args.top,
-            max_should_read=args.max_read,
-            as_of=args.as_of,
-            include_historical=args.include_historical,
-            path_prefix=args.path_prefix,
-        )
+        cfg = _decision_config(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        if cfg.enabled:
+            from obsidian_wiki.decisions import gated_query
+
+            result = gated_query(
+                vault,
+                args.question,
+                cfg,
+                top_n=args.top,
+                max_should_read=args.max_read,
+                as_of=args.as_of,
+                include_historical=args.include_historical,
+                path_prefix=args.path_prefix,
+            )
+        else:
+            result = query(
+                vault,
+                args.question,
+                top_n=args.top,
+                max_should_read=args.max_read,
+                as_of=args.as_of,
+                include_historical=args.include_historical,
+                path_prefix=args.path_prefix,
+            )
     except ValueError as exc:
         print(f"error: --as-of {args.as_of!r} is not a date: {exc}", file=sys.stderr)
         return 1
@@ -1429,6 +1483,60 @@ def cmd_graph_query(args: argparse.Namespace) -> int:
         print(json.dumps(result, indent=2))
     else:
         print(json.dumps(result))
+    return 0
+
+
+def _print_json(result: dict, pretty: bool) -> None:
+    print(json.dumps(result, indent=2 if pretty else None, ensure_ascii=False))
+
+
+def cmd_decide(args: argparse.Namespace) -> int:
+    handler = getattr(args, "decide_func", None)
+    if handler is None:
+        print("error: use decide status, decide triage or decide contradictions", file=sys.stderr)
+        return 2
+    try:
+        cfg = _decision_config(args)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    return handler(args, cfg)
+
+
+def cmd_decide_status(args: argparse.Namespace, cfg) -> int:
+    from obsidian_wiki.decisions import status
+
+    _print_json(status(cfg), args.pretty)
+    return 0
+
+
+def cmd_decide_triage(args: argparse.Namespace, cfg) -> int:
+    from obsidian_wiki.decisions import triage_source
+
+    vault = _resolve_command_vault(args.vault)
+    if vault is None:
+        return 1
+    source = Path(args.source).expanduser()
+    if not source.is_file():
+        print(f"error: source not found: {source}", file=sys.stderr)
+        return 1
+    result = triage_source(vault, source, cfg, top_n=args.top, max_source_chars=args.max_source_chars)
+    _print_json(result, args.pretty)
+    return 0
+
+
+def cmd_decide_contradictions(args: argparse.Namespace, cfg) -> int:
+    from obsidian_wiki.decisions import contradiction_screen, find_section_pairs
+
+    vault = _resolve_command_vault(args.vault)
+    if vault is None:
+        return 1
+    found = find_section_pairs(vault, entity=args.entity, max_pairs=args.max_pairs,
+                               max_section_chars=args.max_section_chars)
+    result = contradiction_screen(found["pairs"], cfg)
+    result["truncated"] = found["truncated"]
+    result["entities"] = found["entities"]
+    _print_json(result, args.pretty)
     return 0
 
 
@@ -3565,7 +3673,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="also rank pages whose valid_until has passed",
     )
     gq.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    _add_decision_flags(gq)
     gq.set_defaults(func=cmd_graph_query)
+
+    dc = sub.add_parser(
+        "decide",
+        help="optional decision layer: ingest triage and contradiction screening (off by default)",
+    )
+    dc_sub = dc.add_subparsers(dest="decide_command")
+    dc.set_defaults(func=cmd_decide)
+    dcs = dc_sub.add_parser("status", help="show the decision layer's config; no network call")
+    dcs.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    _add_decision_flags(dcs)
+    dcs.set_defaults(decide_func=cmd_decide_status)
+    dct = dc_sub.add_parser(
+        "triage",
+        help="for a source file: which existing pages to update, whether it duplicates one, or a new page",
+    )
+    dct.add_argument("source", help="the source file to ingest (or a vault page, for dedup)")
+    dct.add_argument("--vault", help="vault path (defaults to the configured vault)")
+    dct.add_argument("--top", type=int, default=8, help="candidate pages to judge (default: 8)")
+    dct.add_argument("--max-source-chars", type=int, default=1500,
+                     help="characters of the source sent to the backend (default: 1500)")
+    dct.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    _add_decision_flags(dct)
+    dct.set_defaults(decide_func=cmd_decide_triage)
+    dcc = dc_sub.add_parser(
+        "contradictions",
+        help="pairs of sections about the same entity, ranked for reading; never decides",
+    )
+    dcc.add_argument("--vault", help="vault path (defaults to the configured vault)")
+    dcc.add_argument("--entity", help="only this entity page (default: every page under entities/)")
+    dcc.add_argument("--max-pairs", type=int, default=40, help="cap on section pairs screened (default: 40)")
+    dcc.add_argument("--max-section-chars", type=int, default=1200,
+                     help="characters per section sent to the backend (default: 1200)")
+    dcc.add_argument("--pretty", action="store_true", help="pretty-print JSON output")
+    _add_decision_flags(dcc)
+    dcc.set_defaults(decide_func=cmd_decide_contradictions)
 
     bp = sub.add_parser(
         "batch-plan",
