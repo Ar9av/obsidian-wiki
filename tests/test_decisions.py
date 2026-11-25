@@ -317,6 +317,7 @@ def test_http_redirect_is_refused_and_key_not_forwarded(fake_server):
 def test_scrub_is_linear_on_a_long_unbroken_run():
     started = time.perf_counter()
     d.scrub("A" * 200_000, 1500)
+    d.scrub("the-quick-brown-fox-" * 5_000, 1500)
     assert time.perf_counter() - started < 1.0
 
 
@@ -604,6 +605,9 @@ def test_contradiction_screen_disabled_and_failed_list_every_pair(tmp_path):
     failed = d.contradiction_screen(pairs, cfg(), backend=Failing("http_500"))
     assert len(failed["to_read"]) == len(pairs) and failed["decision"]["failed_open"]
     assert failed["decision"]["reason"] == "all_failed" and failed["decision"]["errors"] == {"http_500": len(pairs)}
+    assert failed["decision"]["sent"] is True  # a 500 proves the requests reached the backend
+    timed_out = d.contradiction_screen(pairs, cfg(), backend=Failing("timeout"))
+    assert timed_out["decision"]["sent"] is None
 
 
 # ---------------------------------------------------------------------------

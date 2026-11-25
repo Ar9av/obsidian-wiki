@@ -403,7 +403,7 @@ def band(confidence: float, cfg: DecisionConfig) -> str:
 
 _MASKS = (
     (re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[email]"),
-    (re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@\S+", re.I), "[url-with-credentials]"),
+    (re.compile(r"\b[a-z][a-z0-9+.-]{0,31}://[^\s/:@]+:[^\s/@]+@\S+", re.I), "[url-with-credentials]"),
     (re.compile(r"\b(?:sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs]|AKIA|ASIA)[-_A-Za-z0-9]{12,}\b"), "[token]"),
     (re.compile(r"\b[A-Fa-f0-9]{32,}\b"), "[hex]"),
     # Long runs mixing letters and digits (API keys, base64). Requiring both
@@ -1075,7 +1075,7 @@ def contradiction_screen(
                   usage=usage,
                   payload={"fields": ["entity_title", "page_title", "heading", "section_text"],
                            "pairs": len(items), "answered": len(items) - sum(errors.values())})
-    if all_failed:
+    if all_failed and not all(r.startswith("http_") or r in _POST_RESPONSE for r in errors):
         rec["sent"] = None  # every call errored; whether any reached the backend is unknown
     rec["errors"] = errors
     rec["counts"] = {"pairs": len(items), "to_read": len(to_read), "skipped": len(skipped)}
