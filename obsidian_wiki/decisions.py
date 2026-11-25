@@ -226,6 +226,13 @@ class DecisionBackend:
         raise NotImplementedError
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects: urllib would re-send the bearer key to the new URL unchecked."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401
+        return None  # urllib then raises HTTPError(code) -> fails open as http_3xx
+
+
 def _url_allowed(url: str) -> bool:
     """HTTPS anywhere, plain HTTP only to loopback, so the key never crosses a network in clear."""
     parts = urllib.parse.urlsplit(url)
@@ -256,7 +263,7 @@ class TypeSafeBackend(DecisionBackend):
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self._open = opener or urllib.request.urlopen
+        self._open = opener or urllib.request.build_opener(_NoRedirect).open
 
     def __repr__(self) -> str:  # never show the key
         return f"TypeSafeBackend(model={self.model!r}, base_url={self.base_url!r})"
@@ -395,7 +402,7 @@ def band(confidence: float, cfg: DecisionConfig) -> str:
 
 
 _MASKS = (
-    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[email]"),
+    (re.compile(r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"), "[email]"),
     (re.compile(r"\b[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@\S+", re.I), "[url-with-credentials]"),
     (re.compile(r"\b(?:sk|pk|rk|ghp|gho|ghs|github_pat|xox[abprs]|AKIA|ASIA)[-_A-Za-z0-9]{12,}\b"), "[token]"),
     (re.compile(r"\b[A-Fa-f0-9]{32,}\b"), "[hex]"),
@@ -431,6 +438,8 @@ def _is_pii(tags: Sequence[str]) -> bool:
 # Failures that happen before any byte leaves the machine.
 _PRE_NETWORK = {"disabled", "no_candidates", "no_pairs", "nothing_sendable", "structural_intent",
                 "missing_key", "insecure_url", "unknown_backend", "invalid_request"}
+# Failures that happen after the backend answered (plus every ``http_*`` status).
+_POST_RESPONSE = {"invalid_response", "invalid_answer"}
 
 
 def _record(
@@ -445,7 +454,7 @@ def _record(
     usage: Optional[Dict[str, Any]] = None,
     payload: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    if latency_ms is not None:
+    if latency_ms is not None or (reason or "").startswith("http_") or reason in _POST_RESPONSE:
         sent: Optional[bool] = True
     elif reason in _PRE_NETWORK or not failed_open:
         sent = False
@@ -971,6 +980,7 @@ def contradiction_screen(
     backend: Optional[DecisionBackend] = None,
     env: Optional[Mapping[str, str]] = None,
     max_workers: int = 4,
+    max_section_chars: int = 1200,
 ) -> Dict[str, Any]:
     """Screen section pairs; return the ones worth reading, in priority order.
 
@@ -1005,9 +1015,9 @@ def contradiction_screen(
         state = {
             "entity": scrub(pair["entity_title"], 160),
             "section_1": {"page": scrub(sides[0]["title"], 160), "heading": scrub(sides[0]["heading"], 160),
-                          "text": scrub(sides[0]["text"], 1600)},
+                          "text": scrub(sides[0]["text"], max_section_chars)},
             "section_2": {"page": scrub(sides[1]["title"], 160), "heading": scrub(sides[1]["heading"], 160),
-                          "text": scrub(sides[1]["text"], 1600)},
+                          "text": scrub(sides[1]["text"], max_section_chars)},
         }
         questions = _choice_pair(
             "rel",

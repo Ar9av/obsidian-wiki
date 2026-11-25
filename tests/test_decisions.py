@@ -286,6 +286,38 @@ def test_http_failures_fail_open(fake_server, status, payload, reason):
     assert out["decision"]["failed_open"] is True
     assert out["decision"]["reason"] == reason
     assert FAKE_KEY not in json.dumps(out)
+    assert out["decision"]["sent"] is True  # the backend answered, so the request reached it
+
+
+def test_http_redirect_is_refused_and_key_not_forwarded(fake_server):
+    target = fake_server(lambda body: (200, {"model": "m", "answers": {}, "usage": {}}, 0))
+
+    class Redirect(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            self.send_response(302)
+            self.send_header("Location", target.url + "/v1/systemone")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Redirect)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}"
+        out = d.relevance_gate("alpha", CANDS, cfg(base_url=url), env={d.ENV_KEY: FAKE_KEY})
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert out["decision"]["reason"] == "http_302" and out["decision"]["failed_open"]
+    assert target.requests == []  # the key never reached the redirect target
+
+
+def test_scrub_is_linear_on_a_long_unbroken_run():
+    started = time.perf_counter()
+    d.scrub("A" * 200_000, 1500)
+    assert time.perf_counter() - started < 1.0
 
 
 def test_http_timeout_fails_open(fake_server):

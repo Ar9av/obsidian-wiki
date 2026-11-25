@@ -1533,7 +1533,7 @@ def cmd_decide_contradictions(args: argparse.Namespace, cfg) -> int:
         return 1
     found = find_section_pairs(vault, entity=args.entity, max_pairs=args.max_pairs,
                                max_section_chars=args.max_section_chars)
-    result = contradiction_screen(found["pairs"], cfg)
+    result = contradiction_screen(found["pairs"], cfg, max_section_chars=args.max_section_chars)
     result["truncated"] = found["truncated"]
     result["entities"] = found["entities"]
     _print_json(result, args.pretty)
