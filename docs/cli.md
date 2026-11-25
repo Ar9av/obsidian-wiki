@@ -206,6 +206,27 @@ snapshots:
 
 The check warns by default and fails only under `--strict-trust`. Pages whose ledger entry predates the `lifecycle` field carry no baseline and are skipped silently, so existing vaults behave exactly as before until their next `trust-record`.
 
+## Decision layer (optional)
+
+Off by default. With it on, small closed judgments go to a System One decision model (TypeSafe Jev) instead of the agent reading pages to decide. Every command fails open to its plain output and never writes. Full reference, including exactly what is sent: [Decision layer](decisions.md).
+
+| Command | What it does |
+|---|---|
+| `graph-query <vault> <question> --decide` | Gate the ranked candidates before any body is opened: confident hits move up, confident misses go to `dropped_candidates`, and `should_read` is rebuilt (`decision.should_read_before` keeps the old list). Structural intents are never gated |
+| `decide status` | Show the layer's config, thresholds and `key_present`; makes no network call |
+| `decide triage <source> --vault V --decide` | For a source, label the existing pages it could touch `update`, `duplicate`, or `unrelated`, and return a `verdict` (`update_existing`, `duplicate_skip`, `new_page`, `undecided`) with a reading `shortlist` |
+| `decide contradictions --vault V [--entity E] --decide` | Pair sections on different pages that mention the same entity, then rank the pairs for reading (`priority` 1 to 4). It never decides that a contradiction exists |
+
+All three take `--decide` / `--no-decide`, `--decide-act`, `--decide-confirm`, `--decide-timeout`, `--decide-model`, and `--no-order-check`. Without `--decide` or `OBSIDIAN_WIKI_DECISIONS=typesafe`, `graph-query` output is unchanged, and the `decide` subcommands return the plain result with `decision.reason: "disabled"`.
+
+```bash
+export TYPESAFE_API_KEY=...            # read from the environment only
+obsidian-wiki graph-query "$VAULT" "how should tool errors be retried" --decide --pretty
+obsidian-wiki decide triage notes/new-source.md --vault "$VAULT" --decide --pretty
+obsidian-wiki decide contradictions --vault "$VAULT" --max-pairs 20 --decide --pretty
+python tools/bench_decisions.py        # plain vs gated on examples/demo-vault (offline mock by default)
+```
+
 ## Event time (`valid_from` / `valid_until`)
 
 `created` and `updated` are *ingestion* time — when the vault learned something.

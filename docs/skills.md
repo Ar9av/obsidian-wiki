@@ -49,6 +49,7 @@ You need three skills to get value from the vault. Everything else on this page 
 | `wiki-playbook-review` | The weekly loop: finds the `skills/` playbooks this week's meetings, journals and new pages touched, rewrites each one from that evidence (what worked, what failed, new cases, a dated *Stop doing* list and changelog), and stages the revisions for you to approve with `/wiki-stage-commit`. Never writes a live page | `/wiki-playbook-review [--since 7d]` |
 | `wiki-context-pack` | Produce a token-bounded context slice for a downstream agent or skill | `/wiki-context-pack` |
 | `memory-bridge` | Browse and diff knowledge by which AI tool wrote it | `/memory-bridge` |
+| `wiki-decisions` | **Optional, off by default.** Hands small closed judgments to a System One decision model (TypeSafe Jev): it gates `wiki-query` candidates before any page is opened, triages an ingest (update, duplicate, or new page) for `wiki-ingest`/`wiki-dedup`, and ranks section pairs for `wiki-lint`'s contradiction check. Fails open and never writes. See [Decision layer](decisions.md) | `/wiki-decisions` |
 
 ## Finding past sessions
 

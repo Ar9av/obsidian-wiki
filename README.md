@@ -281,6 +281,7 @@ Full data, per-run logs and the scaling measurements are in
 | **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)** | `from obsidian_wiki import Memory` — use a vault as agent memory |
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | The index, log, hot cache, owner profile, and todo index |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | Topic graph over your agent session history |
+| **[Decision layer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/decisions.md)** | Optional and off by default: hand small relevance, ingest-triage and contradiction judgments to a decision model (TypeSafe Jev). Fails open, never writes |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | Capture pages into the vault, and fill web forms from it |
 | **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | The local web viewer, connecting agents over MCP, and self-hosting a vault (Docker or `obsidian-wiki serve`) with TLS, a read-only key and git sync |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | Adding skills, keeping the READMEs in sync |

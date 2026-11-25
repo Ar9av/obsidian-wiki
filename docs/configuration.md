@@ -328,6 +328,20 @@ Pages can carry a `visibility/` tag marking their intended reach. This is **enti
 
 `visibility/` tags are **system tags** — they don't count toward the 5-tag limit and are listed separately from domain/type tags in the taxonomy.
 
+## Decision layer (optional)
+
+Read by `graph-query --decide` and `obsidian-wiki decide …` from the process environment, so export these in your shell rather than only writing them to `.env`. Everything is off until `OBSIDIAN_WIKI_DECISIONS` is set, or `--decide` is passed. Full guide: [Decision layer](decisions.md).
+
+| Variable | What it does | Default |
+|---|---|---|
+| `OBSIDIAN_WIKI_DECISIONS` | `typesafe` turns the layer on for every command that supports it | `off` |
+| `TYPESAFE_API_KEY` | Bearer key for `api.typesafe.ai`. Read from the environment only, never printed; `decide status` reports only `key_present` | *(unset)* |
+| `OBSIDIAN_WIKI_DECISIONS_MODEL` | Model ID, pinned so thresholds stay meaningful | `jev-1.14.0` |
+| `OBSIDIAN_WIKI_DECISIONS_ACT` | Confidence at or above which a decision is acted on | `0.9` |
+| `OBSIDIAN_WIKI_DECISIONS_CONFIRM` | Confidence at or above which a decision is kept but flagged to confirm | `0.5` |
+| `OBSIDIAN_WIKI_DECISIONS_TIMEOUT` | Seconds per backend call; on timeout the command prints its plain result | `5` |
+| `OBSIDIAN_WIKI_DECISIONS_URL` | Backend base URL; must be `https` (or `http` to loopback) | `https://api.typesafe.ai` |
+
 ## Memory server (optional)
 
 Only read by `obsidian_wiki/server.py`, the HTTP + MCP front end that `obsidian-wiki serve` and the Docker image run. Irrelevant to local

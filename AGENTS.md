@@ -110,6 +110,7 @@ Skills live in `skills/<name>/SKILL.md`. Match the user's intent to the right sk
 | "/wiki-digest" / "what did I learn this week" / "weekly digest" / "knowledge summary" / "what's new in my wiki" / "summarize my recent learning" / "monthly review" | `wiki-digest` |
 | "/wiki-context-pack" / "make a context pack" / "context slice for X" / "pack the wiki for my agent" / "bounded context for Y" | `wiki-context-pack` |
 | "/wiki-stage-commit" / "review staged pages" / "commit staged writes" / "promote staged pages" / "what's waiting in staging" | `wiki-stage-commit` |
+| "/wiki-decisions" / "enable the decision layer" / "use Jev" / "gate my search results" / "triage this ingest" / "screen for contradictions" | `wiki-decisions` |
 | "restyle Obsidian" / "adjust the vault layout" / "CSS snippet" / "tune tabs/sidebars/graph panes" | `obsidian-layout-adjustment` |
 
 ### Session history: ingest vs. retrieve

@@ -368,6 +368,8 @@ Before writing anything, plan which pages to update or create. Cap the plan at `
 - If it's new, which category does it belong in?
 - What `[[wikilinks]]` should connect it to existing pages?
 
+**Optional decision layer.** If the user enabled it, run `obsidian-wiki decide triage <source> --vault "$OBSIDIAN_VAULT_PATH" --decide` before planning. Read the `shortlist` pages first. A `duplicate_skip` verdict needs one confirming read before you skip the source. On `undecided` or `failed_open`, plan as below. It never writes a page. See `wiki-decisions`.
+
 **One source file, one primary page.** A source's primary page is the `references/` (or equivalent) page that stands for the document itself. Derived concept and entity pages don't count. The same document often arrives twice: once as a conversion (`_raw/import/report.md`), later as the original (`report.pdf`). Stems, titles and hashes all differ between the two, so nothing else notices. Run the guard before writing:
 
 ```bash
