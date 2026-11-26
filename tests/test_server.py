@@ -558,6 +558,8 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     (claude_home / "skills" / "wiki-lint" / "SKILL.md").write_text("x")
     ui_tools.start_job(vault, "lint")
     cmd = seen["cmd"]
+    denied = cmd[cmd.index("--disallowedTools") + 1]
+    assert "Read(~/.config/obsidian-wiki/**)" in denied and "Read(**/.env)" in denied
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
 
@@ -740,3 +742,13 @@ def test_write_hook_covers_bulk_writes_and_a_veto_rejects_the_whole_batch(client
     _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].upper()}))\n")
     assert client.post("/v1/pages/bulk", json=[ok]).status_code == 200
     assert "FINE" in (tmp_path / "concepts/fine.md").read_text()
+
+
+@pytest.mark.parametrize("path", [".env", ".git/config", ".obsidian/plugins/copilot/data.json", "notes.txt"])
+def test_read_refuses_files_that_are_not_wiki_pages(client, tmp_path, path):
+    """Keys live next to the pages: `.env`, git remotes, Obsidian plugin settings."""
+    (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / path).write_text("OPENAI_API_KEY=sk-test")
+    response = client.get(f"/v1/pages/{path}")
+    assert response.status_code == 400
+    assert "sk-test" not in response.text
