@@ -560,6 +560,7 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     cmd = seen["cmd"]
     denied = cmd[cmd.index("--disallowedTools") + 1]
     assert "Read(~/.config/obsidian-wiki/**)" in denied and "Read(**/.env)" in denied
+    assert f"{ui_tools.config_dir().resolve().name}/**)" in denied.split(",")[-1]
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
 
@@ -752,3 +753,8 @@ def test_read_refuses_files_that_are_not_wiki_pages(client, tmp_path, path):
     response = client.get(f"/v1/pages/{path}")
     assert response.status_code == 400
     assert "sk-test" not in response.text
+
+
+def test_read_accepts_an_uppercase_markdown_extension(client, tmp_path):
+    (tmp_path / "Up.MD").write_text("hello")
+    assert client.get("/v1/pages/Up.MD").status_code == 200

@@ -506,6 +506,16 @@ JOB_DENIED = ",".join(f"Read({p})" for p in (
     "~/.config/obsidian-wiki/**", "~/.obsidian-wiki/**", "~/.ssh/**", "~/.aws/**",
     "~/.config/gh/**", "~/.netrc", "**/.env", "**/.env.*", "./.git/**", "./.obsidian/**",
 ))
+
+
+def _job_denied() -> str:
+    """JOB_DENIED plus the config dir in use, which a custom XDG_CONFIG_HOME moves."""
+    path = config_dir().resolve().as_posix()
+    if path[1:2] == ":":  # Claude Code spells C:/x as //c/x in permission rules
+        path = f"/{path[0].lower()}{path[2:]}"
+    return f"{JOB_DENIED},Read(/{path}/**)"
+
+
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 
@@ -541,7 +551,7 @@ def start_job(vault: Path, task: str) -> dict[str, Any]:
     # .claude/settings.json (hooks, allow rules) and .mcp.json. Load only the
     # user's own settings and no MCP servers, so vault content can't run code.
     cmd = [claude, "-p", prompt, "--output-format", "json", "--permission-mode", "acceptEdits",
-           "--allowedTools", JOB_TOOLS, "--disallowedTools", JOB_DENIED, "--no-session-persistence",
+           "--allowedTools", JOB_TOOLS, "--disallowedTools", _job_denied(), "--no-session-persistence",
            "--setting-sources", "user", "--strict-mcp-config"] + (["--model", model] if model else [])
     threading.Thread(target=_run_job, args=(job, cmd, vault), daemon=True).start()
     return dict(job)

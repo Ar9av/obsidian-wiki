@@ -113,7 +113,7 @@ def read_page(path: str) -> dict[str, Any]:
     # Markdown pages only: the vault root can also hold `.env`, `.git/config` (remote
     # tokens) and `.obsidian/plugins/*/data.json` (plugin API keys).
     rel = target.relative_to(VAULT.resolve())
-    if target.suffix != ".md" or any(part.startswith(".") for part in rel.parts):
+    if target.suffix.lower() != ".md" or any(part.startswith(".") for part in rel.parts):
         raise HTTPException(400, f"not a wiki page: {path}")
     if not target.is_file():
         raise HTTPException(404, f"no such page: {path}")
