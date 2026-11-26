@@ -587,6 +587,30 @@ def test_write_hook_can_rewrite_the_body(client, tmp_path, monkeypatch):
     assert "call [phone]" in (tmp_path / "concepts/note.md").read_text()
 
 
+def test_write_hook_output_is_read_as_utf8(client, tmp_path, monkeypatch):
+    # A hook that emits raw UTF-8 (node, jq, go) must not be decoded with the locale codec: on Windows
+    # that wrote mojibake into the page, and bytes cp1252 can't map (the 0x81 in "\u00c1") left stdout None.
+    _hook(tmp_path, monkeypatch,
+          "out = json.dumps({'content': page['content'] + ' | caf\\u00e9 \\u2014 \\u2713'}, ensure_ascii=False)\n"
+          "sys.stdout.buffer.write(out.encode('utf-8'))\n")
+    assert _write(client, "\u00c1ngel").status_code == 200
+    body = (tmp_path / "concepts/note.md").read_text(encoding="utf-8")
+    assert "\u00c1ngel | caf\u00e9 \u2014 \u2713" in body
+
+
+def test_write_hook_rejection_reason_is_read_as_utf8(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch,
+          "sys.stderr.buffer.write('refus\\u00e9: \\u00c1 \\u20ac'.encode('utf-8'))\nsys.exit(1)\n")
+    denied = _write(client)
+    assert denied.status_code == 422 and "refus\u00e9: \u00c1 \u20ac" in denied.json()["detail"]
+
+
+def test_write_hook_output_that_is_not_utf8_fails_closed(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "sys.stdout.buffer.write(b'{\"content\": \"caf\\xe9\"}')\n")
+    assert _write(client).status_code == 502
+    assert not (tmp_path / "concepts/note.md").exists()
+
+
 def test_write_hook_sees_the_page_and_silent_success_changes_nothing(client, tmp_path, monkeypatch):
     seen = tmp_path.parent / f"{tmp_path.name}-seen.json"
     _hook(tmp_path, monkeypatch, f"open({str(seen)!r}, 'w').write(json.dumps(page))\n")

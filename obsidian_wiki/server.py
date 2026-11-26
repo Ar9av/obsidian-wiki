@@ -183,15 +183,18 @@ def _write_hook(rel: str, title: str, category: str, content: str,
     try:
         # POSIX shlex would eat the backslashes in `C:\tools\hook.exe`; Windows parses the string itself.
         argv = command if os.name == "nt" else shlex.split(command)
-        proc = subprocess.run(argv, input=payload, capture_output=True, text=True,
+        # Bytes in and out: `text=True` would use the locale codec (cp1252 on Windows), which garbles
+        # a UTF-8 hook's output or, on bytes it can't map, leaves stdout None.
+        proc = subprocess.run(argv, input=payload.encode("utf-8"), capture_output=True,
                               timeout=WRITE_HOOK_TIMEOUT, cwd=VAULT)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise HTTPException(502, f"write hook failed ({type(exc).__name__}); nothing written") from exc
     if proc.returncode != 0:
-        raise HTTPException(422, f"write hook rejected {rel}: {(proc.stderr or proc.stdout).strip()[:300]}")
+        reason = (proc.stderr or proc.stdout).decode("utf-8", errors="replace")
+        raise HTTPException(422, f"write hook rejected {rel}: {reason.strip()[:300]}")
     if proc.stdout.strip():
         try:
-            replaced = json.loads(proc.stdout)["content"]
+            replaced = json.loads(proc.stdout.decode("utf-8"))["content"]
         except (ValueError, TypeError, KeyError):
             replaced = None
         # Anything printed must be {"content": "<string>"}: a typo'd key or a null
