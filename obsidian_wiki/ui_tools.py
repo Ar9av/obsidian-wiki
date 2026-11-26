@@ -499,6 +499,13 @@ AGENT_TASKS: dict[str, tuple[str, str]] = {
 }
 # File tools plus the wiki CLI and the moves raw mode needs; nothing else runs unasked.
 JOB_TOOLS = "Read,Write,Edit,Glob,Grep,Skill,WebFetch,Bash(obsidian-wiki:*),Bash(mkdir:*),Bash(mv:*),Bash(ls:*),Bash(git status:*),Bash(git diff:*)"
+# Reads need no approval, so deny the places keys live: an ingested page must not be able
+# to steer a job into reading one and sending it out through WebFetch.
+# ponytail: deny-list, not an allow-list; widen it if a job ever needs to read outside the vault.
+JOB_DENIED = ",".join(f"Read({p})" for p in (
+    "~/.config/obsidian-wiki/**", "~/.obsidian-wiki/**", "~/.ssh/**", "~/.aws/**",
+    "~/.config/gh/**", "~/.netrc", "**/.env", "**/.env.*", "./.git/**", "./.obsidian/**",
+))
 _jobs: dict[str, dict[str, Any]] = {}
 _jobs_lock = threading.Lock()
 
@@ -534,7 +541,7 @@ def start_job(vault: Path, task: str) -> dict[str, Any]:
     # .claude/settings.json (hooks, allow rules) and .mcp.json. Load only the
     # user's own settings and no MCP servers, so vault content can't run code.
     cmd = [claude, "-p", prompt, "--output-format", "json", "--permission-mode", "acceptEdits",
-           "--allowedTools", JOB_TOOLS, "--no-session-persistence",
+           "--allowedTools", JOB_TOOLS, "--disallowedTools", JOB_DENIED, "--no-session-persistence",
            "--setting-sources", "user", "--strict-mcp-config"] + (["--model", model] if model else [])
     threading.Thread(target=_run_job, args=(job, cmd, vault), daemon=True).start()
     return dict(job)

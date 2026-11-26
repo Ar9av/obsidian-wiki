@@ -23,6 +23,17 @@ GITIGNORE_CONTENT = (
     ".obsidian/cache\n"
     ".trash/\n"
     ".graph-cache.json\n"
+    ".env\n"
+    ".env.*\n"
+    ".obsidian/plugins/*/data.json\n"
+)
+
+#: Never staged by `run_sync`, whatever the vault's own .gitignore says: config
+#: files that hold keys. Pathspec excludes, so an existing .gitignore stays untouched.
+_SECRET_EXCLUDES = (
+    ":(exclude,glob)**/.env",
+    ":(exclude,glob)**/.env.*",
+    ":(exclude,glob).obsidian/plugins/*/data.json",
 )
 
 #: Derived files that should never be committed — they are regenerable and
@@ -102,7 +113,7 @@ def run_sync(vault_path: Path) -> tuple[int, str]:
     if not (vault_path / ".git").is_dir():
         return 1, "wiki-sync: vault is not a git repo — run `obsidian-wiki sync-setup <remote>` first"
 
-    add = _git(vault_path, "add", "-A")
+    add = _git(vault_path, "add", "-A", "--", ".", *_SECRET_EXCLUDES)
     if add.returncode != 0:
         return 1, f"wiki-sync: git add failed: {add.stderr.strip()}"
 
@@ -208,7 +219,7 @@ def pull_and_push(vault_path: Path, lock=None) -> tuple[int, str]:
     _ensure_excludes(vault_path)
 
     with guard():
-        add = _git(vault_path, "add", "-A")
+        add = _git(vault_path, "add", "-A", "--", ".", *_SECRET_EXCLUDES)
         if add.returncode != 0:
             return 1, f"wiki-sync: git add failed: {add.stderr.strip()}"
         committed = _git(vault_path, "diff", "--cached", "--quiet").returncode != 0

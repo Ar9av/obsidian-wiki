@@ -128,6 +128,23 @@ class TestRunSync:
         log = _git(vault, "log", "--oneline").stdout
         assert "sync " in log
 
+    def test_never_commits_env_or_plugin_keys(self, vault, remote_repo):
+        configure_sync(vault, str(remote_repo))
+        (vault / ".gitignore").write_text("# the user's own, without secret rules\n")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        (vault / "note.md").write_text("hello")
+        (vault / ".env").write_text("ANTHROPIC_API_KEY=sk-test")
+        (vault / "sub").mkdir()
+        (vault / "sub" / ".env.local").write_text("TOKEN=x")
+        plugin = vault / ".obsidian" / "plugins" / "copilot"
+        plugin.mkdir(parents=True)
+        (plugin / "data.json").write_text('{"openAIApiKey": "sk-test"}')
+        assert run_sync(vault)[0] == 0
+        tracked = _git(vault, "ls-files").stdout.split()
+        assert "note.md" in tracked
+        assert not {".env", "sub/.env.local", ".obsidian/plugins/copilot/data.json"} & set(tracked)
+
     def test_second_run_with_no_changes_is_clean(self, vault, remote_repo):
         configure_sync(vault, str(remote_repo))
         _git(vault, "config", "user.email", "test@example.com")
