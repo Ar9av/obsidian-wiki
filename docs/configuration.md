@@ -216,7 +216,9 @@ Missing CodeGraph never breaks normal `wiki-update` or `doctor` runs. The graph 
 | `CODE_UNDERSTANDING_BACKEND` | How `wiki-update` understands project structure: `auto` (CodeGraph when available, else a Graphify graph when `graphify-out/graph.json` exists, else the built-in `ast-extract` + `rg`), `builtin` (always the built-in, dependency-free), `codegraph` (explicitly require CodeGraph; warn/error if unavailable), or `graphify` (explicitly require a Graphify graph) | `auto` |
 | `CODE_UNDERSTANDING_CODEGRAPH_BIN` | Path to the `codegraph` binary if it isn't on `PATH` | *(empty)* |
 
-Both variables resolve like `OBSIDIAN_VAULT_PATH`: a real environment variable wins (empty counts as unset), then the nearest `.env` walking up from the project directory (stopping at the first one that sets a `CODE_UNDERSTANDING` key), then the global config ([where the global config lives](#where-the-global-config-lives)), then the default.
+`CODE_UNDERSTANDING_BACKEND` resolves like `OBSIDIAN_VAULT_PATH`: a real environment variable wins (empty counts as unset), then the nearest `.env` walking up from the project directory (stopping at the first one that sets a `CODE_UNDERSTANDING` key), then the global config ([where the global config lives](#where-the-global-config-lives)), then the default.
+
+`CODE_UNDERSTANDING_CODEGRAPH_BIN` names a program that gets executed, so it is read only from the environment or the global config — never from a project `.env`, which belongs to the repository being analysed and may come from someone else. A relative path is resolved against your current directory, not the project's.
 
 ### Setup (optional)
 

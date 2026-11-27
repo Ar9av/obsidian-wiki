@@ -411,7 +411,7 @@ def test_doctor_project_codegraph_gitignore_passes_when_ignored(tmp_path: Path) 
     assert check["hint"] == ""
 
 
-def test_doctor_project_codegraph_bin_from_project_env(tmp_path: Path) -> None:
+def test_doctor_ignores_codegraph_bin_from_project_env(tmp_path: Path) -> None:
     home = tmp_path / "home"
     vault = tmp_path / "vault"
     _make_vault(vault)
@@ -442,7 +442,7 @@ def test_doctor_project_codegraph_bin_from_project_env(tmp_path: Path) -> None:
     assert proc.returncode == 0
     data = json.loads(proc.stdout)
     check = next(c for c in data["checks"] if c["name"] == "code-understanding.codegraph")
-    assert check["status"] == "pass"
+    assert check["status"] == "info"  # repo .env may not pick the binary (GHSA-334c-x34r-49fv)
 
 
 def test_doctor_project_codegraph_not_initialized_hints_run_command(tmp_path: Path) -> None:

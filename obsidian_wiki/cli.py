@@ -2413,39 +2413,49 @@ _CODE_UNDERSTANDING_KEYS = ("CODE_UNDERSTANDING_BACKEND", "CODE_UNDERSTANDING_CO
 def _resolve_code_understanding_settings(project: Path) -> tuple[str, str | None]:
     """Resolve (backend, bin_path) for code-understanding.
 
-    Precedence: os.environ (empty = unset) > nearest walk-up project .env
-    (project dir to HOME, stopping at the first .env setting a
-    CODE_UNDERSTANDING key) > global config > defaults ("auto", None).
-    Mirrors the OBSIDIAN_VAULT_PATH resolution used by the schema/context-pack
-    commands.
+    Backend precedence: os.environ (empty = unset) > nearest walk-up project
+    .env (project dir to HOME, stopping at the first .env setting a
+    CODE_UNDERSTANDING key) > global config > "auto".
+
+    The codegraph binary is an executable, so it is only taken from places the
+    user controls: os.environ or the global config. A project ``.env`` is part
+    of the analysed repository and may have been written by someone else, so
+    its CODE_UNDERSTANDING_CODEGRAPH_BIN is ignored (GHSA-334c-x34r-49fv).
+    A relative bin path is anchored to the caller's working directory, never to
+    the analysed project.
     """
     backend = os.environ.get("CODE_UNDERSTANDING_BACKEND") or ""
     bin_path = os.environ.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or ""
     if not backend or not bin_path:
-        current = Path(project).resolve()
-        home = HOME.resolve()
-        local: dict[str, str] = {}
-        while True:
-            candidate = _read_config_file(current / ".env")
-            if any(key in candidate for key in _CODE_UNDERSTANDING_KEYS):
-                local = candidate
-                break
-            if current == home or current.parent == current:
-                break
-            current = current.parent
         global_config = _read_config()
         if not backend:
+            current = Path(project).resolve()
+            home = HOME.resolve()
+            local: dict[str, str] = {}
+            while True:
+                candidate = _read_config_file(current / ".env")
+                if any(key in candidate for key in _CODE_UNDERSTANDING_KEYS):
+                    local = candidate
+                    break
+                if current == home or current.parent == current:
+                    break
+                current = current.parent
             backend = (
                 local.get("CODE_UNDERSTANDING_BACKEND")
                 or global_config.get("CODE_UNDERSTANDING_BACKEND")
                 or "auto"
             )
         if not bin_path:
-            bin_path = (
-                local.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
-                or global_config.get("CODE_UNDERSTANDING_CODEGRAPH_BIN")
-                or ""
-            )
+            bin_path = global_config.get("CODE_UNDERSTANDING_CODEGRAPH_BIN") or ""
+    if bin_path:
+        candidate_bin = Path(bin_path).expanduser()
+        # A bare command name is looked up on PATH by subprocess; anything with a
+        # directory part is pinned to an absolute path so it can't be resolved
+        # against the analysed project's directory (the subprocess cwd).
+        if not candidate_bin.is_absolute() and (os.sep in bin_path or (os.altsep and os.altsep in bin_path)):
+            candidate_bin = Path(os.getcwd()) / candidate_bin
+        if candidate_bin.is_absolute():
+            bin_path = str(candidate_bin)
     return backend, bin_path or None
 
 
