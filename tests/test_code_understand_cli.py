@@ -14,6 +14,7 @@ codes, JSON shape on stdout, and stderr messages — not any internal function.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -189,20 +190,34 @@ def test_code_understand_pretty_flag(tmp_path: Path) -> None:
     assert "backend" in proc.stdout
 
 
-def test_code_understand_backend_from_project_env(tmp_path: Path) -> None:
-    """RED: backend resolution must consult <project>/.env, not just os.environ.
+def _marker_bin(tmp_path: Path, marker: Path) -> Path:
+    """An executable that only records that it ran (stands in for a hostile
+    program committed to the analysed repository)."""
+    script = tmp_path / "evil" / "codegraph"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(f"#!/bin/sh\necho ran > '{marker}'\nexit 1\n", encoding="utf-8")
+    script.chmod(0o755)
+    return script
 
-    With CODE_UNDERSTANDING_BACKEND explicitly unset in the subprocess env, the
-    resolver should fall through to the project's `.env` (backend=codegraph +
-    fake bin). Current cli.py ignores .env, so the backend auto-falls back to
-    "builtin" and this test fails until the config-resolution chain lands.
-    """
+
+@pytest.mark.skipif(os.name == "nt", reason="needs a shebang executable")
+def test_code_understand_ignores_codegraph_bin_from_project_env(tmp_path: Path) -> None:
+    """GHSA-334c-x34r-49fv: a repository's .env must not choose the program
+    that code-understand executes. The backend choice is still honoured, but
+    the binary comes only from the user's environment or global config."""
     project = _mini_project(tmp_path)
-    bin_path = make_fake_codegraph_bin(tmp_path)
+    marker = tmp_path / "marker"
+    evil = _marker_bin(tmp_path, marker)
     (project / ".env").write_text(
         f'CODE_UNDERSTANDING_BACKEND="codegraph"\n'
-        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{bin_path}"\n',
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{evil}"\n',
         encoding="utf-8",
+    )
+    bin_path = make_fake_codegraph_bin(tmp_path)
+    home = tmp_path / "home"
+    (home / ".obsidian-wiki").mkdir(parents=True)
+    (home / ".obsidian-wiki" / "config").write_text(
+        f'CODE_UNDERSTANDING_CODEGRAPH_BIN="{bin_path}"\n', encoding="utf-8"
     )
 
     proc = _run_cli(
@@ -211,15 +226,45 @@ def test_code_understand_backend_from_project_env(tmp_path: Path) -> None:
         "--project",
         str(project),
         env_overrides={
+            "HOME": str(home),
             "PATH": _NO_CODEGRAPH_PATH,
             "CODE_UNDERSTANDING_BACKEND": "",
             "CODE_UNDERSTANDING_CODEGRAPH_BIN": "",
         },
     )
 
-    assert proc.returncode == 0
-    data = json.loads(proc.stdout)
-    assert data["backend"] == "codegraph"
+    assert not marker.exists(), "program named by the project .env was executed"
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["backend"] == "codegraph"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="needs a shebang executable")
+def test_code_understand_project_relative_bin_never_runs(tmp_path: Path) -> None:
+    """The PoC shape: .env points at ./tools/codegraph inside the checkout."""
+    project = _mini_project(tmp_path)
+    marker = tmp_path / "marker"
+    tool = project / "tools" / "codegraph"
+    tool.parent.mkdir()
+    tool.write_text(f"#!/bin/sh\necho ran > '{marker}'\n", encoding="utf-8")
+    tool.chmod(0o755)
+    (project / ".env").write_text("CODE_UNDERSTANDING_CODEGRAPH_BIN=./tools/codegraph\n", encoding="utf-8")
+
+    proc = _run_cli(
+        tmp_path,
+        "code-understand",
+        "--project",
+        str(project),
+        env_overrides={
+            "HOME": str(tmp_path / "home"),
+            "PATH": _NO_CODEGRAPH_PATH,
+            "CODE_UNDERSTANDING_BACKEND": "",
+            "CODE_UNDERSTANDING_CODEGRAPH_BIN": "",
+        },
+    )
+
+    assert not marker.exists()
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout)["backend"] == "builtin"
 
 
 def test_code_understand_backend_from_global_config(tmp_path: Path) -> None:

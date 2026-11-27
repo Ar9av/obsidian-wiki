@@ -660,7 +660,7 @@ The wiki is configured through environment variables (see `.env.example`). The o
 - `WIKI_TOKEN_WARN_THRESHOLD` — Emit a warning in `wiki-status` when the full-wiki token estimate exceeds this value (default: `100000`). Set to `0` to disable. See `wiki-status` for the token footprint report.
 - `WIKI_STAGED_WRITES` — When `true`, all LLM-written pages go to `_staging/<category>/` for human review before promotion. See `wiki-setup` and `wiki-stage-commit` for details.
 - `CODE_UNDERSTANDING_BACKEND` — how wiki-update understands a project before distilling: `auto` (CodeGraph when available, else builtin ast-extract + rg; default), `builtin`, `codegraph` (explicitly require; warn/error if unavailable), or `graphify` (read an existing `graphify-out/graph.json`; `auto` picks it after CodeGraph).
-- `CODE_UNDERSTANDING_CODEGRAPH_BIN` — optional path to the codegraph binary when it isn't on PATH.
+- `CODE_UNDERSTANDING_CODEGRAPH_BIN` — optional path to the codegraph binary when it isn't on PATH. Read from the environment or global config only; a project `.env` cannot set it.
   Both resolve like `OBSIDIAN_VAULT_PATH`: a real environment variable wins (empty counts as
   unset), then the nearest `.env` walking up from the project directory, then the global config
   (`$(obsidian_wiki_config_dir)/config`), then the default.
