@@ -558,6 +558,9 @@ def test_agent_jobs_ignore_the_vaults_own_claude_settings(tmp_path, monkeypatch)
     (claude_home / "skills" / "wiki-lint" / "SKILL.md").write_text("x")
     ui_tools.start_job(vault, "lint")
     cmd = seen["cmd"]
+    denied = cmd[cmd.index("--disallowedTools") + 1]
+    assert "Read(~/.config/obsidian-wiki/**)" in denied and "Read(**/.env)" in denied
+    assert f"{ui_tools.config_dir().resolve().name}/**)" in denied.split(",")[-1]
     assert cmd[cmd.index("--setting-sources") + 1] == "user"
     assert "--strict-mcp-config" in cmd
 
@@ -585,6 +588,30 @@ def test_write_hook_can_rewrite_the_body(client, tmp_path, monkeypatch):
     _hook(tmp_path, monkeypatch, "print(json.dumps({'content': page['content'].replace('555-1234', '[phone]')}))\n")
     assert _write(client, "call 555-1234").status_code == 200
     assert "call [phone]" in (tmp_path / "concepts/note.md").read_text()
+
+
+def test_write_hook_output_is_read_as_utf8(client, tmp_path, monkeypatch):
+    # A hook that emits raw UTF-8 (node, jq, go) must not be decoded with the locale codec: on Windows
+    # that wrote mojibake into the page, and bytes cp1252 can't map (the 0x81 in "\u00c1") left stdout None.
+    _hook(tmp_path, monkeypatch,
+          "out = json.dumps({'content': page['content'] + ' | caf\\u00e9 \\u2014 \\u2713'}, ensure_ascii=False)\n"
+          "sys.stdout.buffer.write(out.encode('utf-8'))\n")
+    assert _write(client, "\u00c1ngel").status_code == 200
+    body = (tmp_path / "concepts/note.md").read_text(encoding="utf-8")
+    assert "\u00c1ngel | caf\u00e9 \u2014 \u2713" in body
+
+
+def test_write_hook_rejection_reason_is_read_as_utf8(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch,
+          "sys.stderr.buffer.write('refus\\u00e9: \\u00c1 \\u20ac'.encode('utf-8'))\nsys.exit(1)\n")
+    denied = _write(client)
+    assert denied.status_code == 422 and "refus\u00e9: \u00c1 \u20ac" in denied.json()["detail"]
+
+
+def test_write_hook_output_that_is_not_utf8_fails_closed(client, tmp_path, monkeypatch):
+    _hook(tmp_path, monkeypatch, "sys.stdout.buffer.write(b'{\"content\": \"caf\\xe9\"}')\n")
+    assert _write(client).status_code == 502
+    assert not (tmp_path / "concepts/note.md").exists()
 
 
 def test_write_hook_sees_the_page_and_silent_success_changes_nothing(client, tmp_path, monkeypatch):
@@ -742,93 +769,16 @@ def test_write_hook_covers_bulk_writes_and_a_veto_rejects_the_whole_batch(client
     assert "FINE" in (tmp_path / "concepts/fine.md").read_text()
 
 
-# --- vault images in the viewer ---------------------------------------------
-
-PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
-
-
-def test_assets_serve_vault_images_behind_the_key(client, tmp_path):
-    (tmp_path / "attachments").mkdir()
-    (tmp_path / "attachments" / "example.png").write_bytes(PNG)
-    res = client.get("/v1/assets/attachments/example.png")
-    assert res.status_code == 200 and res.content == PNG
-    assert res.headers["content-type"] == "image/png"
-    assert res.headers["x-content-type-options"] == "nosniff"
-    client.headers.pop("authorization")
-    assert client.get("/v1/assets/attachments/example.png").status_code == 401
+@pytest.mark.parametrize("path", [".env", ".git/config", ".obsidian/plugins/copilot/data.json", "notes.txt"])
+def test_read_refuses_files_that_are_not_wiki_pages(client, tmp_path, path):
+    """Keys live next to the pages: `.env`, git remotes, Obsidian plugin settings."""
+    (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+    (tmp_path / path).write_text("OPENAI_API_KEY=sk-test")
+    response = client.get(f"/v1/pages/{path}")
+    assert response.status_code == 400
+    assert "sk-test" not in response.text
 
 
-def test_assets_accept_the_read_only_key(tmp_path, monkeypatch):
-    monkeypatch.setenv("OBSIDIAN_VAULT_PATH", str(tmp_path))
-    monkeypatch.setenv("WIKI_READ_KEY", "reader")
-    monkeypatch.delenv("WIKI_API_KEY", raising=False)
-    monkeypatch.delenv("WIKI_ALLOW_ANONYMOUS", raising=False)
-    sys.modules.pop("obsidian_wiki.server", None)
-    server = importlib.import_module("obsidian_wiki.server")
-    (tmp_path / "a.png").write_bytes(PNG)
-    with TestClient(server.app) as c:
-        assert c.get("/v1/assets/a.png", headers={"authorization": "Bearer reader"}).status_code == 200
-
-
-def test_svg_is_served_sandboxed_so_a_direct_visit_cannot_run_script(client, tmp_path):
-    (tmp_path / "logo.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
-    res = client.get("/v1/assets/logo.svg")
-    assert res.headers["content-type"].startswith("image/svg+xml")
-    assert "sandbox" in res.headers["content-security-policy"]
-
-
-def test_assets_serve_images_only_never_notes_or_secrets(client, tmp_path):
-    (tmp_path / ".env").write_text("WIKI_API_KEY=hunter2\n")
-    (tmp_path / "concepts").mkdir()
-    (tmp_path / "concepts" / "a.md").write_text("# A\n")
-    (tmp_path / ".obsidian").mkdir()
-    (tmp_path / ".obsidian" / "hidden.png").write_bytes(PNG)
-    assert client.get("/v1/assets/.env").status_code == 415
-    assert client.get("/v1/assets/concepts/a.md").status_code == 415
-    assert client.get("/v1/assets/.obsidian/hidden.png").status_code == 404
-    assert client.get("/v1/assets/nothing.png").status_code == 404
-    assert client.get("/v1/assets/concepts").status_code == 415
-
-
-@pytest.mark.parametrize("path", ["../outside.png", "attachments/../../outside.png", "%2e%2e/outside.png"])
-def test_assets_cannot_escape_the_vault(client, tmp_path, path):
-    (tmp_path.parent / "outside.png").write_bytes(PNG)
-    assert client.get(f"/v1/assets/{path}").status_code in (400, 404)
-
-
-def test_assets_refuse_a_symlink_out_of_the_vault(client, tmp_path):
-    outside = tmp_path.parent / "secret.png"
-    outside.write_bytes(PNG)
-    try:
-        (tmp_path / "link.png").symlink_to(outside)
-        (tmp_path / "docs").mkdir()
-        (tmp_path / "docs" / "linked.png").symlink_to(outside)
-    except OSError:
-        pytest.skip("symlinks unavailable")
-    assert client.get("/v1/assets/link.png").status_code == 400
-    # An Obsidian bare-name embed finds it by name; it must be refused the same way.
-    assert client.get("/v1/assets/linked.png").status_code == 400
-
-
-def test_bare_names_resolve_like_obsidian_embeds(client, tmp_path):
-    (tmp_path / "attachments").mkdir()
-    (tmp_path / "attachments" / "Shot.PNG").write_bytes(PNG)
-    deeper = tmp_path / "projects" / "x" / "assets"
-    deeper.mkdir(parents=True)
-    (deeper / "Shot.PNG").write_bytes(PNG + b"deeper")
-    # Shallowest match wins; the case of the name does not matter.
-    assert client.get("/v1/assets/shot.png").content == PNG
-    # A path is never searched for: an exact miss stays a miss.
-    assert client.get("/v1/assets/elsewhere/Shot.PNG").status_code == 404
-
-
-def test_assets_follow_the_vault_switcher(client, tmp_path, monkeypatch):
-    other = tmp_path.parent / "other-vault"
-    other.mkdir()
-    (other / "only-there.png").write_bytes(PNG)
-    (tmp_path / "only-here.png").write_bytes(PNG)
-    server = sys.modules["obsidian_wiki.server"]
-    assert client.get("/v1/assets/only-here.png").status_code == 200
-    monkeypatch.setattr(server, "VAULT", other)
-    assert client.get("/v1/assets/only-here.png").status_code == 404
-    assert client.get("/v1/assets/only-there.png").status_code == 200
+def test_read_accepts_an_uppercase_markdown_extension(client, tmp_path):
+    (tmp_path / "Up.MD").write_text("hello")
+    assert client.get("/v1/pages/Up.MD").status_code == 200

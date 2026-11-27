@@ -115,18 +115,28 @@ def index_state(project: Path) -> tuple[bool, bool, str]:
 def _tracked_files_only(project: Path) -> list[Path] | None:
     """Committed files only — unlike batch._git_tracked_files (--cached
     --others), excludes untracked junk so seeds/freshness stay clean."""
+    names = _git_names(project, "ls-files", "--cached", "--exclude-standard")
+    if names is None:
+        return None
+    return [project / name for name in names]
+
+
+def _git_names(project: Path, *args: str) -> list[str] | None:
+    """Paths printed by a git command, or None if git failed. ``-z`` and a
+    UTF-8 decode: plain output C-quotes non-ASCII names (octal escapes in
+    double quotes), and ``text=True`` decodes with the locale codec (cp1252 on
+    Windows)."""
     try:
         proc = subprocess.run(
-            ["git", "-C", str(project), "ls-files", "--cached", "--exclude-standard"],
+            ["git", "-C", str(project), args[0], "-z", *args[1:]],
             capture_output=True,
-            text=True,
             timeout=_SUBPROCESS_TIMEOUT,
         )
     except (OSError, subprocess.SubprocessError):
         return None
     if proc.returncode != 0:
         return None
-    return [project / line for line in proc.stdout.splitlines() if line]
+    return [n for n in proc.stdout.decode("utf-8", errors="replace").split("\0") if n]
 
 
 def _rel(project: Path, path: Path | str) -> str:
@@ -152,18 +162,9 @@ def _seed_files(
     if changed is not None:
         return [_rel(project, p) for p in changed if p]
     if since is not None:
-        proc = None
-        try:
-            proc = subprocess.run(
-                ["git", "-C", str(project), "diff", "--name-only", f"{since}..HEAD"],
-                capture_output=True,
-                text=True,
-                timeout=_SUBPROCESS_TIMEOUT,
-            )
-        except (OSError, subprocess.SubprocessError):
-            pass
-        if proc is not None and proc.returncode == 0:
-            return [line for line in proc.stdout.splitlines() if line]
+        diffed = _git_names(project, "diff", "--name-only", f"{since}..HEAD")
+        if diffed is not None:
+            return diffed
         warnings.append(
             f"could not compute git diff since {since} (using all tracked files)"
         )

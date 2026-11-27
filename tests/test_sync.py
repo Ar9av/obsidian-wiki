@@ -128,6 +128,66 @@ class TestRunSync:
         log = _git(vault, "log", "--oneline").stdout
         assert "sync " in log
 
+    def test_never_commits_env_or_plugin_keys(self, vault, remote_repo):
+        configure_sync(vault, str(remote_repo))
+        (vault / ".gitignore").write_text("# the user's own, without secret rules\n")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        (vault / "note.md").write_text("hello")
+        (vault / ".env").write_text("ANTHROPIC_API_KEY=sk-test")
+        (vault / "sub").mkdir()
+        (vault / "sub" / ".env.local").write_text("TOKEN=x")
+        plugin = vault / ".obsidian" / "plugins" / "copilot"
+        plugin.mkdir(parents=True)
+        (plugin / "data.json").write_text('{"openAIApiKey": "sk-test"}')
+        assert run_sync(vault)[0] == 0
+        tracked = _git(vault, "ls-files").stdout.split()
+        assert "note.md" in tracked
+        assert not {".env", "sub/.env.local", ".obsidian/plugins/copilot/data.json"} & set(tracked)
+
+    def test_never_commits_staged_uppercase_or_nested_secrets(self, vault, remote_repo):
+        configure_sync(vault, str(remote_repo))
+        (vault / ".gitignore").write_text("# no secret rules\n")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        nested = "sub/.obsidian/plugins/x/data.json"
+        (vault / nested).parent.mkdir(parents=True)
+        for name in (".env", ".ENV.prod", nested):
+            (vault / name).write_text("TOKEN=x")
+        _git(vault, "add", ".env")
+        (vault / "note.md").write_text("hello")
+        assert run_sync(vault)[0] == 0
+        tracked = _git(vault, "ls-files").stdout.split()
+        assert "note.md" in tracked
+        assert not {".env", ".ENV.prod", nested} & set(tracked)
+
+    def test_staged_removal_of_a_tracked_env_still_goes_through(self, vault, remote_repo):
+        configure_sync(vault, str(remote_repo))
+        (vault / ".gitignore").write_text("# no secret rules\n")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        (vault / ".env").write_text("TOKEN=x")
+        _git(vault, "add", "-A")
+        _git(vault, "commit", "-qm", "old")
+        _git(vault, "rm", "-q", "--cached", ".env")
+        assert run_sync(vault)[0] == 0
+        assert ".env" not in _git(vault, "ls-files").stdout.split()
+        assert (vault / ".env").exists()
+
+    def test_undo_pending_leaves_env_alone(self, vault, remote_repo):
+        configure_sync(vault, str(remote_repo))
+        (vault / ".gitignore").write_text("# no secret rules\n")
+        _git(vault, "config", "user.email", "test@example.com")
+        _git(vault, "config", "user.name", "Test")
+        assert run_sync(vault)[0] == 0
+        (vault / ".env").write_text("TOKEN=x")
+        assert run_undo(vault, pending=True)[0] == 1  # only a secret is dirty
+        (vault / "note.md").write_text("hello")
+        assert run_undo(vault, pending=True)[0] == 0
+        assert (vault / ".env").read_text() == "TOKEN=x"
+        assert not (vault / "note.md").exists()
+        assert ".env" not in _git(vault, "log", "--all", "--name-only").stdout.split()
+
     def test_second_run_with_no_changes_is_clean(self, vault, remote_repo):
         configure_sync(vault, str(remote_repo))
         _git(vault, "config", "user.email", "test@example.com")

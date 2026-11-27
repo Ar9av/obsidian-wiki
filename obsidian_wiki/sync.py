@@ -23,7 +23,16 @@ GITIGNORE_CONTENT = (
     ".obsidian/cache\n"
     ".trash/\n"
     ".graph-cache.json\n"
+    ".env\n"
+    ".env.*\n"
+    ".obsidian/plugins/*/data.json\n"
 )
+
+#: Config files that hold keys. Never staged here, whatever the vault's own
+#: .gitignore says: pathspecs, so an existing .gitignore stays untouched.
+_SECRET_GLOBS = ("**/.env", "**/.env.*", "**/.obsidian/plugins/*/data.json")
+_SECRET_PATHS = tuple(f":(glob,icase){g}" for g in _SECRET_GLOBS)
+_SECRET_EXCLUDES = tuple(f":(exclude,glob,icase){g}" for g in _SECRET_GLOBS)
 
 #: Derived files that should never be committed — they are regenerable and
 #: churn on every graph change. Backfilled into vaults whose .gitignore
@@ -95,6 +104,20 @@ def configure_sync(vault_path: Path, remote: str) -> list[str]:
     return messages
 
 
+def _stage(vault_path: Path) -> subprocess.CompletedProcess:
+    """`git add -A` minus the secret files, including ones the user staged by hand."""
+    add = _git(vault_path, "add", "-A", "--", ".", *_SECRET_EXCLUDES)
+    if add.returncode != 0:
+        return add
+    # --diff-filter=d: a staged removal (`git rm --cached .env`) must still go through.
+    staged = _git(
+        vault_path, "diff", "--cached", "--name-only", "--no-renames", "--diff-filter=d", "-z",
+        "--", *_SECRET_PATHS,
+    ).stdout.split("\0")
+    paths = [f":(literal){p}" for p in staged if p]
+    return _git(vault_path, "reset", "-q", "--", *paths) if paths else add
+
+
 def run_sync(vault_path: Path) -> tuple[int, str]:
     """Commit and push any pending vault changes. Returns (exit_code, message)."""
     if not vault_path.is_dir():
@@ -102,7 +125,7 @@ def run_sync(vault_path: Path) -> tuple[int, str]:
     if not (vault_path / ".git").is_dir():
         return 1, "wiki-sync: vault is not a git repo — run `obsidian-wiki sync-setup <remote>` first"
 
-    add = _git(vault_path, "add", "-A")
+    add = _stage(vault_path)
     if add.returncode != 0:
         return 1, f"wiki-sync: git add failed: {add.stderr.strip()}"
 
@@ -208,7 +231,7 @@ def pull_and_push(vault_path: Path, lock=None) -> tuple[int, str]:
     _ensure_excludes(vault_path)
 
     with guard():
-        add = _git(vault_path, "add", "-A")
+        add = _stage(vault_path)
         if add.returncode != 0:
             return 1, f"wiki-sync: git add failed: {add.stderr.strip()}"
         committed = _git(vault_path, "diff", "--cached", "--quiet").returncode != 0
@@ -259,7 +282,8 @@ def run_undo(vault_path: Path, pending: bool = False) -> tuple[int, str]:
     if not (vault_path / ".git").is_dir():
         return 1, "wiki-undo: vault is not a git repo — run `obsidian-wiki sync-setup <remote>` first"
 
-    dirty = bool(_git(vault_path, "status", "--porcelain").stdout.strip())
+    status = _git(vault_path, "status", "--porcelain", "--", ".", *_SECRET_EXCLUDES)
+    dirty = bool(status.stdout.strip())
     if dirty and not pending:
         return 1, "wiki-undo: uncommitted changes — pass --pending to undo them, or `obsidian-wiki sync` to keep them"
     if pending and not dirty:
@@ -270,7 +294,7 @@ def run_undo(vault_path: Path, pending: bool = False) -> tuple[int, str]:
         return 1, "wiki-undo: nothing earlier to go back to"
 
     if pending:
-        _git(vault_path, "add", "-A")
+        _stage(vault_path)
         commit = _git(vault_path, "commit", "-m", f"checkpoint before undo {datetime.now():%Y-%m-%d %H:%M}")
         if commit.returncode != 0:
             return 1, f"wiki-undo: git commit failed: {commit.stderr.strip()}"

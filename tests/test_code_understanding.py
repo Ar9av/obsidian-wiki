@@ -12,6 +12,7 @@ pytest fixtures.
 from __future__ import annotations
 
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -130,6 +131,28 @@ def test_builtin_since_computes_git_diff(tmp_path: Path) -> None:
     result = code_understand(project, backend_flag="builtin", since=sha_first)
 
     assert set(result["seed_files"]) == {"src/foo.py", "src/bar.py"}
+
+
+def test_builtin_seeds_keep_non_ascii_tracked_filenames(tmp_path: Path) -> None:
+    # Plain `git ls-files` prints "src/caf\303\251.py" (quoted, octal) for this
+    # name: the seed pointed at a file that does not exist.
+    project = make_project(
+        tmp_path,
+        {"src/café.py": "def latte():\n    return 1\n", "src/plain.py": "x = 1\n"},
+    )
+    result = code_understand(project, backend_flag="builtin")
+
+    assert set(result["seed_files"]) == {"src/café.py", "src/plain.py"}
+
+
+def test_builtin_since_keeps_non_ascii_filenames(tmp_path: Path) -> None:
+    project, sha_first = make_repo_two_commits(tmp_path)
+    (project / "src/café.py").write_text("def latte():\n    return 1\n", encoding="utf-8")
+    for args in (["add", "-A"], ["-c", "commit.gpgsign=false", "commit", "-q", "-m", "third commit"]):
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+    result = code_understand(project, backend_flag="builtin", since=sha_first)
+
+    assert set(result["seed_files"]) == {"src/foo.py", "src/bar.py", "src/café.py"}
 
 
 @pytest.mark.skipif(shutil.which("rg") is None, reason="rg not installed")

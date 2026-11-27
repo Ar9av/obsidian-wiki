@@ -268,6 +268,7 @@ memory.recap()                       # 在 session 開始時注入
 | **[Python API](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/python-api.md)** | `from obsidian_wiki import Memory`——把 vault 當成 agent 記憶使用 |
 | **[Memory Surface](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/memory.md)** | index、log、hot cache、擁有者檔案與待辦索引 |
 | **[Session Brain](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/session-brain.md)** | 建立在 agent session 歷史之上的主題圖譜 |
+| **[Decision layer](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/decisions.md)** | 選用功能，預設關閉：把相關性判斷、ingest 分流與矛盾篩檢這類小決策交給決策模型（TypeSafe Jev）。失敗時回到原本結果（fail open），且從不寫入 |
 | **[Browser Extension](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/browser-extension.md)** | 將網頁擷取進 vault，並用 vault 內容填寫網頁表單 |
 | **[Deployment](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/deployment.md)** | 本機網頁檢視器、透過 MCP 連接 agent，以及自架 vault（Docker 或 `obsidian-wiki serve`），支援 TLS、唯讀金鑰與 git 同步 |
 | **[Contributing](https://github.com/Ar9av/obsidian-wiki/blob/main/docs/contributing.md)** | 新增 skill、維持兩份 README 同步 |

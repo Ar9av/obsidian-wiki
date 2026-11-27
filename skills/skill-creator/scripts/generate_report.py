@@ -309,6 +309,8 @@ def main():
     args = parser.parse_args()
 
     if args.input == "-":
+        # stdin/stdout default to the locale code page when piped or redirected.
+        sys.stdin.reconfigure(encoding="utf-8")
         data = json.load(sys.stdin)
     else:
         data = json.loads(Path(args.input).read_text(encoding="utf-8"))
@@ -319,6 +321,7 @@ def main():
         Path(args.output).write_text(html_output, encoding="utf-8")
         print(f"Report written to {args.output}", file=sys.stderr)
     else:
+        sys.stdout.reconfigure(encoding="utf-8")
         print(html_output)
 
 

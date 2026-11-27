@@ -110,6 +110,11 @@ def search(q: str, limit: int = 8, path_prefix: str = "") -> dict[str, Any]:
 
 def read_page(path: str) -> dict[str, Any]:
     target = _resolve(path)
+    # Markdown pages only: the vault root can also hold `.env`, `.git/config` (remote
+    # tokens) and `.obsidian/plugins/*/data.json` (plugin API keys).
+    rel = target.relative_to(VAULT.resolve())
+    if target.suffix.lower() != ".md" or any(part.startswith(".") for part in rel.parts):
+        raise HTTPException(400, f"not a wiki page: {path}")
     if not target.is_file():
         raise HTTPException(404, f"no such page: {path}")
     return {"path": path, "markdown": target.read_text(encoding="utf-8")}
@@ -183,15 +188,18 @@ def _write_hook(rel: str, title: str, category: str, content: str,
     try:
         # POSIX shlex would eat the backslashes in `C:\tools\hook.exe`; Windows parses the string itself.
         argv = command if os.name == "nt" else shlex.split(command)
-        proc = subprocess.run(argv, input=payload, capture_output=True, text=True,
+        # Bytes in and out: `text=True` would use the locale codec (cp1252 on Windows), which garbles
+        # a UTF-8 hook's output or, on bytes it can't map, leaves stdout None.
+        proc = subprocess.run(argv, input=payload.encode("utf-8"), capture_output=True,
                               timeout=WRITE_HOOK_TIMEOUT, cwd=VAULT)
     except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
         raise HTTPException(502, f"write hook failed ({type(exc).__name__}); nothing written") from exc
     if proc.returncode != 0:
-        raise HTTPException(422, f"write hook rejected {rel}: {(proc.stderr or proc.stdout).strip()[:300]}")
+        reason = (proc.stderr or proc.stdout).decode("utf-8", errors="replace")
+        raise HTTPException(422, f"write hook rejected {rel}: {reason.strip()[:300]}")
     if proc.stdout.strip():
         try:
-            replaced = json.loads(proc.stdout)["content"]
+            replaced = json.loads(proc.stdout.decode("utf-8"))["content"]
         except (ValueError, TypeError, KeyError):
             replaced = None
         # Anything printed must be {"content": "<string>"}: a typo'd key or a null
