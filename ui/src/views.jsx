@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge, Box, Button, Card, CardBody, CardHeader, Code, Divider, Flex, HStack, Heading, Input, Link, SimpleGrid, Skeleton,
   Stack, Stat, StatHelpText, StatLabel, StatNumber, Tab, TabList, TabPanel, TabPanels, Table, TableContainer, Tabs, Tag, Tbody, Td, Text, Th, Thead, Tr, Wrap,
@@ -12,7 +12,7 @@ import ForceGraph2D from 'react-force-graph-2d'
 import { Check, Copy, ExternalLink, Sparkles } from 'lucide-react'
 import { api, go, useVault } from './main.jsx'
 import { NextActions } from './tools.jsx'
-import { AGENT_INSTRUCTIONS, connectSnippets, parseLog, splitFrontmatter, withLinks } from './lib.js'
+import { AGENT_INSTRUCTIONS, assetUrl, connectSnippets, isRemote, parseEmbed, parseLog, resolveAsset, splitFrontmatter, withLinks } from './lib.js'
 
 // --- building blocks -------------------------------------------------------
 export const pageHref = (path) => `#/page/${encodeURIComponent(path)}`
@@ -91,7 +91,42 @@ const StatusBadge = ({ s }) => <Badge colorScheme={statusColor[s] ?? 'gray'}>{s}
 // react-markdown never renders raw HTML and drops javascript: URLs, so agent-authored
 // pages can't inject markup. Wikilinks become internal #/wl/ links resolved on click.
 
-export function Markdown({ text }) {
+// An image from the vault. <img src> can't send the bearer header, so the bytes
+// are fetched through the API and shown from a blob: URL, released on unmount.
+function VaultImage({ path, alt, title, width }) {
+  const [shown, setShown] = useState({ path: null, url: null, error: false })
+  useEffect(() => {
+    let live = true
+    let url = null
+    api.blob(assetUrl(path))
+      .then((blob) => { if (live) { url = URL.createObjectURL(blob); setShown({ path, url, error: false }) } })
+      .catch(() => live && setShown({ path, url: null, error: true }))
+    return () => { live = false; if (url) URL.revokeObjectURL(url) }
+  }, [path])
+  if (shown.path === path && shown.url) return <img src={shown.url} alt={alt} title={title} width={width} loading="lazy" />
+  const failed = shown.path === path && shown.error
+  return <Text as="span" color="muted" fontSize="sm" title={path}>{failed ? `[image not found: ${path}]` : alt || 'loading image…'}</Text>
+}
+
+// The vault path of the page being rendered, which relative image paths start from.
+const PagePath = createContext(undefined)
+
+// A module-level component, not a closure inside Markdown: react-markdown treats a
+// new function as a new component type and would remount (and refetch) every image
+// each time the page re-renders.
+function MdImage({ src = '', alt = '', title, width }) {
+  const page = useContext(PagePath)
+  const embed = parseEmbed(src)
+  const file = embed ? embed.path : resolveAsset(page, src)
+  if (file) return <VaultImage path={file} alt={alt} title={title} width={embed?.width ?? width} />
+  // react-markdown blanks unsafe URLs (data:, javascript:), so a remote image is what's left.
+  // A relative path that resolved to nothing climbs out of the vault: say so, don't ask the browser for it.
+  if (isRemote(src)) return <img src={src} alt={alt} title={title} width={width} loading="lazy" />
+  return <Text as="span" color="muted" fontSize="sm" title={src}>{src ? `[image not found: ${src}]` : alt}</Text>
+}
+
+// `path` is the vault path of the page being shown; images resolve relative to it.
+export function Markdown({ text, path }) {
   const { index } = useVault()
   const link = useColorModeValue('purple.600', 'purple.300')
   const components = {
@@ -112,6 +147,7 @@ export function Markdown({ text }) {
       if (!href) return <Text as="span">{children}</Text>
       return <Link href={href} color={link} isExternal={/^https?:/.test(href)}>{children}</Link>
     },
+    img: MdImage,
   }
   return (
     <Box className="md" sx={{
@@ -123,9 +159,12 @@ export function Markdown({ text }) {
       'pre code': { bg: 'transparent', px: 0 },
       blockquote: { borderLeftWidth: 3, pl: 4, color: 'muted' },
       table: { display: 'block', overflowX: 'auto' }, 'th,td': { borderWidth: 1, px: 2, py: 1, minW: '6rem' },
+      img: { maxW: '100%', height: 'auto', borderRadius: 'md', my: 2 },
       lineHeight: 'tall',
     }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{withLinks(text)}</ReactMarkdown>
+      <PagePath.Provider value={path}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>{withLinks(text)}</ReactMarkdown>
+      </PagePath.Provider>
     </Box>
   )
 }
@@ -279,7 +318,7 @@ export function PageView({ path }) {
       <Box flex="1" minW="0" maxW="3xl">
         <Text fontSize="xs" color="muted">{path}</Text>
         <Heading size="lg" mt="1" mb="4">{title}</Heading>
-        <Markdown text={body.replace(/^\s*# .*\n/, (h) => (h.trim().slice(2).trim().toLowerCase() === title.toLowerCase() ? '' : h))} />
+        <Markdown path={path} text={body.replace(/^\s*# .*\n/, (h) => (h.trim().slice(2).trim().toLowerCase() === title.toLowerCase() ? '' : h))} />
       </Box>
       <Stack w={{ base: 'full', xl: '72' }} flexShrink="0" spacing="5" position={{ xl: 'sticky' }} top="6" alignSelf="start">
         {obsidian && <Button as="a" href={obsidian} size="sm" variant="outline" leftIcon={<ExternalLink size={14} />}>Open in Obsidian</Button>}
@@ -452,7 +491,7 @@ export function HotView() {
   const hot = useFetch('/v1/pages/hot.md')
   if (hot.error) return <EmptyState title="No hot cache yet" description="hot.md is written by `obsidian-wiki memory sync` after each write skill." py="16" />
   if (!hot.data) return <Loading />
-  return <><Header title="Hot cache" description="hot.md — the ~500-word snapshot the next session starts from." /><Body maxW="4xl"><Markdown text={splitFrontmatter(hot.data.markdown)[1]} /></Body></>
+  return <><Header title="Hot cache" description="hot.md — the ~500-word snapshot the next session starts from." /><Body maxW="4xl"><Markdown path="hot.md" text={splitFrontmatter(hot.data.markdown)[1]} /></Body></>
 }
 
 export function HealthView() {

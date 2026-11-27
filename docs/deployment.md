@@ -230,6 +230,8 @@ Ask and Actions need a model, set up under **Settings**:
 
 **Automatic** (the default) picks Claude Code when it is on `PATH`, else the key. Agent jobs always need Claude Code because they edit files. A job runs `claude -p` in the vault with `--permission-mode acceptEdits` and an allowlist of file tools plus `obsidian-wiki`, `mkdir`, `mv` and `ls`. Settings live in `<global config dir>/ui-settings.json` (mode 0600), outside the vault so a key is never committed. The browser sees whether a key is set and its last four characters, never the key itself.
 
+Images in a page show up in the viewer: a Markdown image with a relative path (such as `../attachments/x.png`) resolves from the page's own folder, and Obsidian's `![[x.png]]` and `![[x.png|300]]` embeds work too. The viewer fetches each image through `GET /v1/assets/{path}` with the same key as everything else, then shows the bytes, so images work behind `obsidian-wiki serve` as well as in `obsidian-wiki ui`. Remote `https://` images load as usual; a missing local image shows `[image not found: …]` in its place.
+
 The same viewer is served at `/ui` by the HTTP server above, behind its API key (it asks once and keeps the key in `sessionStorage`).
 
 The viewer is a React app built with [Saas UI](https://saas-ui.dev) (Chakra UI). The source is in `ui/` and the built bundle is committed to `obsidian_wiki/webui/`, so installing the package needs no Node. After changing `ui/src`, rebuild with `cd ui && npm install && npm run build`. `npm run dev` gives hot reload against a running `obsidian-wiki ui --no-open`.
@@ -361,6 +363,7 @@ Every route below `/v1` needs `Authorization: Bearer <key>`. `/health` does not.
 | `GET` | `/health` | Liveness; also reports whether the vault directory exists, and `git_sync_ok` when sync is on |
 | `GET` | `/v1/search?q=&limit=&path_prefix=` | Ranked pages with summaries, (optionally one folder via `path_prefix`) from the same GraphRAG index the `wiki-query` skill uses |
 | `GET` | `/v1/pages/{path}` | One page as markdown, by vault-relative path |
+| `GET` | `/v1/assets/{path}` | One image from the vault (png, jpg, gif, webp, avif, bmp, ico, svg), by vault-relative path. A bare file name (`shot.png`) is found anywhere in the vault, like an Obsidian `![[shot.png]]` embed. Other file types and hidden folders are refused. Available to the read-only key |
 | `POST` | `/v1/pages` | `{title, category, content, tags, sources, summary, upsert}` |
 | `POST` | `/v1/pages/bulk` | A JSON array of up to 50 of those objects; all are checked first, so one bad page rejects the batch with nothing written |
 | `POST` | `/v1/context-pack` | `{topic, budget, recent, public_only, metadata_only}` |
