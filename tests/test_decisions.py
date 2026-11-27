@@ -546,6 +546,36 @@ def test_triage_source_excludes_its_own_page_and_sends_excerpt_only():
     assert not seen["state"]["source"].startswith("---")  # frontmatter is not sent
 
 
+@pytest.mark.parametrize(
+    "tags_block",
+    [
+        "tags: [owner, visibility/pii]\n",
+        'tags:\n  - owner\n  - "visibility/pii"\n',
+        "tags: visibility/pii\n",
+    ],
+)
+def test_triage_source_withholds_a_pii_source_page(tmp_path, tags_block):
+    """GHSA-vqj8-wqw9-96rm: a visibility/pii source is never sent."""
+    _write(
+        tmp_path,
+        "entities/me.md",
+        "---\ntitle: Jane Roe\n" + tags_block + "summary: Owner profile\n---\n"
+        "# Jane Roe\nPassport X1234567 is held by Jane Roe.\n",
+    )
+    _write(
+        tmp_path,
+        "concepts/jane.md",
+        "---\ntitle: Jane Roe notes\ntags: [profile]\nsummary: Notes about Jane Roe\n---\n# Jane Roe\nNotes.\n",
+    )
+    backend = Scripted(lambda state, questions: {qid: choice(UNREL) for qid in questions})
+    out = d.triage_source(tmp_path, tmp_path / "entities" / "me.md", cfg(), backend=backend)
+    assert backend.calls == []
+    assert out["verdict"] == "undecided" and out["decision"]["reason"] == "pii_source"
+    assert out["decision"]["sent"] is False
+    assert out["decision"]["failed_open"] is False
+    assert [c["page"] for c in out["shortlist"]] == ["concepts/jane.md"]
+
+
 # ---------------------------------------------------------------------------
 # D3 contradiction screen
 # ---------------------------------------------------------------------------
