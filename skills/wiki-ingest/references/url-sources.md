@@ -51,7 +51,18 @@ which firecrawl
   ```
 
   Use it first when the URL points to a PDF: a `.pdf` path, a `/pdf/` route such as arXiv's, or a `Content-Type: application/pdf` response. It fetches through the Firecrawl API, so skip it for private or intranet URLs, and check with the user before a long PDF, since Firecrawl credits are charged per PDF page. Leave installing and signing in to the user: `npm install -g firecrawl-cli`, then `firecrawl login` or `FIRECRAWL_API_KEY` ([get a free API key](https://www.firecrawl.dev/app/api-keys)). If it is missing or exits non-zero, continue with `defuddle`/`WebFetch`.
-- **If `firecrawl` is not available:** Step U1 falls back to [Jina Reader](https://jina.ai/reader) for PDF URLs and pages that come back blank. It needs no install, renders the page or parses the PDF, and returns markdown:
+- **If `firecrawl` is not available and `SPECSTREAM_API_KEY` is set:** Step U1 uses the [SpecStream Extract API](https://specstream.ai/extract-api) for PDF URLs, Word (`.docx`) and Excel (`.xlsx`) links, and pages that come back blank. It renders the page or parses the document on its side and returns the main text as markdown. The snippet writes that text to a fresh temp file, and exits non-zero with the read status (`blocked`, `not_found`, `empty`, `unsupported`, `failed`) when there is no text:
+
+  ```bash
+  out=$(mktemp) && curl -sf https://api.specstream.ai/v1/extract \
+    -H "Authorization: Bearer $SPECSTREAM_API_KEY" -H "Content-Type: application/json" \
+    -d '{"urls": ["<url>"], "format": "markdown"}' \
+    | python3 -c 'import json, sys; d = json.loads(sys.stdin.read() or "{}"); r = ((d.get("data") or {}).get("results") or [{}])[0]; r.get("status") == "ok" or sys.exit("specstream: " + str(r.get("status", "no reply (HTTP error or key refused)"))); r.get("read_from") == "archive" and sys.exit("specstream: only an archived copy, not the live page"); sys.stdout.write(r.get("text") or "")' \
+    > "$out" && echo "$out"
+  ```
+
+  The snippet takes only a live read: when the API could answer only from an archived copy, it exits non-zero like any other failure, so the ingest never files an older version of the page as the current one. It sends the URL to SpecStream's servers, so skip it for private or intranet URLs. Each page read costs $0.0008 of account credit ($0.80 per 1,000 pages) and a page with no text costs nothing; keys are at [specstream.ai/workspace/keys](https://specstream.ai/workspace/keys). If the key is rejected or the call fails, continue with Jina Reader below.
+- **If neither `firecrawl` nor `SPECSTREAM_API_KEY` is available:** Step U1 falls back to [Jina Reader](https://jina.ai/reader) for PDF URLs and pages that come back blank. It needs no install, renders the page or parses the PDF, and returns markdown:
 
   ```bash
   out=$(mktemp) && curl -sf "https://r.jina.ai/<url>" -H "X-Return-Format: markdown" ${JINA_API_KEY:+-H} ${JINA_API_KEY:+"Authorization: Bearer $JINA_API_KEY"} -o "$out" && echo "$out"
@@ -63,7 +74,7 @@ which firecrawl
 
 Use `WebFetch` to retrieve the content at the provided URL (or skip if `defuddle` or `firecrawl` already returned the page in Step U0.5).
 
-- If the page comes back blank or nearly empty (only a nav or login link) because it renders with JavaScript, or it is a PDF that `defuddle`/`WebFetch` could not read, try `firecrawl` once if it is available, otherwise Jina Reader (Step U0.5). If that returns the page content, proceed to Step U2.
+- If the page comes back blank or nearly empty (only a nav or login link) because it renders with JavaScript, or it is a PDF that `defuddle`/`WebFetch` could not read, try `firecrawl` once if it is available, otherwise the SpecStream Extract API when `SPECSTREAM_API_KEY` is set, otherwise Jina Reader (Step U0.5). A Word or Excel link goes the same way. If that returns the page content, proceed to Step U2.
 - If the page is paywalled, JS-rendered (blank body), or returns an error: create a **stub page** with the title (inferred from the URL), the URL, and `stub: true` in frontmatter. Append this to the body: `> [Stub] Page could not be fetched — enrich manually.` Then skip to Step U7.
 - If the page fetches successfully: proceed to Step U2.
 

@@ -150,10 +150,11 @@ Install: clone [PageIndex](https://github.com/VectifyAI/PageIndex), create a ven
 
 ## URL ingest (optional)
 
-When the `firecrawl` CLI isn't installed, `/ingest-url` falls back to [Jina Reader](https://jina.ai/reader) for PDFs and JavaScript-rendered pages. It works without a key at a low rate limit. See `skills/wiki-ingest/references/url-sources.md`.
+When the `firecrawl` CLI isn't installed, `/ingest-url` reads PDFs, Word and Excel links and JavaScript-rendered pages with the [SpecStream Extract API](https://specstream.ai/extract-api) if `SPECSTREAM_API_KEY` is set, and otherwise falls back to [Jina Reader](https://jina.ai/reader), which works without a key at a low rate limit. See `skills/wiki-ingest/references/url-sources.md`.
 
 | Variable | What it does | Default |
 |---|---|---|
+| `SPECSTREAM_API_KEY` | Turns on the SpecStream Extract API reader | *(empty, off)* |
 | `JINA_API_KEY` | Raises the Jina Reader rate limit | *(empty, keyless)* |
 
 ## QMD semantic search (optional)
