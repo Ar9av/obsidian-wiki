@@ -107,8 +107,13 @@ class BuiltinProvider:
 
     def _rg(self, name: str, files: list[str] | None) -> list[tuple[str, int]]:
         """rg --json matches of \\bname\\b; returns [(file, line), ...]."""
-        args = ["rg", "--json", "-n", "--no-messages", "--no-heading", f"\\b{name}\\b"]
+        # The pattern goes through -e and the file names after "--": seed names
+        # come from the analysed repository (git diff --name-only), so a tracked
+        # path like "--pre=x/run.sh" must never be parsed as an rg option
+        # (GHSA-vr5p-jr6c-mj2h).
+        args = ["rg", "--json", "-n", "--no-messages", "--no-heading", "-e", f"\\b{name}\\b"]
         if files:
+            args.append("--")
             args.extend(files)
         try:
             proc = subprocess.run(
