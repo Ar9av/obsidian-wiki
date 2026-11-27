@@ -135,7 +135,7 @@ Nothing is sent unless the layer is on. When it is on, requests go only to the c
 | Check | Sent | Never sent |
 |---|---|---|
 | D1 | the query (≤ 500 chars), plus each candidate's title, `summary` (≤ 400 chars), and tags | paths, bodies, `visibility/*` tags, pages tagged `visibility/pii` |
-| D4 | the source body after its frontmatter (first 1,500 chars, `--max-source-chars`), plus candidate titles and summaries | paths, candidate bodies, `visibility/pii` pages |
+| D4 | the source body after its frontmatter (first 1,500 chars, `--max-source-chars`), plus candidate titles and summaries | paths, candidate bodies, `visibility/pii` pages — a `visibility/pii` source sends nothing at all (`reason: pii_source`, lexical shortlist only) |
 | D3 | the entity title, plus each section's page title, heading, and text (≤ 1,200 chars, `--max-section-chars`) | paths, the rest of the page, `visibility/pii` pages |
 
 Before anything is sent, emails, URLs with embedded credentials, and token-shaped strings (`sk-…`,

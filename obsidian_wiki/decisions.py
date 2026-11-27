@@ -436,7 +436,7 @@ def _is_pii(tags: Sequence[str]) -> bool:
 
 
 # Failures that happen before any byte leaves the machine.
-_PRE_NETWORK = {"disabled", "no_candidates", "no_pairs", "nothing_sendable", "structural_intent",
+_PRE_NETWORK = {"disabled", "no_candidates", "no_pairs", "nothing_sendable", "structural_intent", "pii_source",
                 "missing_key", "insecure_url", "unknown_backend", "invalid_request"}
 # Failures that happen after the backend answered (plus every ``http_*`` status).
 _POST_RESPONSE = {"invalid_response", "invalid_answer"}
@@ -710,6 +710,7 @@ def ingest_triage(
     cfg: DecisionConfig,
     *,
     source_label: str = "",
+    source_pii: bool = False,
     backend: Optional[DecisionBackend] = None,
     env: Optional[Mapping[str, str]] = None,
     max_source_chars: int = 1500,
@@ -736,6 +737,9 @@ def ingest_triage(
         return _plain("disabled")
     if not original:
         return _plain("no_candidates")
+    if source_pii:
+        # A visibility/pii source never leaves the machine (GHSA-vqj8-wqw9-96rm).
+        return _plain("pii_source")
 
     rng = _rng(cfg, "triage", source_label, source_text[:200], *(str(c.get("page", "")) for c in original))
     order = list(range(len(original)))
@@ -838,6 +842,20 @@ def _split(text: str) -> tuple:
     return split_frontmatter(text)
 
 
+def _front_is_pii(front: str) -> bool:
+    """True when a source's frontmatter marks it ``visibility/pii``.
+
+    Fails closed: besides the parsed tags, any mention of ``visibility/pii`` in
+    the frontmatter (a quoted block item, a scalar ``tags:`` value) counts, so
+    a tag the parser misses never sends the page out.
+    """
+    if not front:
+        return False
+    from obsidian_wiki.graph_analysis import frontmatter_tags
+
+    return _is_pii(frontmatter_tags(front)) or "visibility/pii" in front.lower()
+
+
 def triage_source(
     vault: Path,
     source: Path,
@@ -865,9 +883,9 @@ def triage_source(
          "tags": pool[c["slug"]]["tags"]}
         for c in ranked
     ]
-    _front, body = _split(text)
-    result = ingest_triage(body, candidates, cfg, source_label=source.stem, backend=backend, env=env,
-                           max_source_chars=max_source_chars)
+    front, body = _split(text)
+    result = ingest_triage(body, candidates, cfg, source_label=source.stem, source_pii=_front_is_pii(front),
+                           backend=backend, env=env, max_source_chars=max_source_chars)
     for cand in result["shortlist"] + result["skip"]:
         cand.pop("tags", None)
     result["source"] = own or source.name
