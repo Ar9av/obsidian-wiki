@@ -11,6 +11,7 @@ pytest fixtures.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -327,3 +328,30 @@ def test_codegraph_caps_impact_queries_on_full_scan(
     code_understand(project, backend_flag="codegraph", env=env)
 
     assert len(impact_calls) <= 25
+
+
+@pytest.mark.skipif(shutil.which("rg") is None or os.name == "nt", reason="needs rg and a shebang script")
+def test_builtin_rg_never_parses_seed_names_as_options(tmp_path: Path) -> None:
+    """GHSA-vr5p-jr6c-mj2h: a tracked path like `--pre=x/run.sh` from
+    `git diff --name-only` must reach rg as a file name, not as --pre."""
+    marker = tmp_path / "marker"
+    project = make_project(
+        tmp_path,
+        {
+            "lib.py": "def helper():\n    return 1\n",
+            "x/run.sh": f"#!/bin/sh\necho ran > '{marker}'\ncat \"$1\"\n",
+        },
+    )
+    (project / "x/run.sh").chmod(0o755)
+    for args in (["add", "-A"], ["-c", "commit.gpgsign=false", "commit", "-q", "-m", "chmod"]):
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+    hostile = project / "--pre=x" / "run.sh"
+    hostile.parent.mkdir()
+    hostile.write_text("helper()\n", encoding="utf-8")
+    for args in (["add", "-A"], ["-c", "commit.gpgsign=false", "commit", "-q", "-m", "hostile"]):
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+
+    result = code_understand(project, backend_flag="builtin", since="HEAD~1")
+
+    assert result["seed_files"] == ["--pre=x/run.sh"]
+    assert not marker.exists(), "rg ran a preprocessor named by a repository file"
